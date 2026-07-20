@@ -217,6 +217,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPage("play");
       log(`Joined queue ${queue.id}`);
       notify("Queue started", "success");
+      if (queue.format === "1v1" && window.electronApi) {
+        void window.electronApi.runAoe2CreateLobbySequence().then((result) => {
+          log(`AoE2 lobby automation: ${result.message}`);
+          notify(result.message, result.sent ? "success" : "danger");
+        }).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : "The AoE2 lobby sequence could not be started.";
+          log(`AoE2 lobby automation failed: ${message}`);
+          notify("The AoE2 lobby sequence could not be started.", "danger", { detail: message });
+        });
+      }
       unsubscribeRef.current = services.matchmaking.subscribeToQueue(ticket.id, (event) => {
         if (event.type === "range") {
           setState((previous) => ({ ...previous, searchRange: { min: event.minRating, max: event.maxRating } }));
