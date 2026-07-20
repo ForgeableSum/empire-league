@@ -443,6 +443,25 @@
   align-content: start;
 }
 
+.detection-feedback {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #1a1816;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.detection-feedback.success {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--line));
+  color: var(--success);
+}
+
+.detection-feedback.error {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--danger);
+}
+
 .toggle-row {
   min-height: 36px;
   display: flex;

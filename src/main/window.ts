@@ -14,7 +14,7 @@ export function createMainWindow(): BrowserWindow {
     title: "Empire League",
     backgroundColor: "#141312",
     webPreferences: {
-      preload: join(currentDir, "../preload/preload.js"),
+      preload: join(currentDir, "../preload/preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true

@@ -5,6 +5,7 @@ export type GameStatus = "not_detected" | "installed" | "running" | "in_lobby" |
 export interface GameInstallationStatus {
   installed: boolean;
   path?: string;
+  message?: string;
 }
 
 export interface GameProcessStatus {

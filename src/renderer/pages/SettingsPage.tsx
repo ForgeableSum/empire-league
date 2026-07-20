@@ -1,9 +1,47 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useAppStore } from "../state/appStore";
+
+type DetectionFeedback = { tone: "success" | "error"; message: string };
 
 export function SettingsPage() {
   const { state, updateSettings } = useAppStore();
   const settings = state.settings;
+  const [detecting, setDetecting] = useState(false);
+  const [detectionFeedback, setDetectionFeedback] = useState<DetectionFeedback | null>(null);
+
+  async function testGameDetection(): Promise<void> {
+    setDetecting(true);
+    setDetectionFeedback(null);
+
+    try {
+      if (!window.electronApi) {
+        throw new Error("Game detection is only available in the Electron app.");
+      }
+
+      const result = await window.electronApi.detectAoe2Installation();
+      if (!result.installed || !result.path) {
+        setDetectionFeedback({
+          tone: "error",
+          message: result.message ?? "AoE2: Definitive Edition could not be detected."
+        });
+        return;
+      }
+
+      updateSettings({ aoePath: result.path });
+      setDetectionFeedback({
+        tone: "success",
+        message: `${result.message ?? "AoE2: Definitive Edition detected."} ${result.path}`
+      });
+    } catch (error) {
+      setDetectionFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Game detection failed unexpectedly."
+      });
+    } finally {
+      setDetecting(false);
+    }
+  }
+
   return (
     <section className="settings-grid">
       <SettingsGroup title="Game">
@@ -14,7 +52,14 @@ export function SettingsPage() {
         <label>Preferred display mode<select value={settings.displayMode} onChange={(event) => updateSettings({ displayMode: event.target.value as typeof settings.displayMode })}><option>Borderless</option><option>Fullscreen</option><option>Windowed</option></select></label>
         <Toggle label="Enable replay detection" checked={settings.replayDetection} onChange={(replayDetection) => updateSettings({ replayDetection })} />
         <label>Recorded-game folder<input value={settings.replayFolder} onChange={(event) => updateSettings({ replayFolder: event.target.value })} placeholder="Not configured" /></label>
-        <button type="button" className="secondary">Test Game Detection</button>
+        <button type="button" className="secondary" disabled={detecting} onClick={() => void testGameDetection()}>
+          {detecting ? "Detecting…" : "Test Game Detection"}
+        </button>
+        {detectionFeedback && (
+          <div className={`detection-feedback ${detectionFeedback.tone}`} role="status" aria-live="polite">
+            {detectionFeedback.message}
+          </div>
+        )}
       </SettingsGroup>
       <SettingsGroup title="Matchmaking">
         <label>Preferred server region<input value={settings.serverRegion} onChange={(event) => updateSettings({ serverRegion: event.target.value })} /></label>
