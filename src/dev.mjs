@@ -4,6 +4,10 @@ import { request } from "node:http";
 const vite = spawn(process.execPath, ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1"], {
   stdio: "inherit"
 });
+const matchmaker = spawn(process.execPath, ["src/matchmaker.mjs"], {
+  stdio: "inherit",
+  env: { ...process.env, EMPIRE_MATCHMAKER_PORT: "4317" }
+});
 
 let electron;
 let stopping = false;
@@ -14,6 +18,7 @@ function stop(exitCode = 0) {
 
   if (electron && !electron.killed) electron.kill();
   if (!vite.killed) vite.kill();
+  if (!matchmaker.killed) matchmaker.kill();
   process.exit(exitCode);
 }
 
@@ -39,6 +44,9 @@ function waitForVite(attempts = 60) {
 }
 
 vite.on("exit", (code) => {
+  if (!stopping) stop(code ?? 1);
+});
+matchmaker.on("exit", (code) => {
   if (!stopping) stop(code ?? 1);
 });
 

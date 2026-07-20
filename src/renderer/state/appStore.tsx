@@ -5,7 +5,7 @@ import { maps, currentUser } from "../mocks/mockPlayers";
 import { mockMatches } from "../mocks/mockMatches";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
 import { MockGameIntegrationService } from "../services/gameIntegrationService";
-import { MockMatchmakingService } from "../services/matchmakingService";
+import { LocalMatchmakingService, MockMatchmakingService } from "../services/matchmakingService";
 import { MockMatchResultService } from "../services/matchResultService";
 import { nowLog } from "../services/timing";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
@@ -118,7 +118,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const services = useMemo(
     () => ({
-      matchmaking: new MockMatchmakingService(() => configRef.current),
+      matchmaking: import.meta.env.DEV
+        ? new LocalMatchmakingService()
+        : new MockMatchmakingService(() => configRef.current),
       game: new MockGameIntegrationService(() => configRef.current),
       results: new MockMatchResultService(() => configRef.current)
     }),
@@ -204,7 +206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function startQueue(queue: QueueDefinition): Promise<void> {
     try {
-      const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, player: state.currentUser });
+      const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: state.currentUser });
       ticketRef.current = ticket.id;
       setState((previous) => ({
         ...previous,
@@ -217,16 +219,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPage("play");
       log(`Joined queue ${queue.id}`);
       notify("Queue started", "success");
-      if (queue.format === "1v1" && window.electronApi) {
-        void window.electronApi.runAoe2CreateLobbySequence().then((result) => {
-          log(`AoE2 lobby automation: ${result.message}`);
-          notify(result.message, result.sent ? "success" : "danger");
-        }).catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : "The AoE2 lobby sequence could not be started.";
-          log(`AoE2 lobby automation failed: ${message}`);
-          notify("The AoE2 lobby sequence could not be started.", "danger", { detail: message });
-        });
-      }
       unsubscribeRef.current = services.matchmaking.subscribeToQueue(ticket.id, (event) => {
         if (event.type === "range") {
           setState((previous) => ({ ...previous, searchRange: { min: event.minRating, max: event.maxRating } }));
@@ -243,19 +235,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (event.type === "opponent_accepted") {
           setState((previous) => ({
             ...previous,
-            queueStatus: "creating_lobby",
+            queueStatus: event.role === "host" ? "creating_lobby" : "waiting_for_opponent",
             activeMatch: previous.activeMatch
-              ? { ...previous.activeMatch, acceptedByOpponent: true, status: "creating_lobby" }
+              ? {
+                  ...previous.activeMatch,
+                  acceptedByPlayer: true,
+                  acceptedByOpponent: true,
+                  role: event.role ?? previous.activeMatch.role,
+                  status: event.role === "host" ? "creating_lobby" : "waiting_for_opponent"
+                }
               : null
           }));
-          log("Opponent accepted");
+          log(event.role === "host" ? "Both players accepted; assigned as host" : "Both players accepted; waiting for host");
           notify("Opponent accepted", "success");
-          setState((previous) => {
-            if (!previous.activeMatch) return previous;
-            const acceptedMatch = { ...previous.activeMatch, acceptedByOpponent: true, status: "creating_lobby" as const };
-            void prepareLobby(acceptedMatch);
-            return { ...previous, queueStatus: "creating_lobby", activeMatch: acceptedMatch };
-          });
+          if (event.role === "host") {
+            setState((previous) => {
+              if (!previous.activeMatch) return previous;
+              const acceptedMatch = {
+                ...previous.activeMatch,
+                acceptedByPlayer: true,
+                acceptedByOpponent: true,
+                role: "host" as const,
+                status: "creating_lobby" as const
+              };
+              void prepareLobby(acceptedMatch);
+              return { ...previous, queueStatus: "creating_lobby", activeMatch: acceptedMatch };
+            });
+          }
+        }
+        if (event.type === "lobby_ready") {
+          setState((previous) => ({
+            ...previous,
+            queueStatus: "ready",
+            gameStatus: "in_lobby",
+            activeMatch: previous.activeMatch
+              ? { ...previous.activeMatch, lobby: event.lobby, status: "ready" }
+              : null
+          }));
+          log(`Host published lobby: ${event.lobby.platformLobbyId ?? "pending"}`);
+          notify("The host created the AoE2 lobby", "success");
         }
         if (event.type === "error") {
           setError({ code: event.code, message: event.message, retryable: true });
@@ -325,6 +343,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       log("AoE2 process found");
       await services.game.launchGame();
       log("Opening multiplayer menu");
+      if (window.electronApi) {
+        const automation = await window.electronApi.runAoe2CreateLobbySequence();
+        if (!automation.sent) throw new Error(automation.message);
+        log("AoE2 host-lobby sequence completed");
+      }
       const lobbyResult = await services.game.createLobby({
         matchId: match.id,
         hostProfileId: match.player.aoeProfileId,
@@ -333,6 +356,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         serverRegion: state.settings.serverRegion
       });
       log(`Lobby created: ${lobbyResult.lobby.platformLobbyId ?? "pending"}`);
+      await services.matchmaking.publishLobby(match.id, lobbyResult.lobby);
+      log("Lobby details published to opponent");
       setState((previous) => ({
         ...previous,
         activeMatch: previous.activeMatch ? { ...previous.activeMatch, lobby: lobbyResult.lobby } : null,

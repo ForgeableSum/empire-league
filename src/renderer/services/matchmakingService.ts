@@ -15,6 +15,90 @@ export interface MatchmakingService {
   subscribeToQueue(ticketId: string, listener: QueueEventListener): UnsubscribeFunction;
   acceptMatch(matchId: string): Promise<void>;
   declineMatch(matchId: string): Promise<void>;
+  publishLobby(matchId: string, lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void>;
+}
+
+const localMatchmakerUrl = "http://127.0.0.1:4317";
+
+export class LocalMatchmakingService implements MatchmakingService {
+  private activeTicketId: string | null = null;
+
+  async joinQueue(request: JoinQueueRequest): Promise<QueueTicket> {
+    const response = await fetch(`${localMatchmakerUrl}/queue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ queue: request.queue, player: request.player })
+    });
+    return this.read<QueueTicket>(response);
+  }
+
+  async leaveQueue(ticketId: string): Promise<void> {
+    await this.read(await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}`, { method: "DELETE" }));
+    if (this.activeTicketId === ticketId) this.activeTicketId = null;
+  }
+
+  subscribeToQueue(ticketId: string, listener: QueueEventListener): UnsubscribeFunction {
+    this.activeTicketId = ticketId;
+    let stopped = false;
+    let after = 0;
+    let polling = false;
+    const poll = async () => {
+      if (stopped || polling) return;
+      polling = true;
+      try {
+        const result = await this.read<{ events: Array<{ sequence: number; event: Parameters<QueueEventListener>[0] }> }>(
+          await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}/events?after=${after}`)
+        );
+        for (const item of result.events) {
+          after = Math.max(after, item.sequence);
+          listener(item.event);
+        }
+      } catch (error) {
+        listener({ type: "error", code: "MATCHMAKER_UNAVAILABLE", message: error instanceof Error ? error.message : "Local matchmaker unavailable." });
+        stopped = true;
+      } finally {
+        polling = false;
+      }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 400);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }
+
+  async acceptMatch(matchId: string): Promise<void> {
+    await this.matchAction(matchId, "accept");
+  }
+
+  async declineMatch(matchId: string): Promise<void> {
+    await this.matchAction(matchId, "decline");
+  }
+
+  async publishLobby(matchId: string, lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void> {
+    if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
+    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/lobby`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticketId: this.activeTicketId, lobby })
+    }));
+  }
+
+  private async matchAction(matchId: string, action: "accept" | "decline"): Promise<void> {
+    if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
+    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticketId: this.activeTicketId })
+    }));
+  }
+
+  private async read<T = unknown>(response: Response): Promise<T> {
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error ?? `Matchmaker request failed (${response.status}).`);
+    return body as T;
+  }
 }
 
 export class MockMatchmakingService implements MatchmakingService {
@@ -97,6 +181,10 @@ export class MockMatchmakingService implements MatchmakingService {
 
   async declineMatch(_matchId: string): Promise<void> {
     await delay(200);
+  }
+
+  async publishLobby(_matchId: string, _lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void> {
+    await delay(100);
   }
 
   private clearTimers(ticketId: string): void {

@@ -86,6 +86,8 @@ export interface MatchSession {
   queue: QueueDefinition;
   player: PlayerProfile;
   opponent: PlayerProfile;
+  role?: "host" | "guest";
+  hostPlayerId?: number;
   acceptedByPlayer: boolean;
   acceptedByOpponent: boolean;
   acceptDeadline?: string;
@@ -97,6 +99,7 @@ export interface MatchSession {
 
 export interface JoinQueueRequest {
   queueId: string;
+  queue?: QueueDefinition;
   player: PlayerProfile;
 }
 
@@ -109,7 +112,8 @@ export interface QueueTicket {
 export type QueueEvent =
   | { type: "range"; minRating: number; maxRating: number }
   | { type: "match_found"; match: MatchSession }
-  | { type: "opponent_accepted"; matchId: string }
+  | { type: "opponent_accepted"; matchId: string; role?: "host" | "guest" }
+  | { type: "lobby_ready"; matchId: string; lobby: LobbySession }
   | { type: "error"; code: string; message: string };
 
 export type QueueEventListener = (event: QueueEvent) => void;
