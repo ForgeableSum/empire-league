@@ -30,7 +30,7 @@ export function SettingsPage() {
       updateSettings({ aoePath: result.path });
       setDetectionFeedback({
         tone: "success",
-        message: `${result.message ?? "AoE2: Definitive Edition detected."} ${result.path}`
+        message: result.message ?? "AoE2: Definitive Edition detected."
       });
     } catch (error) {
       setDetectionFeedback({

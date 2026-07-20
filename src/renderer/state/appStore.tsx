@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchResult } from "../../shared/contracts/matches";
 import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { maps, currentUser } from "../mocks/mockPlayers";
@@ -125,14 +125,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  useEffect(() => {
+    if (!state.settings.autoLaunch) return;
+
+    let cancelled = false;
+
+    async function autoLaunchAoe2(): Promise<void> {
+      try {
+        if (!window.electronApi) {
+          throw new Error("The Electron game integration bridge is unavailable.");
+        }
+
+        const installation = await window.electronApi.detectAoe2Installation();
+        if (!installation.installed || !installation.path) {
+          if (!cancelled) {
+            notify(installation.message ?? "AoE2 DE was not detected, so it was not launched.", "warning");
+          }
+          return;
+        }
+
+        const result = await window.electronApi.launchAoe2();
+        if (!result.launched) {
+          throw new Error(result.message ?? "Steam did not accept the AoE2 DE launch request.");
+        }
+
+        if (!cancelled) {
+          setState((previous) => ({
+            ...previous,
+            gameStatus: "running",
+            settings: { ...previous.settings, aoePath: installation.path as string }
+          }));
+          window.localStorage.setItem(settingsKey, JSON.stringify({ ...state.settings, aoePath: installation.path }));
+          notify("Launching AoE2 DE…", "success", {
+            detail: "Steam received the launch request.",
+            durationMs: 5000
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          notify(error instanceof Error ? error.message : "AoE2 DE could not be launched.", "danger");
+        }
+      }
+    }
+
+    void autoLaunchAoe2();
+    return () => {
+      cancelled = true;
+    };
+    // Auto-launch is intentionally evaluated once when the app starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function log(message: string): void {
     setState((previous) => ({ ...previous, eventLog: [nowLog(message), ...previous.eventLog].slice(0, 80) }));
   }
 
-  function notify(message: string, tone: NotificationItem["tone"] = "info"): void {
+  function notify(
+    message: string,
+    tone: NotificationItem["tone"] = "info",
+    options: { detail?: string; durationMs?: number } = {}
+  ): void {
     setState((previous) => ({
       ...previous,
-      notifications: [{ id: crypto.randomUUID(), message, tone }, ...previous.notifications].slice(0, 4)
+      notifications: [{
+        id: crypto.randomUUID(),
+        message,
+        tone,
+        detail: options.detail,
+        durationMs: options.durationMs ?? (tone === "danger" ? 8000 : 5000)
+      }, ...previous.notifications].slice(0, 4)
     }));
   }
 

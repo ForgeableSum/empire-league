@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, shell } from "electron";
 import { execFile } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -8,6 +8,7 @@ import type { CreateLobbyRequest } from "../../shared/contracts/gameIntegration.
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const execFileAsync = promisify(execFile);
 const aoe2AppId = "813780";
+let launchRequested = false;
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -108,8 +109,22 @@ export function registerGameHandlers(): void {
   });
 
   ipcMain.handle("game:launch", async () => {
-    await delay(450);
-    return { launched: true, status: "running" };
+    if (launchRequested) {
+      return { launched: true, status: "running", message: "AoE2 DE launch was already requested." };
+    }
+
+    const installation = await detectAoe2Installation();
+    if (!installation.installed) {
+      return {
+        launched: false,
+        status: "not_detected",
+        message: installation.message ?? "AoE2: Definitive Edition is not installed."
+      };
+    }
+
+    await shell.openExternal(`steam://run/${aoe2AppId}`);
+    launchRequested = true;
+    return { launched: true, status: "running", message: "Launching AoE2 DE through Steam." };
   });
 
   ipcMain.handle("game:focus", async () => {

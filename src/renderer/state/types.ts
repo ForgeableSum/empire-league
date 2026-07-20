@@ -33,6 +33,8 @@ export interface NotificationItem {
   id: string;
   tone: "info" | "success" | "warning" | "danger";
   message: string;
+  detail?: string;
+  durationMs: number;
 }
 
 export interface UserSettings {

@@ -16,6 +16,7 @@ export interface GameProcessStatus {
 export interface GameLaunchResult {
   launched: boolean;
   status: GameStatus;
+  message?: string;
 }
 
 export interface GameFocusResult {

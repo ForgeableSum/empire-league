@@ -523,22 +523,64 @@
 
 .toasts {
   position: fixed;
-  right: 310px;
-  bottom: 18px;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 20;
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  width: min(520px, calc(100vw - 32px));
+  pointer-events: none;
 }
 
 .toast {
-  min-width: 260px;
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  width: 100%;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 14px 14px 16px;
+  overflow: hidden;
   border-radius: var(--radius);
-  background: #28241f;
+  background: rgba(40, 36, 31, 0.97);
   border: 1px solid var(--line);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.42);
+  pointer-events: auto;
+}
+
+.toast.info .toast-icon {
+  color: var(--accent-2);
+}
+
+.toast.success .toast-icon {
+  color: var(--success);
+}
+
+.toast.warning .toast-icon {
+  color: var(--warning);
+}
+
+.toast.danger .toast-icon {
+  color: var(--danger);
+}
+
+.toast-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.toast-copy strong {
+  color: var(--text);
+}
+
+.toast-copy span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .toast button {
@@ -548,6 +590,29 @@
   height: 24px;
   background: transparent;
   color: var(--muted);
+}
+
+.toast-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: currentColor;
+  transform-origin: left;
+  animation: toast-countdown var(--toast-duration) linear forwards;
+}
+
+.toast.success .toast-progress {
+  color: var(--success);
+}
+
+.toast.warning .toast-progress {
+  color: var(--warning);
+}
+
+.toast.danger .toast-progress {
+  color: var(--danger);
 }
 
 .dev-panel {
@@ -592,6 +657,15 @@
   }
 }
 
+@keyframes toast-countdown {
+  from {
+    transform: scaleX(var(--toast-progress));
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 @media (max-width: 1180px) {
   .app-shell {
     grid-template-columns: 220px minmax(0, 1fr);
@@ -601,7 +675,4 @@
     display: none;
   }
 
-  .toasts {
-    right: 18px;
-  }
 }
