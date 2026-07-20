@@ -1,0 +1,62 @@
+import { Play } from "lucide-react";
+import { Metric } from "../components/common/Metric";
+import { FormPips } from "../components/common/FormPips";
+import { useAppStore } from "../state/appStore";
+
+export function HomePage() {
+  const { state, setPage } = useAppStore();
+  const user = state.currentUser;
+  return (
+    <section className="page-grid">
+      <div className="hero-panel">
+        <div>
+          <span className="eyebrow">Current Rating</span>
+          <div className="rating-display">{user.rating}</div>
+          <p>{user.division} III · Global Rank #{user.rank.toLocaleString()}</p>
+        </div>
+        <button className="primary large" type="button" onClick={() => setPage("play")}>
+          <Play size={20} /> Play 1v1
+        </button>
+      </div>
+      <div className="metrics-grid">
+        <Metric label="Division" value={`${user.division} III`} detail="Top 18% this season" />
+        <Metric label="Season Record" value={`${user.wins}-${user.losses}`} detail={`${user.winRate}% win rate`} />
+        <Metric label="Current Streak" value={user.streak > 0 ? `W${user.streak}` : `L${Math.abs(user.streak)}`} />
+        <Metric label="Peak Rating" value={user.peakRating} />
+      </div>
+      <div className="panel span-2">
+        <div className="panel-title">
+          <h2>Recent Matches</h2>
+          <FormPips form={user.recentForm} />
+        </div>
+        <div className="table">
+          {state.recentMatches.slice(0, 7).map((match) => (
+            <div className="table-row" key={match.id}>
+              <strong className={match.outcome}>{match.outcome === "win" ? "Victory" : match.outcome === "loss" ? "Defeat" : "No Contest"}</strong>
+              <span>{match.opponent}</span>
+              <span>{match.map}</span>
+              <span>{match.civilization}</span>
+              <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
+              <span>{match.durationMinutes}m</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="panel">
+        <h2>Current Map Pool</h2>
+        <div className="tag-list">
+          {state.selectedQueue?.mapPool.map((map) => <span key={map.id}>{map.name}</span>) ??
+            ["Arabia", "Arena", "Acropolis", "Gold Rush", "Hideout", "Nomad"].map((map) => <span key={map}>{map}</span>)}
+        </div>
+      </div>
+      <div className="panel">
+        <h2>Platform Status</h2>
+        <div className="status-list">
+          <div><span>Matchmaking</span><strong>Operational</strong></div>
+          <div><span>Result service</span><strong>Mock verified</strong></div>
+          <div><span>Active season</span><strong>42 days left</strong></div>
+        </div>
+      </div>
+    </section>
+  );
+}
