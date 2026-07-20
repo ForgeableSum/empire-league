@@ -10,6 +10,10 @@ import { Toasts } from "./components/common/Toasts";
 import { useAppStore } from "./state/appStore";
 
 export function App() {
+  if (new URLSearchParams(window.location.search).get("overlay") === "test") {
+    return <TestOverlay />;
+  }
+
   const { page, state } = useAppStore();
 
   return (
@@ -25,5 +29,16 @@ export function App() {
       {state.queueStatus === "match_found" && state.activeMatch && <MatchFoundOverlay />}
       <Toasts />
     </>
+  );
+}
+
+function TestOverlay() {
+  return (
+    <main className="test-overlay">
+      <div className="test-overlay__status"><span /> EMPIRE LEAGUE OVERLAY</div>
+      <strong>Searching for an opponent</strong>
+      <p>Queue time 00:42 · Ranked 1v1</p>
+      <button type="button" onClick={() => void window.electronApi?.closeTestOverlay()}>Hide overlay</button>
+    </main>
   );
 }

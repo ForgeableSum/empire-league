@@ -28,6 +28,13 @@ export interface GameInputTestResult {
   message: string;
 }
 
+export type GameInputKey = "TAB" | "ENTER";
+
+export interface GameInputResult {
+  sent: boolean;
+  message: string;
+}
+
 export interface CreateLobbyRequest {
   matchId: string;
   hostProfileId: number;

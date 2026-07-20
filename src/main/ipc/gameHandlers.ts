@@ -3,7 +3,7 @@ import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { CreateLobbyRequest } from "../../shared/contracts/gameIntegration.js";
+import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const execFileAsync = promisify(execFile);
@@ -62,8 +62,333 @@ while ([DateTime]::UtcNow -lt $deadline) {
   } else {
     Write-Output "WAIT|AoE2 process not found"
   }
-  Start-Sleep -Milliseconds 800
+  Start-Sleep -Milliseconds 1000
 }
+`;
+
+function createBackgroundKeyScript(virtualKey: number, scanCode: number): string {
+  const downLParam = (scanCode << 16) | 1;
+  const upLParam = (0xc0000000 | downLParam) >>> 0;
+  return String.raw`
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+public static class AoeKeySender {
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+
+  public static IntPtr Find(uint targetProcessId) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((window, _) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId == targetProcessId && IsWindowVisible(window)) {
+        found = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+
+  public static bool Send(IntPtr window) {
+    bool down = PostMessage(window, 0x0100, new IntPtr(${virtualKey}), new IntPtr(${downLParam}));
+    bool up = PostMessage(window, 0x0101, new IntPtr(${virtualKey}), new IntPtr(unchecked((int)${upLParam})));
+    return down && up;
+  }
+}
+'@
+Add-Type -TypeDefinition $interop
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
+$window = [AoeKeySender]::Find([uint32]$game.Id)
+if ($window -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 3 }
+if ([AoeKeySender]::Send($window)) { Write-Output 'SENT'; exit 0 }
+Write-Output 'POST_FAILED'; exit 4
+`;
+}
+
+const backgroundKeyDefinitions: Record<GameInputKey, { virtualKey: number; scanCode: number }> = {
+  TAB: { virtualKey: 0x09, scanCode: 0x0f },
+  ENTER: { virtualKey: 0x0d, scanCode: 0x1c }
+};
+
+const createLobbySequenceScript = String.raw`
+$ProgressPreference = 'SilentlyContinue'
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+public static class AoeSequence {
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int command);
+
+  public static IntPtr Find(uint targetProcessId) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((window, _) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId == targetProcessId && IsWindowVisible(window)) {
+        found = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+
+  public static bool Send(IntPtr window, int virtualKey, int downLParam, int upLParam) {
+    bool down = PostMessage(window, 0x0100, new IntPtr(virtualKey), new IntPtr(downLParam));
+    bool up = PostMessage(window, 0x0101, new IntPtr(virtualKey), new IntPtr(upLParam));
+    return down && up;
+  }
+
+  public static bool Activate(IntPtr window) {
+    ShowWindow(window, 9);
+    SetForegroundWindow(window);
+    return GetForegroundWindow() == window;
+  }
+}
+'@
+Add-Type -TypeDefinition $interop
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game) { Write-Output 'ERROR|AoE2 process not found'; exit 2 }
+$window = [AoeSequence]::Find([uint32]$game.Id)
+if ($window -eq [IntPtr]::Zero) { Write-Output 'ERROR|AoE2 window not found'; exit 3 }
+
+function Send-Tab([int]$count, [string]$stage) {
+  for ($index = 1; $index -le $count; $index++) {
+    $sent = [AoeSequence]::Send($window, 0x09, 0x000F0001, [int]0xC00F0001)
+    Write-Output "SEQUENCE|$stage|Tab=$index/$count|Sent=$sent"
+    if (-not $sent) { exit 4 }
+    Start-Sleep -Milliseconds 180
+  }
+}
+
+function Send-Enter([string]$stage) {
+  $sent = [AoeSequence]::Send($window, 0x0D, 0x001C0001, [int]0xC01C0001)
+  Write-Output "SEQUENCE|$stage|Enter|Sent=$sent"
+  if (-not $sent) { exit 5 }
+}
+
+function Send-Down([string]$stage) {
+  $sent = [AoeSequence]::Send($window, 0x28, 0x01500001, [int]0xC1500001)
+  Write-Output "SEQUENCE|$stage|Down|Sent=$sent"
+  if (-not $sent) { exit 6 }
+}
+
+Write-Output 'SEQUENCE|Start|ExpectedScreen=Main Menu'
+Send-Tab 6 'Main Menu'
+$activated = [AoeSequence]::Activate($window)
+Write-Output "SEQUENCE|Main Menu|ActivateBeforeMultiplayer=$activated"
+Start-Sleep -Milliseconds 250
+Send-Enter 'Open Multiplayer'
+Start-Sleep -Milliseconds 2500
+Send-Tab 5 'Multiplayer'
+Send-Enter 'Open Host Game'
+Start-Sleep -Milliseconds 1800
+Send-Tab 2 'Create Lobby Dialog'
+Send-Enter 'Open Lobby Type'
+Start-Sleep -Milliseconds 300
+Send-Down 'Select Ranked Option'
+Start-Sleep -Milliseconds 200
+Send-Enter 'Confirm Ranked Lobby Type'
+Start-Sleep -Milliseconds 500
+Send-Tab 9 'Ranked Lobby Settings'
+Send-Enter 'Create Ranked Lobby'
+Write-Output 'SEQUENCE|Complete=True'
+`;
+
+const hostGameMouseClickScript = String.raw`
+$ProgressPreference = 'SilentlyContinue'
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+public static class AoeMouseClick {
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hWnd, out Rect rect);
+  [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+
+  public static IntPtr Find(uint targetProcessId) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((window, _) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId == targetProcessId && IsWindowVisible(window)) {
+        found = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+
+  public static string ClickDesignPoint(IntPtr window, int designX, int designY) {
+    Rect rect;
+    if (!GetClientRect(window, out rect)) return "CLIENT_RECT_FAILED";
+    int width = rect.Right - rect.Left;
+    int height = rect.Bottom - rect.Top;
+    if (width <= 0 || height <= 0) return "INVALID_CLIENT_SIZE";
+    int x = (int)Math.Round(designX * width / 3840.0);
+    int y = (int)Math.Round(designY * height / 2160.0);
+    IntPtr position = new IntPtr((y << 16) | (x & 0xffff));
+    bool moved = PostMessage(window, 0x0200, IntPtr.Zero, position);
+    bool down = PostMessage(window, 0x0201, new IntPtr(1), position);
+    bool up = PostMessage(window, 0x0202, IntPtr.Zero, position);
+    return String.Format("{0}|Client={1}x{2}|Point={3},{4}", moved && down && up ? "SENT" : "POST_FAILED", width, height, x, y);
+  }
+}
+'@
+Add-Type -TypeDefinition $interop
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
+$window = [AoeMouseClick]::Find([uint32]$game.Id)
+if ($window -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 3 }
+$result = [AoeMouseClick]::ClickDesignPoint($window, 1905, 1855)
+Write-Output $result
+if ($result.StartsWith('SENT')) { exit 0 }
+exit 4
+`;
+
+const hostGameMouseCalibrationScript = String.raw`
+$ProgressPreference = 'SilentlyContinue'
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+public static class AoeMouseCalibration {
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+  [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hWnd, out Rect rect);
+  [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
+  [DllImport("user32.dll")] private static extern bool ScreenToClient(IntPtr hWnd, ref Point point);
+  [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+
+  public static IntPtr Find(uint targetProcessId) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((window, _) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId == targetProcessId && IsWindowVisible(window)) {
+        found = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+
+  public static string ClickCursorPoint(IntPtr window) {
+    Rect rect;
+    Point point;
+    if (!GetClientRect(window, out rect) || !GetCursorPos(out point) || !ScreenToClient(window, ref point)) return "COORDINATE_FAILED";
+    int width = rect.Right - rect.Left;
+    int height = rect.Bottom - rect.Top;
+    if (point.X < 0 || point.Y < 0 || point.X >= width || point.Y >= height) {
+      return String.Format("CURSOR_OUTSIDE|Client={0}x{1}|Point={2},{3}", width, height, point.X, point.Y);
+    }
+    IntPtr position = new IntPtr((point.Y << 16) | (point.X & 0xffff));
+    bool moved = PostMessage(window, 0x0200, IntPtr.Zero, position);
+    bool down = PostMessage(window, 0x0201, new IntPtr(1), position);
+    bool up = PostMessage(window, 0x0202, IntPtr.Zero, position);
+    int designX = (int)Math.Round(point.X * 3840.0 / width);
+    int designY = (int)Math.Round(point.Y * 2160.0 / height);
+    return String.Format("{0}|Client={1}x{2}|Point={3},{4}|DesignPoint={5},{6}", moved && down && up ? "SENT" : "POST_FAILED", width, height, point.X, point.Y, designX, designY);
+  }
+}
+'@
+Add-Type -TypeDefinition $interop
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
+$window = [AoeMouseCalibration]::Find([uint32]$game.Id)
+if ($window -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 3 }
+Start-Sleep -Seconds 5
+$result = [AoeMouseCalibration]::ClickCursorPoint($window)
+Write-Output $result
+if ($result.StartsWith('SENT')) { exit 0 }
+exit 4
+`;
+
+const fakeActivationMouseClickScript = String.raw`
+$ProgressPreference = 'SilentlyContinue'
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+using System.Threading;
+public static class AoeFakeActivationClick {
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hWnd, out Rect rect);
+  [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+
+  public static IntPtr Find(uint targetProcessId) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((window, _) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId == targetProcessId && IsWindowVisible(window)) {
+        found = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+
+  public static string Click(IntPtr window, int designX, int designY) {
+    Rect rect;
+    if (!GetClientRect(window, out rect)) return "CLIENT_RECT_FAILED";
+    int width = rect.Right - rect.Left;
+    int height = rect.Bottom - rect.Top;
+    int x = (int)Math.Round(designX * width / 3840.0);
+    int y = (int)Math.Round(designY * height / 2160.0);
+    IntPtr position = new IntPtr((y << 16) | (x & 0xffff));
+
+    bool activate = PostMessage(window, 0x0006, new IntPtr(1), IntPtr.Zero);
+    bool focus = PostMessage(window, 0x0007, IntPtr.Zero, IntPtr.Zero);
+    bool mouseActivate = PostMessage(window, 0x0021, window, new IntPtr(0x02010001));
+    Thread.Sleep(100);
+    bool moved = PostMessage(window, 0x0200, IntPtr.Zero, position);
+    bool down = PostMessage(window, 0x0201, new IntPtr(1), position);
+    bool up = PostMessage(window, 0x0202, IntPtr.Zero, position);
+    Thread.Sleep(100);
+    bool blur = PostMessage(window, 0x0008, IntPtr.Zero, IntPtr.Zero);
+    bool deactivate = PostMessage(window, 0x0006, IntPtr.Zero, IntPtr.Zero);
+
+    bool sent = activate && focus && mouseActivate && moved && down && up && blur && deactivate;
+    return String.Format("{0}|Client={1}x{2}|Point={3},{4}|DesignPoint={5},{6}|Activate={7}|Focus={8}|MouseActivate={9}|Move={10}|Down={11}|Up={12}|Blur={13}|Deactivate={14}",
+      sent ? "SENT" : "POST_FAILED", width, height, x, y, designX, designY,
+      activate, focus, mouseActivate, moved, down, up, blur, deactivate);
+  }
+}
+'@
+Add-Type -TypeDefinition $interop
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
+$window = [AoeFakeActivationClick]::Find([uint32]$game.Id)
+if ($window -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 3 }
+$result = [AoeFakeActivationClick]::Click($window, 2760, 795)
+Write-Output $result
+if ($result.StartsWith('SENT')) { exit 0 }
+exit 4
 `;
 
 function stopTabTest(): void {
@@ -161,6 +486,148 @@ async function detectAoe2Installation() {
   };
 }
 
+type UiWidget = Record<string, unknown>;
+
+function decodeLocalizedText(value: string): string {
+  return value
+    .replace(/\\n/g, " ")
+    .replace(/\\r/g, "")
+    .replace(/\\t/g, " ")
+    .replace(/\\"/g, '"')
+    .replace(/Î“Ã‡Ã–/g, "'")
+    .trim();
+}
+
+async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
+  const widgetUiPath = join(gamePath, "widgetui");
+  const screenPath = join(widgetUiPath, "dialogcreatemultiplayergame.json");
+  const stringReferencePath = join(widgetUiPath, "stringreference.json");
+  const localizationPath = join(gamePath, "resources", "en", "strings", "key-value", "key-value-strings-utf8.txt");
+  const [screenText, stringReferenceText, localizationText] = await Promise.all([
+    readFile(screenPath, "utf8"),
+    readFile(stringReferencePath, "utf8"),
+    readFile(localizationPath, "utf8")
+  ]);
+
+  const screen = JSON.parse(screenText) as { Collection?: UiWidget };
+  const stringReferences = JSON.parse(stringReferenceText) as Record<string, number>;
+  const localizedStrings = new Map<string, string>();
+
+  for (const rawLine of localizationText.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("//")) continue;
+    const match = line.match(/^(\d+|[A-Z][A-Z0-9_]*)\s+"(.*)"\s*(?:\/\/.*)?$/);
+    if (match) localizedStrings.set(match[1], decodeLocalizedText(match[2]));
+  }
+
+  function resolveString(value: unknown): string | undefined {
+    if (typeof value !== "string" && typeof value !== "number") return undefined;
+    const key = String(value);
+    const direct = localizedStrings.get(key);
+    if (direct) return direct;
+    const numericReference = stringReferences[key];
+    if (numericReference !== undefined) return localizedStrings.get(String(numericReference));
+    return typeof value === "string" && !value.startsWith("IDS_") ? value : undefined;
+  }
+
+  const widgets = new Map<string, UiWidget>();
+  function collectWidgets(value: unknown): void {
+    if (Array.isArray(value)) {
+      value.forEach(collectWidgets);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const object = value as UiWidget;
+    if (typeof object.Name === "string" && typeof object.Type === "string") {
+      widgets.set(object.Name, object);
+    }
+    Object.values(object).forEach(collectWidgets);
+  }
+  collectWidgets(screen.Collection);
+
+  const collectionName = typeof screen.Collection?.Name === "string"
+    ? screen.Collection.Name
+    : "Unknown screen";
+  const tabOrder = Array.isArray(screen.Collection?.TabOrder)
+    ? screen.Collection.TabOrder as Array<{ Tab?: unknown }>
+    : [];
+  const lines = [
+    `INSPECT|Screen=${collectionName}|File=dialogcreatemultiplayergame.json`,
+    `INSPECT|Widgets=${widgets.size}|TabStops=${tabOrder.length}|Language=en`
+  ];
+
+  const tabWidgetNames = new Set<string>();
+  function inferTabLabel(path: string, name: string, widget: UiWidget): string {
+    const direct = resolveString(widget.AccessibilityName ?? widget.AccessibilityTextOverride)
+      ?? resolveString(widget.Text);
+    if (direct) return direct;
+
+    const parentName = path.split("/").at(-2);
+    if (parentName?.endsWith("Anchor")) {
+      const siblingLabel = widgets.get(`${parentName.slice(0, -"Anchor".length)}Label`);
+      const siblingText = siblingLabel
+        ? resolveString(siblingLabel.AccessibilityName ?? siblingLabel.AccessibilityTextOverride)
+          ?? resolveString(siblingLabel.Text)
+        : undefined;
+      if (siblingText) return siblingText;
+    }
+
+    return name
+      .replace(/InputField|InputBox|CheckBox|DropDown|Button/g, "")
+      .replace(/^Min(?=[A-Z])/, "Minimum")
+      .replace(/^Max(?=[A-Z])/, "Maximum")
+      .replace(/Civ$/, "Civilizations")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .trim() || "Unknown";
+  }
+
+  tabOrder.forEach((entry, index) => {
+    const path = typeof entry.Tab === "string" ? entry.Tab : "";
+    const name = path.split("/").at(-1) ?? path;
+    tabWidgetNames.add(name);
+    const widget = widgets.get(name);
+    if (!widget) {
+      lines.push(`TAB_ORDER|${index + 1}|Path=${path}|Widget=Not found`);
+      return;
+    }
+    const label = inferTabLabel(path, name, widget);
+    const help = resolveString(widget.Help);
+    lines.push([
+      `TAB_ORDER|${index + 1}`,
+      `Name=${name}`,
+      `Type=${String(widget.Type)}`,
+      `Label=${label}`,
+      `Help=${help ?? ""}`,
+      `Path=${path}`
+    ].join("|"));
+  });
+
+  const semanticWidgets = [...widgets.values()]
+    .filter((widget) => widget.AccessibilityName !== undefined
+      || widget.AccessibilityTextOverride !== undefined
+      || widget.Text !== undefined
+      || widget.Help !== undefined)
+    .sort((left, right) => String(left.Name).localeCompare(String(right.Name)));
+
+  for (const widget of semanticWidgets) {
+    const name = String(widget.Name);
+    if (tabWidgetNames.has(name)) continue;
+    const accessibility = resolveString(widget.AccessibilityName ?? widget.AccessibilityTextOverride);
+    const text = resolveString(widget.Text);
+    const help = resolveString(widget.Help);
+    lines.push([
+      "CONTROL",
+      `Name=${name}`,
+      `Type=${String(widget.Type)}`,
+      `Label=${accessibility ?? text ?? "Unknown"}`,
+      `Help=${help ?? ""}`
+    ].join("|"));
+  }
+
+  lines.push(`INSPECT|SemanticControls=${semanticWidgets.length}|Complete=True`);
+  return lines;
+}
+
 export function registerGameHandlers(): void {
   ipcMain.handle("game:detect-installation", async () => {
     return detectAoe2Installation();
@@ -206,6 +673,17 @@ export function registerGameHandlers(): void {
       return { started: false, message: "AoE2 DE is not installed." };
     }
 
+    const emitLog = (message: string) => {
+      console.info(`[AoE2 automation] ${message}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+    };
+    try {
+      const inspectionLines = await inspectCreateLobbyUi(installation.path as string);
+      inspectionLines.forEach(emitLog);
+    } catch (error) {
+      emitLog(`INSPECT|Complete=False|Error=${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+
     const encodedScript = Buffer.from(tabTestScript, "utf16le").toString("base64");
     tabTestProcess = spawn("powershell.exe", ["-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -213,8 +691,7 @@ export function registerGameHandlers(): void {
     });
     const sendLog = (chunk: Buffer) => {
       for (const message of chunk.toString().split(/\r?\n/).filter(Boolean)) {
-        console.info(`[AoE2 automation] ${message}`);
-        if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+        emitLog(message);
       }
     };
     tabTestProcess.stdout?.on("data", sendLog);
@@ -227,6 +704,129 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:stop-tab-test", async () => {
     stopTabTest();
+  });
+
+  ipcMain.handle("game:send-background-key", async (event, key: GameInputKey) => {
+    const definition = backgroundKeyDefinitions[key];
+    if (!definition || process.platform !== "win32") {
+      return { sent: false, message: "That game input is not supported." };
+    }
+
+    const script = createBackgroundKeyScript(definition.virtualKey, definition.scanCode);
+    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+    try {
+      const { stdout } = await execFileAsync("powershell.exe", [
+        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+      ], { windowsHide: true });
+      const sent = stdout.includes("SENT");
+      const message = sent ? `${key} sent to AoE2 DE.` : `${key} could not be sent to AoE2 DE.`;
+      console.info(`[AoE2 automation] KEY|${key}|Sent=${sent}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", `KEY|${key}|Sent=${sent}`);
+      return { sent, message };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Background input failed.";
+      console.error(`[AoE2 automation] KEY|${key}|Sent=False|Error=${message}`);
+      return { sent: false, message: `${key} could not be sent to AoE2 DE.` };
+    }
+  });
+
+  ipcMain.handle("game:run-create-lobby-sequence", async (event) => {
+    stopTabTest();
+    if (process.platform !== "win32") {
+      return { sent: false, message: "Lobby automation is only supported on Windows." };
+    }
+
+    const emitLog = (message: string) => {
+      console.info(`[AoE2 automation] ${message}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+    };
+    const encodedScript = Buffer.from(createLobbySequenceScript, "utf16le").toString("base64");
+    const sequenceProcess = spawn("powershell.exe", [
+      "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+    ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    sequenceProcess.stdout?.on("data", (chunk: Buffer) => {
+      chunk.toString().split(/\r?\n/).filter(Boolean).forEach(emitLog);
+    });
+    sequenceProcess.stderr?.on("data", (chunk: Buffer) => {
+      chunk.toString().split(/\r?\n/).filter(Boolean).forEach(emitLog);
+    });
+
+    const exitCode = await new Promise<number | null>((resolve) => sequenceProcess.once("exit", resolve));
+    return exitCode === 0
+      ? { sent: true, message: "Create Lobby sequence completed." }
+      : { sent: false, message: "The Create Lobby sequence stopped before completion." };
+  });
+
+  ipcMain.handle("game:test-host-game-mouse-click", async (event) => {
+    if (process.platform !== "win32") {
+      return { sent: false, message: "Background mouse testing is only supported on Windows." };
+    }
+    const encodedScript = Buffer.from(hostGameMouseClickScript, "utf16le").toString("base64");
+    try {
+      const { stdout } = await execFileAsync("powershell.exe", [
+        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+      ], { windowsHide: true });
+      const result = stdout.trim();
+      const sent = result.startsWith("SENT");
+      const logMessage = `MOUSE|Target=Host Game|DesignPoint=1905,1855|${result}`;
+      console.info(`[AoE2 automation] ${logMessage}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", logMessage);
+      return {
+        sent,
+        message: sent ? "Background click sent to Host Game." : "The Host Game click could not be sent."
+      };
+    } catch (error) {
+      console.error("[AoE2 automation] Host Game mouse test failed", error);
+      return { sent: false, message: "The Host Game mouse test failed." };
+    }
+  });
+
+  ipcMain.handle("game:calibrate-host-game-mouse-click", async (event) => {
+    if (process.platform !== "win32") {
+      return { sent: false, message: "Mouse calibration is only supported on Windows." };
+    }
+    const encodedScript = Buffer.from(hostGameMouseCalibrationScript, "utf16le").toString("base64");
+    try {
+      const { stdout } = await execFileAsync("powershell.exe", [
+        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+      ], { windowsHide: true });
+      const result = stdout.trim();
+      const sent = result.startsWith("SENT");
+      const logMessage = `MOUSE_CALIBRATION|Target=Host Game|${result}`;
+      console.info(`[AoE2 automation] ${logMessage}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", logMessage);
+      return {
+        sent,
+        message: sent ? "Calibrated background click sent at the cursor position." : "Mouse calibration did not complete."
+      };
+    } catch (error) {
+      console.error("[AoE2 automation] Host Game mouse calibration failed", error);
+      return { sent: false, message: "Mouse calibration failed. Keep the cursor over Host Game for the full countdown." };
+    }
+  });
+
+  ipcMain.handle("game:test-fake-activation-mouse-click", async (event) => {
+    if (process.platform !== "win32") {
+      return { sent: false, message: "Fake-activation mouse testing is only supported on Windows." };
+    }
+    const encodedScript = Buffer.from(fakeActivationMouseClickScript, "utf16le").toString("base64");
+    try {
+      const { stdout } = await execFileAsync("powershell.exe", [
+        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+      ], { windowsHide: true });
+      const result = stdout.trim();
+      const sent = result.startsWith("SENT");
+      const logMessage = `MOUSE_FAKE_ACTIVATION|Target=Host Game|${result}`;
+      console.info(`[AoE2 automation] ${logMessage}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", logMessage);
+      return {
+        sent,
+        message: sent ? "Fake-activation click sent to Host Game." : "The fake-activation click could not be sent."
+      };
+    } catch (error) {
+      console.error("[AoE2 automation] Fake-activation mouse test failed", error);
+      return { sent: false, message: "The fake-activation mouse test failed." };
+    }
   });
 
   ipcMain.handle("game:create-ranked-1v1-lobby", async (_event, request: CreateLobbyRequest) => {

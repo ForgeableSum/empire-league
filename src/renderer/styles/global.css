@@ -131,3 +131,40 @@ label {
     transition-duration: 0.01ms !important;
   }
 }
+.test-overlay {
+  box-sizing: border-box;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  color: #f8f2e7;
+  text-align: center;
+  background: linear-gradient(145deg, rgba(25, 22, 18, 0.96), rgba(48, 36, 22, 0.94));
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.test-overlay__status {
+  color: #d9ad62;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+.test-overlay__status span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #66d48a;
+  box-shadow: 0 0 10px #66d48a;
+}
+
+.test-overlay strong { display: block; margin-top: 10px; font-size: 18px; }
+.test-overlay p { margin: 5px 0 10px; color: #c8bfae; font-size: 13px; }
+.test-overlay button { -webkit-app-region: no-drag; padding: 5px 13px; }

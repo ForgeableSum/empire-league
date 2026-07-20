@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import type { GameInputKey } from "../../shared/contracts/gameIntegration";
 import { useAppStore } from "../state/appStore";
 
 type DetectionFeedback = { tone: "success" | "error"; message: string };
@@ -9,6 +10,8 @@ export function SettingsPage() {
   const [detecting, setDetecting] = useState(false);
   const [detectionFeedback, setDetectionFeedback] = useState<DetectionFeedback | null>(null);
   const [tabTestRunning, setTabTestRunning] = useState(false);
+  const [lobbySequenceRunning, setLobbySequenceRunning] = useState(false);
+  const [mouseCalibrationRunning, setMouseCalibrationRunning] = useState(false);
 
   useEffect(() => {
     return window.electronApi?.onAoe2AutomationLog((message) => {
@@ -70,6 +73,63 @@ export function SettingsPage() {
     }
   }
 
+  async function sendGameKey(key: GameInputKey): Promise<void> {
+    if (!window.electronApi) {
+      setDetectionFeedback({ tone: "error", message: "Game input is only available in the Electron app." });
+      return;
+    }
+    const result = await window.electronApi.sendAoe2Key(key);
+    setDetectionFeedback({ tone: result.sent ? "success" : "error", message: result.message });
+  }
+
+  async function runCreateLobbySequence(): Promise<void> {
+    if (!window.electronApi) {
+      setDetectionFeedback({ tone: "error", message: "Lobby automation is only available in the Electron app." });
+      return;
+    }
+    setLobbySequenceRunning(true);
+    setDetectionFeedback({ tone: "success", message: "Running ranked-lobby test…" });
+    try {
+      const result = await window.electronApi.runAoe2CreateLobbySequence();
+      setDetectionFeedback({ tone: result.sent ? "success" : "error", message: result.message });
+    } finally {
+      setLobbySequenceRunning(false);
+    }
+  }
+
+  async function testHostGameMouseClick(): Promise<void> {
+    if (!window.electronApi) {
+      setDetectionFeedback({ tone: "error", message: "Mouse testing is only available in the Electron app." });
+      return;
+    }
+    const result = await window.electronApi.testAoe2HostGameMouseClick();
+    setDetectionFeedback({ tone: result.sent ? "success" : "error", message: result.message });
+  }
+
+  async function calibrateHostGameMouseClick(): Promise<void> {
+    if (!window.electronApi) {
+      setDetectionFeedback({ tone: "error", message: "Mouse calibration is only available in the Electron app." });
+      return;
+    }
+    setMouseCalibrationRunning(true);
+    setDetectionFeedback({ tone: "success", message: "Move the cursor over Host Game and hold it there for five seconds." });
+    try {
+      const result = await window.electronApi.calibrateAoe2HostGameMouseClick();
+      setDetectionFeedback({ tone: result.sent ? "success" : "error", message: result.message });
+    } finally {
+      setMouseCalibrationRunning(false);
+    }
+  }
+
+  async function testFakeActivationMouseClick(): Promise<void> {
+    if (!window.electronApi) {
+      setDetectionFeedback({ tone: "error", message: "Fake-activation testing is only available in the Electron app." });
+      return;
+    }
+    const result = await window.electronApi.testAoe2FakeActivationMouseClick();
+    setDetectionFeedback({ tone: result.sent ? "success" : "error", message: result.message });
+  }
+
   return (
     <section className="settings-grid">
       <SettingsGroup title="Game">
@@ -86,6 +146,22 @@ export function SettingsPage() {
         <button type="button" className="secondary" onClick={() => void toggleTabTest()}>
           {tabTestRunning ? "Stop Tab Test" : "Run 15-second Tab Test"}
         </button>
+        <div className="game-input-controls">
+          <button type="button" className="secondary" onClick={() => void sendGameKey("TAB")}>Send Tab</button>
+          <button type="button" className="secondary" onClick={() => void sendGameKey("ENTER")}>Send Enter</button>
+        </div>
+        <button type="button" className="primary" disabled={lobbySequenceRunning} onClick={() => void runCreateLobbySequence()}>
+          {lobbySequenceRunning ? "Creating Ranked Lobby…" : "Test Ranked Lobby Sequence"}
+        </button>
+        <button type="button" className="secondary" onClick={() => void testHostGameMouseClick()}>
+          Test Mouse Click: Host Game
+        </button>
+        <button type="button" className="secondary" disabled={mouseCalibrationRunning} onClick={() => void calibrateHostGameMouseClick()}>
+          {mouseCalibrationRunning ? "Hover Over Host Game…" : "Calibrate Mouse: Host Game"}
+        </button>
+        <button type="button" className="secondary" onClick={() => void testFakeActivationMouseClick()}>
+          Test Fake Activation: Host Game
+        </button>
         {detectionFeedback && (
           <div className={`detection-feedback ${detectionFeedback.tone}`} role="status" aria-live="polite">
             {detectionFeedback.message}
@@ -101,6 +177,7 @@ export function SettingsPage() {
         <Toggle label="Allow rematch offers" checked={settings.rematchOffers} onChange={(rematchOffers) => updateSettings({ rematchOffers })} />
       </SettingsGroup>
       <SettingsGroup title="Interface">
+        <button type="button" className="secondary" onClick={() => void window.electronApi?.toggleTestOverlay()}>Show / Hide Test Overlay</button>
         <label>Sound volume<input type="range" min="0" max="100" value={settings.soundVolume} onChange={(event) => updateSettings({ soundVolume: Number(event.target.value) })} /></label>
         <Toggle label="Reduced motion" checked={settings.reducedMotion} onChange={(reducedMotion) => updateSettings({ reducedMotion })} />
         <Toggle label="Compact layout" checked={settings.compactLayout} onChange={(compactLayout) => updateSettings({ compactLayout })} />

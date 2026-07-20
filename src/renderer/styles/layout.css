@@ -452,6 +452,12 @@
   overflow-wrap: anywhere;
 }
 
+.game-input-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .detection-feedback.success {
   border-color: color-mix(in srgb, var(--success) 45%, var(--line));
   color: var(--success);
