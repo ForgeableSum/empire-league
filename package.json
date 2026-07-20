@@ -6,7 +6,7 @@
   "main": "dist/main/main.js",
   "type": "module",
   "scripts": {
-    "dev": "npm run build:electron && sh -c 'vite --host 127.0.0.1 & VITE_PID=$!; trap \"kill $VITE_PID\" EXIT; sleep 1; NODE_ENV=development electron .'",
+    "dev": "tsc -p tsconfig.electron.json && node src/dev.mjs",
     "build": "tsc -p tsconfig.json && npm run build:electron && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "package": "npm run build && electron-builder --dir",
