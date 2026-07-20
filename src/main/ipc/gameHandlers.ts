@@ -437,6 +437,14 @@ async function getSteamRoots(): Promise<string[]> {
   ].filter((path): path is string => Boolean(path)))];
 }
 
+async function getSteamExecutable(): Promise<string | undefined> {
+  for (const steamRoot of await getSteamRoots()) {
+    const executablePath = join(steamRoot, "steam.exe");
+    if (await pathExists(executablePath)) return executablePath;
+  }
+  return undefined;
+}
+
 async function getSteamAppsFolders(steamRoot: string): Promise<string[]> {
   const defaultSteamApps = join(steamRoot, "steamapps");
   const folders = [defaultSteamApps];
@@ -642,19 +650,36 @@ export function registerGameHandlers(): void {
     if (launchRequested) {
       return { launched: true, status: "running", message: "AoE2 DE launch was already requested." };
     }
-
-    const installation = await detectAoe2Installation();
-    if (!installation.installed) {
-      return {
-        launched: false,
-        status: "not_detected",
-        message: installation.message ?? "AoE2: Definitive Edition is not installed."
-      };
-    }
-
-    await shell.openExternal(`steam://run/${aoe2AppId}`);
     launchRequested = true;
-    return { launched: true, status: "running", message: "Launching AoE2 DE through Steam." };
+
+    try {
+      const installation = await detectAoe2Installation();
+      if (!installation.installed) {
+        launchRequested = false;
+        return {
+          launched: false,
+          status: "not_detected",
+          message: installation.message ?? "AoE2: Definitive Edition is not installed."
+        };
+      }
+
+      const steamExecutable = await getSteamExecutable();
+      if (!steamExecutable) {
+        launchRequested = false;
+        return { launched: false, status: "not_detected", message: "Steam could not be launched." };
+      }
+
+      const gameProcess = spawn(steamExecutable, ["-applaunch", aoe2AppId, "SKIPINTRO"], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: false
+      });
+      gameProcess.unref();
+      return { launched: true, status: "running", message: "Launching AoE2 DE." };
+    } catch (error) {
+      launchRequested = false;
+      throw error;
+    }
   });
 
   ipcMain.handle("game:focus", async () => {
