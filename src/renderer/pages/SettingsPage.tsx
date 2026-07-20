@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAppStore } from "../state/appStore";
 
 type DetectionFeedback = { tone: "success" | "error"; message: string };
@@ -8,6 +8,13 @@ export function SettingsPage() {
   const settings = state.settings;
   const [detecting, setDetecting] = useState(false);
   const [detectionFeedback, setDetectionFeedback] = useState<DetectionFeedback | null>(null);
+  const [tabTestRunning, setTabTestRunning] = useState(false);
+
+  useEffect(() => {
+    return window.electronApi?.onAoe2AutomationLog((message) => {
+      console.info("[AoE2 automation]", message);
+    });
+  }, []);
 
   async function testGameDetection(): Promise<void> {
     setDetecting(true);
@@ -42,6 +49,27 @@ export function SettingsPage() {
     }
   }
 
+  async function toggleTabTest(): Promise<void> {
+    if (!window.electronApi) {
+      setDetectionFeedback({ tone: "error", message: "Game input testing is only available in the Electron app." });
+      return;
+    }
+
+    if (tabTestRunning) {
+      await window.electronApi.stopAoe2TabTest();
+      setTabTestRunning(false);
+      setDetectionFeedback({ tone: "success", message: "Tab test stopped." });
+      return;
+    }
+
+    const result = await window.electronApi.startAoe2TabTest();
+    setDetectionFeedback({ tone: result.started ? "success" : "error", message: result.message });
+    if (result.started) {
+      setTabTestRunning(true);
+      window.setTimeout(() => setTabTestRunning(false), 15_000);
+    }
+  }
+
   return (
     <section className="settings-grid">
       <SettingsGroup title="Game">
@@ -54,6 +82,9 @@ export function SettingsPage() {
         <label>Recorded-game folder<input value={settings.replayFolder} onChange={(event) => updateSettings({ replayFolder: event.target.value })} placeholder="Not configured" /></label>
         <button type="button" className="secondary" disabled={detecting} onClick={() => void testGameDetection()}>
           {detecting ? "Detecting…" : "Test Game Detection"}
+        </button>
+        <button type="button" className="secondary" onClick={() => void toggleTabTest()}>
+          {tabTestRunning ? "Stop Tab Test" : "Run 15-second Tab Test"}
         </button>
         {detectionFeedback && (
           <div className={`detection-feedback ${detectionFeedback.tone}`} role="status" aria-live="polite">

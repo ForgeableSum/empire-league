@@ -1,5 +1,5 @@
 import { ipcMain, shell } from "electron";
-import { execFile } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -9,6 +9,69 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 const execFileAsync = promisify(execFile);
 const aoe2AppId = "813780";
 let launchRequested = false;
+let tabTestProcess: ChildProcess | undefined;
+
+const tabTestScript = String.raw`
+$ProgressPreference = 'SilentlyContinue'
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+public static class AoeWindow {
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
+
+  public static IntPtr Find(uint targetProcessId) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((window, _) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId == targetProcessId && IsWindowVisible(window)) {
+        found = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+
+  public static bool SendTab(IntPtr window) {
+    const uint WM_KEYDOWN = 0x0100;
+    const uint WM_KEYUP = 0x0101;
+    const int VK_TAB = 0x09;
+    bool down = PostMessage(window, WM_KEYDOWN, new IntPtr(VK_TAB), new IntPtr(0x000F0001));
+    bool up = PostMessage(window, WM_KEYUP, new IntPtr(VK_TAB), new IntPtr(unchecked((int)0xC00F0001)));
+    return down && up;
+  }
+}
+'@
+Add-Type -TypeDefinition $interop
+$deadline = [DateTime]::UtcNow.AddSeconds(15)
+while ([DateTime]::UtcNow -lt $deadline) {
+  $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($game) {
+    $window = [AoeWindow]::Find([uint32]$game.Id)
+    if ($window -ne [IntPtr]::Zero) {
+      $posted = [AoeWindow]::SendTab($window)
+      Write-Output "TAB|BackgroundPost=$posted"
+    } else {
+      Write-Output "WAIT|AoE2 process found, but no visible window was found"
+    }
+  } else {
+    Write-Output "WAIT|AoE2 process not found"
+  }
+  Start-Sleep -Milliseconds 800
+}
+`;
+
+function stopTabTest(): void {
+  if (tabTestProcess && !tabTestProcess.killed) tabTestProcess.kill();
+  tabTestProcess = undefined;
+}
+
+process.once("exit", stopTabTest);
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -130,6 +193,40 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:focus", async () => {
     await delay(180);
     return { focused: true };
+  });
+
+  ipcMain.handle("game:start-tab-test", async (event) => {
+    stopTabTest();
+    if (process.platform !== "win32") {
+      return { started: false, message: "The Tab test is only supported on Windows." };
+    }
+
+    const installation = await detectAoe2Installation();
+    if (!installation.installed) {
+      return { started: false, message: "AoE2 DE is not installed." };
+    }
+
+    const encodedScript = Buffer.from(tabTestScript, "utf16le").toString("base64");
+    tabTestProcess = spawn("powershell.exe", ["-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript], {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true
+    });
+    const sendLog = (chunk: Buffer) => {
+      for (const message of chunk.toString().split(/\r?\n/).filter(Boolean)) {
+        console.info(`[AoE2 automation] ${message}`);
+        if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+      }
+    };
+    tabTestProcess.stdout?.on("data", sendLog);
+    tabTestProcess.stderr?.on("data", sendLog);
+    tabTestProcess.once("exit", () => {
+      tabTestProcess = undefined;
+    });
+    return { started: true, message: "Sending Tab to AoE2 DE once per second for 15 seconds." };
+  });
+
+  ipcMain.handle("game:stop-tab-test", async () => {
+    stopTabTest();
   });
 
   ipcMain.handle("game:create-ranked-1v1-lobby", async (_event, request: CreateLobbyRequest) => {

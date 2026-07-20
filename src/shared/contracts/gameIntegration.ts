@@ -23,6 +23,11 @@ export interface GameFocusResult {
   focused: boolean;
 }
 
+export interface GameInputTestResult {
+  started: boolean;
+  message: string;
+}
+
 export interface CreateLobbyRequest {
   matchId: string;
   hostProfileId: number;
