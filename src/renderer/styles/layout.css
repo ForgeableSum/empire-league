@@ -1,7 +1,7 @@
 .app-shell {
   min-height: 100%;
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr) 290px;
+  grid-template-columns: 240px minmax(0, 1fr);
   background:
     linear-gradient(180deg, rgba(197, 141, 69, 0.08), transparent 240px),
     var(--bg);

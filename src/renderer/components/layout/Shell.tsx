@@ -1,7 +1,6 @@
 import { BarChart3, History, Home, Play, Settings, Shield, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAppStore, type AppPage } from "../../state/appStore";
-import { DeveloperPanel } from "../settings/DeveloperPanel";
 
 const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
   { page: "home", label: "Home", icon: <Home size={18} /> },
@@ -66,7 +65,6 @@ export function Shell({ children }: { children: ReactNode }) {
         </header>
         {children}
       </main>
-      {import.meta.env.DEV && <DeveloperPanel />}
     </div>
   );
 }
