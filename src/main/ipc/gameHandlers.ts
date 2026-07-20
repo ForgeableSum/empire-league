@@ -62,7 +62,7 @@ while ([DateTime]::UtcNow -lt $deadline) {
   } else {
     Write-Output "WAIT|AoE2 process not found"
   }
-  Start-Sleep -Milliseconds 1000
+  Start-Sleep -Milliseconds 500
 }
 `;
 
@@ -169,7 +169,7 @@ function Send-Tab([int]$count, [string]$stage) {
     $sent = [AoeSequence]::Send($window, 0x09, 0x000F0001, [int]0xC00F0001)
     Write-Output "SEQUENCE|$stage|Tab=$index/$count|Sent=$sent"
     if (-not $sent) { exit 4 }
-    Start-Sleep -Milliseconds 180
+    Start-Sleep -Milliseconds 90
   }
 }
 
@@ -189,19 +189,19 @@ Write-Output 'SEQUENCE|Start|ExpectedScreen=Main Menu'
 Send-Tab 6 'Main Menu'
 $activated = [AoeSequence]::Activate($window)
 Write-Output "SEQUENCE|Main Menu|ActivateBeforeMultiplayer=$activated"
-Start-Sleep -Milliseconds 250
+Start-Sleep -Milliseconds 125
 Send-Enter 'Open Multiplayer'
-Start-Sleep -Milliseconds 2500
+Start-Sleep -Milliseconds 500
 Send-Tab 5 'Multiplayer'
 Send-Enter 'Open Host Game'
-Start-Sleep -Milliseconds 1800
+Start-Sleep -Milliseconds 900
 Send-Tab 2 'Create Lobby Dialog'
 Send-Enter 'Open Lobby Type'
-Start-Sleep -Milliseconds 300
+Start-Sleep -Milliseconds 150
 Send-Down 'Select Ranked Option'
-Start-Sleep -Milliseconds 200
+Start-Sleep -Milliseconds 100
 Send-Enter 'Confirm Ranked Lobby Type'
-Start-Sleep -Milliseconds 500
+Start-Sleep -Milliseconds 250
 Send-Tab 9 'Ranked Lobby Settings'
 Send-Enter 'Create Ranked Lobby'
 Write-Output 'SEQUENCE|Complete=True'
@@ -724,7 +724,7 @@ export function registerGameHandlers(): void {
     tabTestProcess.once("exit", () => {
       tabTestProcess = undefined;
     });
-    return { started: true, message: "Sending Tab to AoE2 DE once per second for 15 seconds." };
+    return { started: true, message: "Sending Tab to AoE2 DE twice per second for 15 seconds." };
   });
 
   ipcMain.handle("game:stop-tab-test", async () => {
