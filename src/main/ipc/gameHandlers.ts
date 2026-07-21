@@ -13,6 +13,21 @@ let tabTestProcess: ChildProcess | undefined;
 let offscreenWindowProcess: ChildProcess | undefined;
 let aoe2WindowIsOffscreen = false;
 
+function releaseCursorForElectron(): void {
+  if (process.platform !== "win32" || !aoe2WindowIsOffscreen) return;
+  const script = String.raw`
+$signature = '[DllImport("user32.dll")] public static extern bool ClipCursor(IntPtr rectangle);'
+$cursor = Add-Type -MemberDefinition $signature -Name CursorRelease -Namespace EmpireLeague -PassThru
+$released = $cursor::ClipCursor([IntPtr]::Zero)
+Write-Output "CURSOR|Released=$released"
+`;
+  const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+  const child = spawn("powershell.exe", [
+    "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+  ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  child.stdout?.on("data", (chunk: Buffer) => console.info(`[AoE2 automation] ${chunk.toString().trim()}`));
+}
+
 function moveAoe2WindowOffscreen(): void {
   if (process.platform !== "win32") return;
   offscreenWindowProcess?.kill();
@@ -48,7 +63,10 @@ while ($true) {
   ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   offscreenWindowProcess.stdout?.on("data", (chunk: Buffer) => {
     const output = chunk.toString();
-    if (output.includes("OFFSCREEN|Moved=True")) aoe2WindowIsOffscreen = true;
+    if (output.includes("OFFSCREEN|Moved=True")) {
+      aoe2WindowIsOffscreen = true;
+      releaseCursorForElectron();
+    }
     output.split(/\r?\n/).filter(Boolean).forEach((message) => console.info(`[AoE2 automation] ${message}`));
   });
   offscreenWindowProcess.stderr?.on("data", (chunk: Buffer) => console.error(`[AoE2 automation] ${chunk.toString().trim()}`));
@@ -907,6 +925,7 @@ export function registerGameHandlers(): void {
       gameProcess.unref();
       moveAoe2WindowOffscreen();
       const appWindow = BrowserWindow.fromWebContents(event.sender);
+      appWindow?.on("focus", releaseCursorForElectron);
       appWindow?.once("closed", restoreAoe2Window);
       return { launched: true, status: "running", message: "Launching AoE2 DE." };
     } catch (error) {
