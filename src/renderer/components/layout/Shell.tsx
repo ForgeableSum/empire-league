@@ -55,7 +55,6 @@ export function Shell({ children }: { children: ReactNode }) {
       <main className="main-area">
         <header className="topbar">
           <div>
-            <span className="eyebrow">Community ranked client</span>
             <h1>{titleFor(page)}</h1>
           </div>
         </header>
