@@ -1,4 +1,4 @@
-import { ipcMain, shell } from "electron";
+import { BrowserWindow, ipcMain, screen, shell } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -917,6 +917,35 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
+    const appWindow = BrowserWindow.fromWebContents(event.sender);
+    const originalWindowState = appWindow && !appWindow.isDestroyed()
+      ? {
+          bounds: appWindow.getBounds(),
+          alwaysOnTop: appWindow.isAlwaysOnTop(),
+          focusable: appWindow.isFocusable()
+        }
+      : null;
+    let appOverlayVisible = false;
+    const showAppOverlay = () => {
+      if (!appWindow || appWindow.isDestroyed() || appOverlayVisible) return;
+      const display = screen.getDisplayMatching(appWindow.getBounds());
+      appWindow.setFocusable(false);
+      appWindow.setBounds(display.bounds);
+      appWindow.setAlwaysOnTop(true, "screen-saver");
+      appWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+      appWindow.showInactive();
+      appOverlayVisible = true;
+      emitLog("APP_OVERLAY|Visible=True|Focusable=False");
+    };
+    const restoreAppWindow = () => {
+      if (!appWindow || appWindow.isDestroyed() || !originalWindowState || !appOverlayVisible) return;
+      appWindow.setAlwaysOnTop(originalWindowState.alwaysOnTop);
+      appWindow.setVisibleOnAllWorkspaces(false);
+      appWindow.setBounds(originalWindowState.bounds);
+      appWindow.setFocusable(originalWindowState.focusable);
+      appOverlayVisible = false;
+      emitLog("APP_OVERLAY|Visible=False|Restored=True");
+    };
 
     const encodedGuard = Buffer.from(inputGuardScript, "utf16le").toString("base64");
     const guardProcess = spawn("powershell.exe", [
@@ -961,6 +990,9 @@ export function registerGameHandlers(): void {
       const output = chunk.toString();
       sequenceOutput += output;
       output.split(/\r?\n/).filter(Boolean).forEach(emitLog);
+      if (output.includes("SEQUENCE|Main Menu|ActivateBeforeMultiplayer=True")) {
+        showAppOverlay();
+      }
     });
     sequenceProcess.stderr?.on("data", (chunk: Buffer) => {
       chunk.toString().split(/\r?\n/).filter(Boolean).forEach(emitLog);
@@ -970,6 +1002,7 @@ export function registerGameHandlers(): void {
     clearTimeout(guardWatchdog);
     if (!guardProcess.killed) guardProcess.kill();
     emitLog("INPUT_GUARD|Active=False|Reason=SequenceComplete");
+    restoreAppWindow();
     const lobbyUri = sequenceOutput.match(/LOBBY_URI\|(aoe2de:\/\/0\/\d+)/)?.[1];
     return exitCode === 0
       ? { sent: true, message: "Create Lobby sequence completed.", lobbyUri }
