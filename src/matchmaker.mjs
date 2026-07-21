@@ -26,6 +26,11 @@ function emit(ticket, event) {
   ticket.events.push({ sequence: ++eventSequence, event });
 }
 
+function sharedMapPool(firstQueue, secondQueue) {
+  const secondMapIds = new Set(secondQueue.mapPool.map((map) => map.id));
+  return firstQueue.mapPool.filter((map) => secondMapIds.has(map.id));
+}
+
 function sessionFor(match, ticket) {
   const opponent = match.host.id === ticket.id ? match.guest : match.host;
   return {
@@ -49,6 +54,7 @@ function tryMatch(ticket) {
     candidate.id !== ticket.id
       && !candidate.matchId
       && candidate.queueId === ticket.queueId
+      && sharedMapPool(candidate.queue, ticket.queue).length > 0
       && (candidate.canHost || ticket.canHost)
   );
   if (!opponent) return;
@@ -57,12 +63,13 @@ function tryMatch(ticket) {
     ? (opponent.joinedAt <= ticket.joinedAt ? opponent : ticket)
     : (opponent.canHost ? opponent : ticket);
   const guest = host.id === opponent.id ? ticket : opponent;
+  const availableMaps = sharedMapPool(host.queue, guest.queue);
   const match = {
     id: `match-${randomUUID().slice(0, 8)}`,
     host,
     guest,
     accepted: new Set(),
-    selectedMap: host.queue.mapPool[Math.floor(Math.random() * host.queue.mapPool.length)],
+    selectedMap: availableMaps[Math.floor(Math.random() * availableMaps.length)],
     createdAt: new Date().toISOString(),
     acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
     lobby: null
@@ -87,6 +94,9 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/queue") {
       const body = await readJson(request);
       if (!body.queue?.id || !body.player) return send(response, 400, { error: "queue and player are required" });
+      if (!Array.isArray(body.queue.mapPool) || body.queue.mapPool.length === 0) {
+        return send(response, 400, { error: "at least one selected map is required" });
+      }
       const ticket = {
         id: `ticket-${randomUUID()}`,
         queueId: body.queue.id,

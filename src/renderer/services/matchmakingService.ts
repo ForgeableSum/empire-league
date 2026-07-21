@@ -104,6 +104,7 @@ export class LocalMatchmakingService implements MatchmakingService {
 export class MockMatchmakingService implements MatchmakingService {
   private listeners = new Map<string, QueueEventListener>();
   private timers = new Map<string, number[]>();
+  private queuedDefinitions = new Map<string, NonNullable<JoinQueueRequest["queue"]>>();
 
   constructor(private readonly getConfig: () => MockServiceConfig) {}
 
@@ -112,17 +113,23 @@ export class MockMatchmakingService implements MatchmakingService {
     if (this.getConfig().forceQueueFailure) {
       throw new Error("Matchmaking service is unavailable.");
     }
-    return { id: `ticket-${crypto.randomUUID()}`, queueId: request.queueId, joinedAt: new Date().toISOString() };
+    if (!request.queue?.mapPool.length) throw new Error("At least one selected map is required.");
+    const ticket = { id: `ticket-${crypto.randomUUID()}`, queueId: request.queueId, joinedAt: new Date().toISOString() };
+    this.queuedDefinitions.set(ticket.id, request.queue);
+    return ticket;
   }
 
   async leaveQueue(ticketId: string): Promise<void> {
     await delay(150);
     this.clearTimers(ticketId);
     this.listeners.delete(ticketId);
+    this.queuedDefinitions.delete(ticketId);
   }
 
   subscribeToQueue(ticketId: string, listener: QueueEventListener): UnsubscribeFunction {
     this.listeners.set(ticketId, listener);
+    const queuedDefinition = this.queuedDefinitions.get(ticketId);
+    const selectedMaps = queuedDefinition?.mapPool ?? maps;
     const config = this.getConfig();
     const timers: number[] = [];
     [0, 20000, 40000, 60000, 90000].forEach((at, index) => {
@@ -139,7 +146,7 @@ export class MockMatchmakingService implements MatchmakingService {
         const match: MatchSession = {
           id: `match-${crypto.randomUUID().slice(0, 8)}`,
           status: "match_found",
-          queue: {
+          queue: queuedDefinition ?? {
             id: "ranked-rm-1v1",
             name: "Ranked 1v1 Random Map",
             description: "Competitive 1v1 matchmaking with the active community map pool.",
@@ -155,7 +162,7 @@ export class MockMatchmakingService implements MatchmakingService {
           acceptedByPlayer: false,
           acceptedByOpponent: false,
           acceptDeadline: new Date(Date.now() + 20000).toISOString(),
-          selectedMap: maps[Math.floor(Math.random() * maps.length)],
+          selectedMap: selectedMaps[Math.floor(Math.random() * selectedMaps.length)],
           createdAt: new Date().toISOString()
         };
         listener({ type: "match_found", match });
@@ -165,6 +172,7 @@ export class MockMatchmakingService implements MatchmakingService {
     return () => {
       this.clearTimers(ticketId);
       this.listeners.delete(ticketId);
+      this.queuedDefinitions.delete(ticketId);
     };
   }
 
