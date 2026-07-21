@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchResult } from "../../shared/contracts/matches";
+import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { maps, currentUser } from "../mocks/mockPlayers";
 import { mockMatches } from "../mocks/mockMatches";
@@ -115,6 +116,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   configRef.current = state.mockConfig;
   const ticketRef = useRef<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
+  const lobbyAutomationRef = useRef<Promise<GameInputResult> | null>(null);
 
   const services = useMemo(
     () => ({
@@ -231,6 +233,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }));
           log(`Match found: ${event.match.id}`);
           notify("Match found", "warning");
+          if (event.match.role === "host" && window.electronApi) {
+            log("Assigned as host; starting AoE2 lobby automation");
+            lobbyAutomationRef.current = window.electronApi.runAoe2CreateLobbySequence();
+          }
         }
         if (event.type === "opponent_accepted") {
           setState((previous) => ({
@@ -274,6 +280,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }));
           log(`Host published lobby: ${event.lobby.platformLobbyId ?? "pending"}`);
           notify("The host created the AoE2 lobby", "success");
+          if (event.lobby.platformLobbyId?.startsWith("aoe2de://0/") && window.electronApi) {
+            void window.electronApi.openAoe2Lobby(event.lobby.platformLobbyId).then((result) => {
+              log(result.opened ? "Opening the host lobby in AoE2" : "The host lobby URI was rejected");
+              if (!result.opened) notify("The host lobby could not be opened", "danger");
+            });
+          }
         }
         if (event.type === "error") {
           setError({ code: event.code, message: event.message, retryable: true });
@@ -344,9 +356,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await services.game.launchGame();
       log("Opening multiplayer menu");
       if (window.electronApi) {
-        const automation = await window.electronApi.runAoe2CreateLobbySequence();
+        const automation = await (lobbyAutomationRef.current ?? window.electronApi.runAoe2CreateLobbySequence());
+        lobbyAutomationRef.current = null;
         if (!automation.sent) throw new Error(automation.message);
+        if (!automation.lobbyUri) throw new Error("AoE2 did not copy a valid lobby URI.");
         log("AoE2 host-lobby sequence completed");
+        log(`Lobby URI discovered: ${automation.lobbyUri}`);
+        const lobbyResult = await services.game.createLobby({
+          matchId: match.id,
+          hostProfileId: match.player.aoeProfileId,
+          guestProfileId: match.opponent.aoeProfileId,
+          map: match.selectedMap,
+          serverRegion: state.settings.serverRegion
+        });
+        const discoveredLobby = { ...lobbyResult.lobby, platformLobbyId: automation.lobbyUri };
+        log(`Lobby created: ${discoveredLobby.platformLobbyId}`);
+        await services.matchmaking.publishLobby(match.id, discoveredLobby);
+        log("Lobby details published to opponent");
+        setState((previous) => ({
+          ...previous,
+          activeMatch: previous.activeMatch ? { ...previous.activeMatch, lobby: discoveredLobby } : null,
+          queueStatus: "waiting_for_opponent"
+        }));
+        await services.game.waitForGameStart(discoveredLobby.platformLobbyId);
+        log("Opponent joined");
+        setState((previous) => ({ ...previous, queueStatus: "verifying_lobby" }));
+        await services.game.verifyLobby(discoveredLobby.platformLobbyId);
+        log("Lobby verified");
+        notify("Lobby created and verified", "success");
+        setState((previous) => ({
+          ...previous,
+          queueStatus: "ready",
+          gameStatus: "in_lobby",
+          activeMatch: previous.activeMatch
+            ? { ...previous.activeMatch, lobby: verifiedLobby(discoveredLobby), status: "ready" }
+            : null
+        }));
+        return;
       }
       const lobbyResult = await services.game.createLobby({
         matchId: match.id,

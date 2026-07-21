@@ -204,6 +204,19 @@ Send-Enter 'Confirm Ranked Lobby Type'
 Start-Sleep -Milliseconds 250
 Send-Tab 9 'Ranked Lobby Settings'
 Send-Enter 'Create Ranked Lobby'
+Write-Output 'SEQUENCE|Lobby URI|Waiting=6000ms'
+Start-Sleep -Seconds 6
+Set-Clipboard -Value ''
+Send-Tab 23 'Created Lobby'
+Send-Enter 'Copy Game ID'
+Start-Sleep -Milliseconds 400
+$clipboard = Get-Clipboard -Raw
+$lobbyUri = [regex]::Match([string]$clipboard, 'aoe2de://0/[0-9]+').Value
+if (-not $lobbyUri) {
+  Write-Output 'ERROR|Lobby URI was not copied'
+  exit 7
+}
+Write-Output "LOBBY_URI|$lobbyUri"
 Write-Output 'SEQUENCE|Complete=True'
 `;
 
@@ -769,16 +782,20 @@ export function registerGameHandlers(): void {
     const sequenceProcess = spawn("powershell.exe", [
       "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
     ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let sequenceOutput = "";
     sequenceProcess.stdout?.on("data", (chunk: Buffer) => {
-      chunk.toString().split(/\r?\n/).filter(Boolean).forEach(emitLog);
+      const output = chunk.toString();
+      sequenceOutput += output;
+      output.split(/\r?\n/).filter(Boolean).forEach(emitLog);
     });
     sequenceProcess.stderr?.on("data", (chunk: Buffer) => {
       chunk.toString().split(/\r?\n/).filter(Boolean).forEach(emitLog);
     });
 
-    const exitCode = await new Promise<number | null>((resolve) => sequenceProcess.once("exit", resolve));
+    const exitCode = await new Promise<number | null>((resolve) => sequenceProcess.once("close", resolve));
+    const lobbyUri = sequenceOutput.match(/LOBBY_URI\|(aoe2de:\/\/0\/\d+)/)?.[1];
     return exitCode === 0
-      ? { sent: true, message: "Create Lobby sequence completed." }
+      ? { sent: true, message: "Create Lobby sequence completed.", lobbyUri }
       : { sent: false, message: "The Create Lobby sequence stopped before completion." };
   });
 
@@ -890,8 +907,11 @@ export function registerGameHandlers(): void {
     };
   });
 
-  ipcMain.handle("game:open-lobby", async () => {
-    await delay(250);
+  ipcMain.handle("game:open-lobby", async (_event, lobbyId: string) => {
+    if (!/^aoe2de:\/\/0\/\d+$/.test(lobbyId)) {
+      return { opened: false };
+    }
+    await shell.openExternal(lobbyId);
     return { opened: true };
   });
 }

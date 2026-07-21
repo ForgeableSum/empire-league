@@ -33,6 +33,7 @@ export type GameInputKey = "TAB" | "ENTER";
 export interface GameInputResult {
   sent: boolean;
   message: string;
+  lobbyUri?: string;
 }
 
 export interface CreateLobbyRequest {
