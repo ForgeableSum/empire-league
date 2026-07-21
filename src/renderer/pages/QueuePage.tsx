@@ -53,8 +53,8 @@ export function QueuePage() {
         </div>
       ) : (
         <div className="queue-grid">
-          {queues.map((queue, index) => (
-            <article className={index === 0 ? "queue-card primary-queue" : "queue-card"} key={queue.id}>
+          {queues.map((queue) => (
+            <article className="queue-card" key={queue.id}>
               <div className="queue-heading">
                 <ShieldCheck size={22} />
                 <div>
@@ -73,7 +73,7 @@ export function QueuePage() {
                 <span><Clock size={16} /> {queue.estimatedWaitSeconds}s wait</span>
               </div>
               <div className="tag-list">{queue.mapPool.slice(0, 6).map((map) => <span key={map.id}>{map.name}</span>)}</div>
-              <button className={index === 0 ? "primary" : "secondary"} type="button" onClick={() => void startQueue(queue)}>
+              <button className="secondary" type="button" onClick={() => void startQueue(queue)}>
                 <Search size={18} /> Search
               </button>
             </article>
