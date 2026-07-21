@@ -46,11 +46,16 @@ function sessionFor(match, ticket) {
 
 function tryMatch(ticket) {
   const opponent = [...tickets.values()].find((candidate) =>
-    candidate.id !== ticket.id && !candidate.matchId && candidate.queueId === ticket.queueId
+    candidate.id !== ticket.id
+      && !candidate.matchId
+      && candidate.queueId === ticket.queueId
+      && (candidate.canHost || ticket.canHost)
   );
   if (!opponent) return;
 
-  const host = opponent.joinedAt <= ticket.joinedAt ? opponent : ticket;
+  const host = opponent.canHost && ticket.canHost
+    ? (opponent.joinedAt <= ticket.joinedAt ? opponent : ticket)
+    : (opponent.canHost ? opponent : ticket);
   const guest = host.id === opponent.id ? ticket : opponent;
   const match = {
     id: `match-${randomUUID().slice(0, 8)}`,
@@ -87,6 +92,7 @@ const server = createServer(async (request, response) => {
         queueId: body.queue.id,
         queue: body.queue,
         player: body.player,
+        canHost: body.canHost !== false,
         joinedAt: new Date().toISOString(),
         matchId: null,
         events: []

@@ -55,7 +55,7 @@ async function main() {
   ticket = await request("/queue", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ queue, player })
+    body: JSON.stringify({ queue, player, canHost: false })
   });
   console.log("[guest bot] Joined Ranked 1v1. Waiting for your Electron client...");
 

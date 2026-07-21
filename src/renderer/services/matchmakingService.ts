@@ -27,7 +27,7 @@ export class LocalMatchmakingService implements MatchmakingService {
     const response = await fetch(`${localMatchmakerUrl}/queue`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ queue: request.queue, player: request.player })
+      body: JSON.stringify({ queue: request.queue, player: request.player, canHost: request.canHost })
     });
     return this.read<QueueTicket>(response);
   }

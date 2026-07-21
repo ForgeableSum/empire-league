@@ -208,7 +208,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function startQueue(queue: QueueDefinition): Promise<void> {
     try {
-      const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: state.currentUser });
+      const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: state.currentUser, canHost: true });
       ticketRef.current = ticket.id;
       setState((previous) => ({
         ...previous,
@@ -226,47 +226,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setState((previous) => ({ ...previous, searchRange: { min: event.minRating, max: event.maxRating } }));
         }
         if (event.type === "match_found") {
+          const matchedSession = {
+            ...event.match,
+            player: state.currentUser,
+            status: event.match.role === "host" ? "creating_lobby" as const : "waiting_for_opponent" as const
+          };
           setState((previous) => ({
             ...previous,
-            queueStatus: "match_found",
-            activeMatch: { ...event.match, player: previous.currentUser }
+            queueStatus: event.match.role === "host" ? "creating_lobby" : "waiting_for_opponent",
+            activeMatch: matchedSession
           }));
           log(`Match found: ${event.match.id}`);
           notify("Match found", "warning");
           if (event.match.role === "host" && window.electronApi) {
             log("Assigned as host; starting AoE2 lobby automation");
             lobbyAutomationRef.current = window.electronApi.runAoe2CreateLobbySequence();
-          }
-        }
-        if (event.type === "opponent_accepted") {
-          setState((previous) => ({
-            ...previous,
-            queueStatus: event.role === "host" ? "creating_lobby" : "waiting_for_opponent",
-            activeMatch: previous.activeMatch
-              ? {
-                  ...previous.activeMatch,
-                  acceptedByPlayer: true,
-                  acceptedByOpponent: true,
-                  role: event.role ?? previous.activeMatch.role,
-                  status: event.role === "host" ? "creating_lobby" : "waiting_for_opponent"
-                }
-              : null
-          }));
-          log(event.role === "host" ? "Both players accepted; assigned as host" : "Both players accepted; waiting for host");
-          notify("Opponent accepted", "success");
-          if (event.role === "host") {
-            setState((previous) => {
-              if (!previous.activeMatch) return previous;
-              const acceptedMatch = {
-                ...previous.activeMatch,
-                acceptedByPlayer: true,
-                acceptedByOpponent: true,
-                role: "host" as const,
-                status: "creating_lobby" as const
-              };
-              void prepareLobby(acceptedMatch);
-              return { ...previous, queueStatus: "creating_lobby", activeMatch: acceptedMatch };
-            });
+            void prepareLobby(matchedSession);
           }
         }
         if (event.type === "lobby_ready") {

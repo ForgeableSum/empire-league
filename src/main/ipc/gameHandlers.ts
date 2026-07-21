@@ -169,7 +169,7 @@ function Send-Tab([int]$count, [string]$stage) {
     $sent = [AoeSequence]::Send($window, 0x09, 0x000F0001, [int]0xC00F0001)
     Write-Output "SEQUENCE|$stage|Tab=$index/$count|Sent=$sent"
     if (-not $sent) { exit 4 }
-    Start-Sleep -Milliseconds 90
+    Start-Sleep -Milliseconds 135
   }
 }
 
@@ -189,27 +189,27 @@ Write-Output 'SEQUENCE|Start|ExpectedScreen=Main Menu'
 Send-Tab 6 'Main Menu'
 $activated = [AoeSequence]::Activate($window)
 Write-Output "SEQUENCE|Main Menu|ActivateBeforeMultiplayer=$activated"
-Start-Sleep -Milliseconds 125
+Start-Sleep -Milliseconds 188
 Send-Enter 'Open Multiplayer'
-Start-Sleep -Milliseconds 500
+Start-Sleep -Milliseconds 750
 Send-Tab 5 'Multiplayer'
 Send-Enter 'Open Host Game'
-Start-Sleep -Milliseconds 900
+Start-Sleep -Milliseconds 1350
 Send-Tab 2 'Create Lobby Dialog'
 Send-Enter 'Open Lobby Type'
-Start-Sleep -Milliseconds 150
+Start-Sleep -Milliseconds 225
 Send-Down 'Select Ranked Option'
-Start-Sleep -Milliseconds 100
+Start-Sleep -Milliseconds 150
 Send-Enter 'Confirm Ranked Lobby Type'
-Start-Sleep -Milliseconds 250
+Start-Sleep -Milliseconds 375
 Send-Tab 9 'Ranked Lobby Settings'
 Send-Enter 'Create Ranked Lobby'
-Write-Output 'SEQUENCE|Lobby URI|Waiting=6000ms'
-Start-Sleep -Seconds 6
+Write-Output 'SEQUENCE|Lobby URI|Waiting=7000ms'
+Start-Sleep -Seconds 7
 Set-Clipboard -Value ''
 Send-Tab 23 'Created Lobby'
 Send-Enter 'Copy Game ID'
-Start-Sleep -Milliseconds 400
+Start-Sleep -Milliseconds 600
 $clipboard = Get-Clipboard -Raw
 $lobbyUri = [regex]::Match([string]$clipboard, 'aoe2de://0/[0-9]+').Value
 if (-not $lobbyUri) {

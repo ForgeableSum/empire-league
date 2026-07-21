@@ -101,6 +101,7 @@ export interface JoinQueueRequest {
   queueId: string;
   queue?: QueueDefinition;
   player: PlayerProfile;
+  canHost?: boolean;
 }
 
 export interface QueueTicket {
