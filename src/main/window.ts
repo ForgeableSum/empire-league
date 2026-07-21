@@ -22,6 +22,13 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 1050,
     minHeight: 680,
     title: "Empire League",
+    autoHideMenuBar: true,
+    titleBarStyle: "hidden",
+    titleBarOverlay: {
+      color: "#141312",
+      symbolColor: "#e8dfca",
+      height: 40
+    },
     backgroundColor: "#141312",
     webPreferences: {
       preload: join(currentDir, "../preload/preload.cjs"),

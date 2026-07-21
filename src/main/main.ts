@@ -1,10 +1,11 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, nativeTheme } from "electron";
 import { createMainWindow } from "./window.js";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers.js";
 
 registerIpcHandlers();
 
 app.whenReady().then(() => {
+  nativeTheme.themeSource = "dark";
   createMainWindow();
 
   app.on("activate", () => {
