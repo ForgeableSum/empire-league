@@ -51,11 +51,13 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </aside>
       <main className="main-area">
-        <header className="topbar">
-          <div>
-            <h1>{titleFor(page)}</h1>
-          </div>
-        </header>
+        {page !== "home" && (
+          <header className="topbar">
+            <div>
+              <h1>{titleFor(page)}</h1>
+            </div>
+          </header>
+        )}
         {children}
       </main>
     </div>
