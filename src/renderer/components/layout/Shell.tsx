@@ -58,10 +58,6 @@ export function Shell({ children }: { children: ReactNode }) {
             <span className="eyebrow">Community ranked client</span>
             <h1>{titleFor(page)}</h1>
           </div>
-          <div className="queue-pill">
-            <span>{state.queueStatus.replaceAll("_", " ")}</span>
-            {state.selectedQueue && <strong>{state.selectedQueue.name}</strong>}
-          </div>
         </header>
         {children}
       </main>

@@ -70,7 +70,6 @@
 
 .brand span,
 .user-block span,
-.queue-pill span,
 .eyebrow {
   display: block;
   color: var(--muted);
@@ -156,20 +155,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-}
-
-.queue-pill {
-  min-width: 190px;
-  border: 1px solid var(--line-soft);
-  background: #1c1a17;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-}
-
-.queue-pill strong {
-  display: block;
-  margin-top: 4px;
-  font-size: 13px;
 }
 
 .page-grid,
