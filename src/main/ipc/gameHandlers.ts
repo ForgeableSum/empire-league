@@ -10,6 +10,84 @@ const execFileAsync = promisify(execFile);
 const aoe2AppId = "813780";
 let launchRequested = false;
 let tabTestProcess: ChildProcess | undefined;
+let offscreenWindowProcess: ChildProcess | undefined;
+let aoe2WindowIsOffscreen = false;
+
+function moveAoe2WindowOffscreen(): void {
+  if (process.platform !== "win32") return;
+  offscreenWindowProcess?.kill();
+  const script = String.raw`
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+public static class AoeOffscreen {
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+}
+'@
+Add-Type -TypeDefinition $interop
+$lastWindow = [IntPtr]::Zero
+$attempt = 0
+while ($true) {
+  $attempt++
+  $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($game -and $game.MainWindowHandle -ne 0) {
+    [AoeOffscreen]::ShowWindow($game.MainWindowHandle, 9) | Out-Null
+    $moved = [AoeOffscreen]::SetWindowPos($game.MainWindowHandle, [IntPtr]::Zero, -32000, -32000, 0, 0, 0x0015)
+    if ($game.MainWindowHandle -ne $lastWindow) {
+      Write-Output "OFFSCREEN|Moved=$moved|Attempt=$attempt|GamePid=$($game.Id)|Window=$($game.MainWindowHandle)"
+      $lastWindow = $game.MainWindowHandle
+    }
+  }
+  Start-Sleep -Milliseconds 250
+}
+`;
+  const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+  offscreenWindowProcess = spawn("powershell.exe", [
+    "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+  ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  offscreenWindowProcess.stdout?.on("data", (chunk: Buffer) => {
+    const output = chunk.toString();
+    if (output.includes("OFFSCREEN|Moved=True")) aoe2WindowIsOffscreen = true;
+    output.split(/\r?\n/).filter(Boolean).forEach((message) => console.info(`[AoE2 automation] ${message}`));
+  });
+  offscreenWindowProcess.stderr?.on("data", (chunk: Buffer) => console.error(`[AoE2 automation] ${chunk.toString().trim()}`));
+  offscreenWindowProcess.once("exit", () => { offscreenWindowProcess = undefined; });
+}
+
+function restoreAoe2Window(focus = false): void {
+  if (process.platform !== "win32") return;
+  offscreenWindowProcess?.kill();
+  offscreenWindowProcess = undefined;
+  if (!aoe2WindowIsOffscreen) return;
+  aoe2WindowIsOffscreen = false;
+  const script = String.raw`
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+public static class AoeRestore {
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+}
+'@
+Add-Type -TypeDefinition $interop
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($game -and $game.MainWindowHandle -ne 0) {
+  $restored = [AoeRestore]::SetWindowPos($game.MainWindowHandle, [IntPtr]::Zero, 0, 0, 0, 0, 0x0015)
+  if (${focus ? "$true" : "$false"}) {
+    [AoeRestore]::ShowWindow($game.MainWindowHandle, 9) | Out-Null
+    [AoeRestore]::SetForegroundWindow($game.MainWindowHandle) | Out-Null
+  }
+  Write-Output "OFFSCREEN|Restored=$restored"
+}
+`;
+  const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+  const child = spawn("powershell.exe", [
+    "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+  ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  child.stdout?.on("data", (chunk: Buffer) => console.info(`[AoE2 automation] ${chunk.toString().trim()}`));
+}
 
 const tabTestScript = String.raw`
 $ProgressPreference = 'SilentlyContinue'
@@ -798,7 +876,7 @@ export function registerGameHandlers(): void {
     return { running: true, pid: 4242 };
   });
 
-  ipcMain.handle("game:launch", async () => {
+  ipcMain.handle("game:launch", async (event) => {
     if (launchRequested) {
       return { launched: true, status: "running", message: "AoE2 DE launch was already requested." };
     }
@@ -827,6 +905,9 @@ export function registerGameHandlers(): void {
         windowsHide: false
       });
       gameProcess.unref();
+      moveAoe2WindowOffscreen();
+      const appWindow = BrowserWindow.fromWebContents(event.sender);
+      appWindow?.once("closed", restoreAoe2Window);
       return { launched: true, status: "running", message: "Launching AoE2 DE." };
     } catch (error) {
       launchRequested = false;
@@ -835,6 +916,7 @@ export function registerGameHandlers(): void {
   });
 
   ipcMain.handle("game:focus", async () => {
+    restoreAoe2Window(true);
     await delay(180);
     return { focused: true };
   });
@@ -973,6 +1055,7 @@ export function registerGameHandlers(): void {
 
     if (!guardReady) {
       if (!guardProcess.killed) guardProcess.kill();
+      restoreAoe2Window();
       return { sent: false, message: "The temporary AoE2 input guard could not be started." };
     }
 
@@ -1004,6 +1087,7 @@ export function registerGameHandlers(): void {
     emitLog("INPUT_GUARD|Active=False|Reason=SequenceComplete");
     restoreAppWindow();
     const lobbyUri = sequenceOutput.match(/LOBBY_URI\|(aoe2de:\/\/0\/\d+)/)?.[1];
+    if (exitCode !== 0 || !lobbyUri) restoreAoe2Window();
     return exitCode === 0
       ? { sent: true, message: "Create Lobby sequence completed.", lobbyUri }
       : { sent: false, message: "The Create Lobby sequence stopped before completion." };
