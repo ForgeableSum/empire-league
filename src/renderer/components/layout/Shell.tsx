@@ -18,11 +18,11 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
-      <div className="window-title">Empire League - AoE2 DE</div>
+      <div className="window-title">
+        <img src={appIcon} alt="" />
+        <span>Empire League - AoE2 DE</span>
+      </div>
       <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark"><img src={appIcon} alt="" /></div>
-        </div>
         <nav className="nav-list" aria-label="Primary navigation">
           {navItems.map((item) => (
             <button
