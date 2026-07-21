@@ -348,6 +348,45 @@
   transition: border-color 140ms ease, opacity 140ms ease, filter 140ms ease;
 }
 
+.map-thumbnail-wrap {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 16 / 10;
+}
+
+.map-thumbnail-wrap .map-thumbnail {
+  width: 100%;
+  height: 100%;
+}
+
+.map-favorite {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(20, 19, 17, 0.78);
+}
+
+.map-favorite:hover,
+.map-favorite.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(20, 19, 17, 0.92);
+}
+
+.map-favorite:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .map-thumbnail:not(.selected) {
   opacity: 0.48;
   filter: grayscale(0.75);

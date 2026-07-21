@@ -6,19 +6,42 @@ import { ResultScreen } from "../components/match/ResultScreen";
 import { MapPool } from "../components/common/MapPool";
 import { useAppStore } from "../state/appStore";
 
+const favoriteMapsKey = "empire-league-favorite-maps";
+
 export function QueuePage() {
   const { state, queues, startQueue, cancelQueue, clearError } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
   const [selectedMaps, setSelectedMaps] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(queues.map((queue) => [queue.id, queue.mapPool.map((map) => map.id)]))
   );
+  const [favoriteMaps, setFavoriteMaps] = useState<Record<string, string>>(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(favoriteMapsKey) ?? "{}");
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleFavorite = (queueId: string, mapId: string) => {
+    setFavoriteMaps((current) => {
+      const next = { ...current };
+      if (next[queueId] === mapId) delete next[queueId];
+      else next[queueId] = mapId;
+      window.localStorage.setItem(favoriteMapsKey, JSON.stringify(next));
+      return next;
+    });
+  };
 
   const toggleMap = (queueId: string, mapId: string) => {
+    if (selectedMaps[queueId]?.includes(mapId) && favoriteMaps[queueId] === mapId) {
+      toggleFavorite(queueId, mapId);
+    }
     setSelectedMaps((current) => {
       const queueMaps = current[queueId] ?? [];
+      const removing = queueMaps.includes(mapId);
       return {
         ...current,
-        [queueId]: queueMaps.includes(mapId)
+        [queueId]: removing
           ? queueMaps.filter((id) => id !== mapId)
           : [...queueMaps, mapId]
       };
@@ -88,6 +111,8 @@ export function QueuePage() {
                   maps={queue.mapPool}
                   selectedMapIds={selectedMaps[queue.id] ?? []}
                   onToggle={(mapId) => toggleMap(queue.id, mapId)}
+                  favoriteMapId={favoriteMaps[queue.id]}
+                  onFavorite={(mapId) => toggleFavorite(queue.id, mapId)}
                 />
                 <button
                   className="secondary"
@@ -95,7 +120,8 @@ export function QueuePage() {
                   disabled={(selectedMaps[queue.id]?.length ?? 0) === 0}
                   onClick={() => void startQueue({
                     ...queue,
-                    mapPool: queue.mapPool.filter((map) => selectedMaps[queue.id]?.includes(map.id))
+                    mapPool: queue.mapPool.filter((map) => selectedMaps[queue.id]?.includes(map.id)),
+                    favoriteMapId: favoriteMaps[queue.id]
                   })}
                 >
                   <Search size={18} /> Search

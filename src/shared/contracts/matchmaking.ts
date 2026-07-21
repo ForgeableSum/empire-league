@@ -91,6 +91,7 @@ export interface QueueDefinition {
   format: "1v1";
   ruleset: "Random Map" | "Empire Wars";
   mapPool: MapDefinition[];
+  favoriteMapId?: string;
   ranked: boolean;
   estimatedWaitSeconds: number;
   playersSearching: number;
