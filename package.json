@@ -36,6 +36,13 @@
     "directories": {
       "output": "release"
     },
+    "icon": "src/renderer/assets/el-2.png",
+    "extraResources": [
+      {
+        "from": "src/renderer/assets/el-2.png",
+        "to": "icon.png"
+      }
+    ],
     "mac": {
       "category": "public.app-category.games"
     }

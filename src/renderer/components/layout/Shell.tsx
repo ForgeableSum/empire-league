@@ -1,5 +1,6 @@
-import { BarChart3, History, Home, Play, Settings, Shield, User } from "lucide-react";
+import { BarChart3, History, Home, Play, Settings, User } from "lucide-react";
 import type { ReactNode } from "react";
+import appIcon from "../../assets/el-2.png";
 import { useAppStore, type AppPage } from "../../state/appStore";
 
 const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
@@ -17,13 +18,10 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="app-shell">
+      <div className="window-title">Empire League - AoE2 DE</div>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark"><Shield size={22} /></div>
-          <div>
-            <strong>Empire League</strong>
-            <span>AoE2 DE 1v1</span>
-          </div>
+          <div className="brand-mark"><img src={appIcon} alt="" /></div>
         </div>
         <nav className="nav-list" aria-label="Primary navigation">
           {navItems.map((item) => (

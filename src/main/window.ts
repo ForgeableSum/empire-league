@@ -5,6 +5,12 @@ import { fileURLToPath } from "node:url";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 let overlayWindow: BrowserWindow | null = null;
 
+function appIconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, "icon.png")
+    : join(app.getAppPath(), "src/renderer/assets/el-2.png");
+}
+
 function loadRenderer(window: BrowserWindow, route = ""): void {
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
   if (isDev) {
@@ -22,6 +28,7 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 1050,
     minHeight: 680,
     title: "Empire League",
+    icon: appIconPath(),
     autoHideMenuBar: true,
     titleBarStyle: "hidden",
     titleBarOverlay: {
@@ -72,6 +79,7 @@ export function toggleTestOverlay(): boolean {
     skipTaskbar: true,
     show: false,
     hasShadow: false,
+    icon: appIconPath(),
     webPreferences: {
       preload: join(currentDir, "../preload/preload.cjs"),
       contextIsolation: true,

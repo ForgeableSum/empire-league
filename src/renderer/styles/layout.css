@@ -19,6 +19,22 @@
   -webkit-app-region: drag;
 }
 
+.window-title {
+  position: fixed;
+  top: 0;
+  left: 14px;
+  z-index: 1001;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
 .sidebar {
   border-right: 1px solid var(--line-soft);
   background: #181715;
@@ -49,6 +65,24 @@
   color: var(--accent-2);
   font-weight: 900;
   border: 1px solid var(--line);
+}
+
+.brand-mark {
+  width: 85px;
+  height: 85px;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+}
+
+.brand {
+  justify-content: center;
+}
+
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .large-avatar {
