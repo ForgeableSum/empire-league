@@ -3,11 +3,27 @@ import { useEffect, useState } from "react";
 import { LobbyPreparation } from "../components/match/LobbyPreparation";
 import { ActiveMatch } from "../components/match/ActiveMatch";
 import { ResultScreen } from "../components/match/ResultScreen";
+import { MapPool } from "../components/common/MapPool";
 import { useAppStore } from "../state/appStore";
 
 export function QueuePage() {
   const { state, queues, startQueue, cancelQueue, clearError } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
+  const [selectedMaps, setSelectedMaps] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(queues.map((queue) => [queue.id, queue.mapPool.map((map) => map.id)]))
+  );
+
+  const toggleMap = (queueId: string, mapId: string) => {
+    setSelectedMaps((current) => {
+      const queueMaps = current[queueId] ?? [];
+      return {
+        ...current,
+        [queueId]: queueMaps.includes(mapId)
+          ? queueMaps.filter((id) => id !== mapId)
+          : [...queueMaps, mapId]
+      };
+    });
+  };
 
   useEffect(() => {
     if (!state.queueStartedAt || state.queueStatus !== "searching") return;
@@ -63,19 +79,28 @@ export function QueuePage() {
                 </div>
               </div>
               <p>{queue.description}</p>
-              {queue.supportedFormats && (
-                <div className="tag-list">
-                  {queue.supportedFormats.map((format) => <span key={format}>{format}</span>)}
+              <div className="queue-search-controls">
+                <div className="queue-stats">
+                  <span><Search size={16} /> {queue.playersSearching} searching</span>
+                  <span><Clock size={16} /> {queue.estimatedWaitSeconds}s wait</span>
                 </div>
-              )}
-              <div className="queue-stats">
-                <span><Search size={16} /> {queue.playersSearching} searching</span>
-                <span><Clock size={16} /> {queue.estimatedWaitSeconds}s wait</span>
+                <MapPool
+                  maps={queue.mapPool}
+                  selectedMapIds={selectedMaps[queue.id] ?? []}
+                  onToggle={(mapId) => toggleMap(queue.id, mapId)}
+                />
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={(selectedMaps[queue.id]?.length ?? 0) === 0}
+                  onClick={() => void startQueue({
+                    ...queue,
+                    mapPool: queue.mapPool.filter((map) => selectedMaps[queue.id]?.includes(map.id))
+                  })}
+                >
+                  <Search size={18} /> Search
+                </button>
               </div>
-              <div className="tag-list">{queue.mapPool.slice(0, 6).map((map) => <span key={map.id}>{map.name}</span>)}</div>
-              <button className="secondary" type="button" onClick={() => void startQueue(queue)}>
-                <Search size={18} /> Search
-              </button>
             </article>
           ))}
         </div>

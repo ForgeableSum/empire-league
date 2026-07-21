@@ -73,7 +73,6 @@ export const queueDefinitions: QueueDefinition[] = [
     name: "Team Games",
     description: "Find a match for solo, two-player, or three-player teams.",
     format: "1v1",
-    supportedFormats: ["1v1", "2v2", "3v3"],
     ruleset: "Random Map",
     mapPool: maps,
     ranked: false,

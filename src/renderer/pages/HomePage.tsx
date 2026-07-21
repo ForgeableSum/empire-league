@@ -2,6 +2,8 @@ import { Play } from "lucide-react";
 import { formatDivisionForRating } from "../../shared/contracts/matchmaking";
 import { Metric } from "../components/common/Metric";
 import { FormPips } from "../components/common/FormPips";
+import { MapPool } from "../components/common/MapPool";
+import { maps } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
 
 export function HomePage() {
@@ -45,10 +47,7 @@ export function HomePage() {
       </div>
       <div className="panel">
         <h2>Current Map Pool</h2>
-        <div className="tag-list">
-          {state.selectedQueue?.mapPool.map((map) => <span key={map.id}>{map.name}</span>) ??
-            ["Arabia", "Arena", "Acropolis", "Gold Rush", "Hideout", "Nomad"].map((map) => <span key={map}>{map}</span>)}
-        </div>
+        <MapPool maps={state.selectedQueue?.mapPool ?? maps} limit={6} />
       </div>
       <div className="panel">
         <h2>Platform Status</h2>

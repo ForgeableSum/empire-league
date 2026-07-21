@@ -66,6 +66,7 @@ export interface MapDefinition {
   id: string;
   name: string;
   style: "open" | "closed" | "hybrid" | "water" | "nomad";
+  thumbnailUrl: string;
 }
 
 export interface QueueDefinition {
@@ -73,7 +74,6 @@ export interface QueueDefinition {
   name: string;
   description: string;
   format: "1v1";
-  supportedFormats?: Array<"1v1" | "2v2" | "3v3">;
   ruleset: "Random Map" | "Empire Wars";
   mapPool: MapDefinition[];
   ranked: boolean;

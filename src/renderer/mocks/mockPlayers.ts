@@ -1,17 +1,19 @@
 import { getDivisionForRating, type MapDefinition, type MatchOutcome } from "../../shared/contracts/matchmaking";
 import type { PlayerProfile } from "../../shared/contracts/players";
+import acropolisThumbnail from "../assets/maps/acropolis.png";
+import arabiaThumbnail from "../assets/maps/arabia.png";
+import arenaThumbnail from "../assets/maps/arena.png";
+import goldRushThumbnail from "../assets/maps/gold-rush.png";
+import megaRandomThumbnail from "../assets/maps/megarandom.png";
+import nomadThumbnail from "../assets/maps/nomad.png";
 
 export const maps: MapDefinition[] = [
-  { id: "arabia", name: "Arabia", style: "open" },
-  { id: "arena", name: "Arena", style: "closed" },
-  { id: "acropolis", name: "Acropolis", style: "open" },
-  { id: "gold-rush", name: "Gold Rush", style: "open" },
-  { id: "hideout", name: "Hideout", style: "closed" },
-  { id: "nomad", name: "Nomad", style: "nomad" },
-  { id: "four-lakes", name: "Four Lakes", style: "hybrid" },
-  { id: "megarandom", name: "MegaRandom", style: "hybrid" },
-  { id: "socotra", name: "Socotra", style: "open" },
-  { id: "runestones", name: "Runestones", style: "open" }
+  { id: "arabia", name: "Arabia", style: "open", thumbnailUrl: arabiaThumbnail },
+  { id: "arena", name: "Arena", style: "closed", thumbnailUrl: arenaThumbnail },
+  { id: "acropolis", name: "Acropolis", style: "open", thumbnailUrl: acropolisThumbnail },
+  { id: "gold-rush", name: "Gold Rush", style: "open", thumbnailUrl: goldRushThumbnail },
+  { id: "nomad", name: "Nomad", style: "nomad", thumbnailUrl: nomadThumbnail },
+  { id: "megarandom", name: "MegaRandom", style: "hybrid", thumbnailUrl: megaRandomThumbnail }
 ];
 
 export const civilizations = [

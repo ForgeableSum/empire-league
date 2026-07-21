@@ -307,6 +307,81 @@
   font-size: 12px;
 }
 
+.map-pool {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.map-thumbnail {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 16 / 10;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #1a1816;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, opacity 140ms ease, filter 140ms ease;
+}
+
+.map-thumbnail:not(.selected) {
+  opacity: 0.48;
+  filter: grayscale(0.75);
+}
+
+.map-thumbnail.selected {
+  border-color: var(--accent);
+}
+
+.map-thumbnail:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.map-thumbnail img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.map-name {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 18px 9px 8px;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.88));
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.map-check {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 5px;
+  color: #171614;
+  background: var(--accent);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.map-thumbnail:not(.selected) .map-check {
+  background: rgba(20, 19, 17, 0.75);
+}
+
 .form-pips {
   display: inline-flex;
   gap: 5px;
@@ -327,9 +402,14 @@
   background: var(--danger);
 }
 
-.queue-grid,
 .lobby-layout,
 .settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.queue-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
@@ -359,8 +439,15 @@
   align-items: center;
 }
 
-.queue-card button {
+.queue-search-controls {
   margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.queue-search-controls .map-pool {
+  margin-top: 0;
 }
 
 .search-state,
@@ -693,4 +780,10 @@
     display: none;
   }
 
+}
+
+@media (max-width: 999px) {
+  .queue-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
