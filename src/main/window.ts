@@ -33,7 +33,6 @@ export function createMainWindow(): BrowserWindow {
 
   if (isDev) {
     loadRenderer(mainWindow);
-    mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
     void mainWindow.loadFile(join(currentDir, "../renderer/index.html"));
   }
