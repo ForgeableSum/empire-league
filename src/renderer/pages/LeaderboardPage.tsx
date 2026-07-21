@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
-import { formatDivisionForRating } from "../../shared/contracts/matchmaking";
+import {
+  formatDivisionForRating,
+  formatDivisionRatingRange,
+  type Division
+} from "../../shared/contracts/matchmaking";
 import { FormPips } from "../components/common/FormPips";
 import { mockLeaderboard } from "../mocks/mockLeaderboard";
 import { useAppStore } from "../state/appStore";
@@ -29,8 +33,8 @@ export function LeaderboardPage() {
           Division
           <select value={division} onChange={(event) => setDivision(event.target.value)}>
             <option value="all">All</option>
-            {["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster"].map((item) => (
-              <option value={item} key={item}>{item}</option>
+            {(["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster"] satisfies Division[]).map((item) => (
+              <option value={item} key={item}>{item} ({formatDivisionRatingRange(item)})</option>
             ))}
           </select>
         </label>

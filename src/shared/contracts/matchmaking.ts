@@ -10,6 +10,21 @@ export type Division =
   | "Master"
   | "Grandmaster";
 
+export const divisionRatingRanges: Record<Division, readonly [number, number | null]> = {
+  Bronze: [0, 799],
+  Silver: [800, 999],
+  Gold: [1000, 1199],
+  Platinum: [1200, 1399],
+  Diamond: [1400, 1799],
+  Master: [1800, 2199],
+  Grandmaster: [2200, null]
+};
+
+export function formatDivisionRatingRange(division: Division): string {
+  const [minimum, maximum] = divisionRatingRanges[division];
+  return maximum === null ? `${minimum}+ Elo` : `${minimum}–${maximum} Elo`;
+}
+
 export function getDivisionForRating(rating: number): Division {
   if (rating >= 2200) return "Grandmaster";
   if (rating >= 1800) return "Master";
