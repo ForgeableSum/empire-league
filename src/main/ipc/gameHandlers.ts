@@ -116,6 +116,145 @@ const backgroundKeyDefinitions: Record<GameInputKey, { virtualKey: number; scanC
   ENTER: { virtualKey: 0x0d, scanCode: 0x1c }
 };
 
+const inputGuardScript = String.raw`
+$ProgressPreference = 'SilentlyContinue'
+$interop = @'
+using System;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+
+public static class AoeInputGuard {
+  private const int WH_KEYBOARD_LL = 13;
+  private const int WH_MOUSE_LL = 14;
+  private const uint WM_QUIT = 0x0012;
+  private const int VK_CONTROL = 0x11;
+  private const int VK_SHIFT = 0x10;
+  private const int VK_F12 = 0x7B;
+  private const uint GA_ROOT = 2;
+
+  private delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
+  private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct Point { public int X; public int Y; }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct MouseHookData {
+    public Point Point;
+    public uint MouseData;
+    public uint Flags;
+    public uint Time;
+    public IntPtr ExtraInfo;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct Message {
+    public IntPtr Window;
+    public uint Id;
+    public IntPtr WParam;
+    public IntPtr LParam;
+    public uint Time;
+    public Point Location;
+    public uint Private;
+  }
+
+  [DllImport("user32.dll")] private static extern IntPtr SetWindowsHookEx(int id, HookProc callback, IntPtr module, uint threadId);
+  [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
+  [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+  [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point point);
+  [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr window, uint flags);
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] private static extern int GetMessage(out Message message, IntPtr window, uint min, uint max);
+  [DllImport("user32.dll")] private static extern bool PostThreadMessage(uint threadId, uint message, IntPtr wParam, IntPtr lParam);
+  [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
+  [DllImport("kernel32.dll")] private static extern IntPtr GetModuleHandle(string moduleName);
+
+  private static IntPtr targetWindow;
+  private static IntPtr keyboardHook;
+  private static IntPtr mouseHook;
+  private static uint guardThreadId;
+  private static HookProc keyboardCallback = OnKeyboard;
+  private static HookProc mouseCallback = OnMouse;
+
+  public static int Run(uint processId) {
+    targetWindow = FindWindow(processId);
+    if (targetWindow == IntPtr.Zero) return 2;
+    guardThreadId = GetCurrentThreadId();
+    IntPtr module = GetModuleHandle(null);
+    keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboardCallback, module, 0);
+    mouseHook = SetWindowsHookEx(WH_MOUSE_LL, mouseCallback, module, 0);
+    if (keyboardHook == IntPtr.Zero || mouseHook == IntPtr.Zero) {
+      Release();
+      return 3;
+    }
+
+    Console.WriteLine("GUARD_READY");
+    Console.Out.Flush();
+    Message message;
+    while (GetMessage(out message, IntPtr.Zero, 0, 0) > 0) { }
+    Release();
+    return 0;
+  }
+
+  private static IntPtr FindWindow(uint targetProcessId) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((window, _) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId == targetProcessId && IsWindowVisible(window)) {
+        found = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+
+  private static IntPtr OnKeyboard(int code, IntPtr wParam, IntPtr lParam) {
+    if (code >= 0) {
+      int key = Marshal.ReadInt32(lParam);
+      bool emergency = key == VK_F12
+        && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+        && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+      if (emergency) {
+        PostThreadMessage(guardThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+      } else if (GetForegroundWindow() == targetWindow) {
+        return new IntPtr(1);
+      }
+    }
+    return CallNextHookEx(keyboardHook, code, wParam, lParam);
+  }
+
+  private static IntPtr OnMouse(int code, IntPtr wParam, IntPtr lParam) {
+    if (code >= 0) {
+      MouseHookData data = Marshal.PtrToStructure<MouseHookData>(lParam);
+      IntPtr pointedWindow = GetAncestor(WindowFromPoint(data.Point), GA_ROOT);
+      if (GetForegroundWindow() == targetWindow || pointedWindow == targetWindow) {
+        return new IntPtr(1);
+      }
+    }
+    return CallNextHookEx(mouseHook, code, wParam, lParam);
+  }
+
+  private static void Release() {
+    if (keyboardHook != IntPtr.Zero) UnhookWindowsHookEx(keyboardHook);
+    if (mouseHook != IntPtr.Zero) UnhookWindowsHookEx(mouseHook);
+    keyboardHook = IntPtr.Zero;
+    mouseHook = IntPtr.Zero;
+  }
+}
+'@
+Add-Type -TypeDefinition $interop
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game) { Write-Output 'GUARD_ERROR|AoE2 process not found'; exit 2 }
+$exitCode = [AoeInputGuard]::Run([uint32]$game.Id)
+exit $exitCode
+`;
+
 const createLobbySequenceScript = String.raw`
 $ProgressPreference = 'SilentlyContinue'
 $interop = @'
@@ -778,6 +917,41 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
+
+    const encodedGuard = Buffer.from(inputGuardScript, "utf16le").toString("base64");
+    const guardProcess = spawn("powershell.exe", [
+      "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedGuard
+    ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    const guardReady = await new Promise<boolean>((resolve) => {
+      let resolved = false;
+      const finish = (ready: boolean) => {
+        if (resolved) return;
+        resolved = true;
+        clearTimeout(timeout);
+        resolve(ready);
+      };
+      const timeout = setTimeout(() => finish(false), 5000);
+      guardProcess.stdout?.on("data", (chunk: Buffer) => {
+        const output = chunk.toString();
+        output.split(/\r?\n/).filter(Boolean).forEach((message) => emitLog(`INPUT_GUARD|${message}`));
+        if (output.includes("GUARD_READY")) finish(true);
+      });
+      guardProcess.stderr?.on("data", (chunk: Buffer) => {
+        chunk.toString().split(/\r?\n/).filter(Boolean).forEach((message) => emitLog(`INPUT_GUARD|${message}`));
+      });
+      guardProcess.once("exit", () => finish(false));
+    });
+
+    if (!guardReady) {
+      if (!guardProcess.killed) guardProcess.kill();
+      return { sent: false, message: "The temporary AoE2 input guard could not be started." };
+    }
+
+    emitLog("INPUT_GUARD|Active=True|EmergencyUnlock=Ctrl+Shift+F12");
+    const guardWatchdog = setTimeout(() => {
+      if (!guardProcess.killed) guardProcess.kill();
+      emitLog("INPUT_GUARD|Active=False|Reason=Watchdog");
+    }, 30000);
     const encodedScript = Buffer.from(createLobbySequenceScript, "utf16le").toString("base64");
     const sequenceProcess = spawn("powershell.exe", [
       "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
@@ -793,6 +967,9 @@ export function registerGameHandlers(): void {
     });
 
     const exitCode = await new Promise<number | null>((resolve) => sequenceProcess.once("close", resolve));
+    clearTimeout(guardWatchdog);
+    if (!guardProcess.killed) guardProcess.kill();
+    emitLog("INPUT_GUARD|Active=False|Reason=SequenceComplete");
     const lobbyUri = sequenceOutput.match(/LOBBY_URI\|(aoe2de:\/\/0\/\d+)/)?.[1];
     return exitCode === 0
       ? { sent: true, message: "Create Lobby sequence completed.", lobbyUri }
