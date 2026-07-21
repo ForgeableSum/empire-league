@@ -1,4 +1,4 @@
-import type { Division, MapDefinition, MatchOutcome } from "../../shared/contracts/matchmaking";
+import { getDivisionForRating, type MapDefinition, type MatchOutcome } from "../../shared/contracts/matchmaking";
 import type { PlayerProfile } from "../../shared/contracts/players";
 
 export const maps: MapDefinition[] = [
@@ -35,7 +35,7 @@ export const currentUser: PlayerProfile = {
   rating: 1426,
   peakRating: 1511,
   rank: 8421,
-  division: "Platinum",
+  division: "Diamond",
   wins: 284,
   losses: 241,
   winRate: 54.1,
@@ -45,7 +45,6 @@ export const currentUser: PlayerProfile = {
   recentForm: ["win", "win", "loss", "win", "win"]
 };
 
-const divisions: Division[] = ["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster"];
 const countries = ["US", "CA", "BR", "GB", "DE", "FR", "ES", "PL", "SE", "KR", "JP", "AU"];
 const names = [
   "StoneGate",
@@ -86,7 +85,7 @@ export const leaderboardPlayers: PlayerProfile[] = Array.from({ length: 50 }, (_
     rating: index === 17 ? currentUser.rating : rating,
     peakRating: index === 17 ? currentUser.peakRating : rating + 54,
     rank: index === 17 ? currentUser.rank : index + 1,
-    division: index < 2 ? "Grandmaster" : divisions[Math.min(divisions.length - 1, Math.floor(rating / 300) - 2)],
+    division: getDivisionForRating(index === 17 ? currentUser.rating : rating),
     wins,
     losses,
     winRate: Number(((wins / (wins + losses)) * 100).toFixed(1)),

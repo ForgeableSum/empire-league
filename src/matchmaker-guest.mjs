@@ -20,7 +20,7 @@ const player = {
   rating: 1400,
   peakRating: 1400,
   rank: 9999,
-  division: "Gold",
+  division: "Diamond",
   wins: 10,
   losses: 10,
   winRate: 50,

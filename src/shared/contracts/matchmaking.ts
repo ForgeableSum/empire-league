@@ -10,6 +10,16 @@ export type Division =
   | "Master"
   | "Grandmaster";
 
+export function getDivisionForRating(rating: number): Division {
+  if (rating >= 2200) return "Grandmaster";
+  if (rating >= 1800) return "Master";
+  if (rating >= 1400) return "Diamond";
+  if (rating >= 1200) return "Platinum";
+  if (rating >= 1000) return "Gold";
+  if (rating >= 800) return "Silver";
+  return "Bronze";
+}
+
 export type MatchOutcome = "win" | "loss" | "no_contest";
 
 export type QueueStatus =
