@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { formatDivisionForRating } from "../../shared/contracts/matchmaking";
 import { FormPips } from "../components/common/FormPips";
 import { mockLeaderboard } from "../mocks/mockLeaderboard";
 import { useAppStore } from "../state/appStore";
@@ -49,7 +50,7 @@ export function LeaderboardPage() {
               <span>{player.displayName}</span>
               <span>{player.countryCode}</span>
               <span>{player.rating}</span>
-              <span>{player.division}</span>
+              <span>{formatDivisionForRating(player.rating)}</span>
               <span>{player.wins}</span>
               <span>{player.losses}</span>
               <span>{player.winRate}%</span>

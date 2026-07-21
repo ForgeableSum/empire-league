@@ -20,6 +20,31 @@ export function getDivisionForRating(rating: number): Division {
   return "Bronze";
 }
 
+export type DivisionTier = 1 | 2 | 3;
+
+export function getDivisionTierForRating(rating: number): DivisionTier {
+  const division = getDivisionForRating(rating);
+  const thresholds: Record<Division, [number, number]> = {
+    Bronze: [600, 700],
+    Silver: [867, 934],
+    Gold: [1067, 1134],
+    Platinum: [1267, 1334],
+    Diamond: [1533, 1666],
+    Master: [1933, 2066],
+    Grandmaster: [2300, 2400]
+  };
+  const [tierTwo, tierOne] = thresholds[division];
+  if (rating >= tierOne) return 1;
+  if (rating >= tierTwo) return 2;
+  return 3;
+}
+
+export function formatDivisionForRating(rating: number): string {
+  const division = getDivisionForRating(rating);
+  const tier = getDivisionTierForRating(rating);
+  return `${division} ${tier === 1 ? "I" : tier === 2 ? "II" : "III"}`;
+}
+
 export type MatchOutcome = "win" | "loss" | "no_contest";
 
 export type QueueStatus =

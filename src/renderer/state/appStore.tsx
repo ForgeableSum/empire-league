@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import type { MatchResult } from "../../shared/contracts/matches";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
+import { getDivisionForRating } from "../../shared/contracts/matchmaking";
 import { maps, currentUser } from "../mocks/mockPlayers";
 import { mockMatches } from "../mocks/mockMatches";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
@@ -445,6 +446,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updatedUser = {
         ...previous.currentUser,
         rating: result.newRating,
+        division: getDivisionForRating(result.newRating),
         wins: result.outcome === "win" ? previous.currentUser.wins + 1 : previous.currentUser.wins,
         losses: result.outcome === "loss" ? previous.currentUser.losses + 1 : previous.currentUser.losses,
         streak: result.outcome === "win" ? Math.max(1, previous.currentUser.streak + 1) : -1

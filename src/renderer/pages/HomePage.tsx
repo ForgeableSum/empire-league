@@ -1,4 +1,5 @@
 import { Play } from "lucide-react";
+import { formatDivisionForRating } from "../../shared/contracts/matchmaking";
 import { Metric } from "../components/common/Metric";
 import { FormPips } from "../components/common/FormPips";
 import { useAppStore } from "../state/appStore";
@@ -12,14 +13,14 @@ export function HomePage() {
         <div>
           <span className="eyebrow">Current Rating</span>
           <div className="rating-display">{user.rating}</div>
-          <p>{user.division} III · Global Rank #{user.rank.toLocaleString()}</p>
+          <p>{formatDivisionForRating(user.rating)} · Global Rank #{user.rank.toLocaleString()}</p>
         </div>
         <button className="primary large" type="button" onClick={() => setPage("play")}>
           <Play size={20} /> Play 1v1
         </button>
       </div>
       <div className="metrics-grid">
-        <Metric label="Division" value={`${user.division} III`} detail="Top 18% this season" />
+        <Metric label="Division" value={formatDivisionForRating(user.rating)} detail="Top 18% this season" />
         <Metric label="Season Record" value={`${user.wins}-${user.losses}`} detail={`${user.winRate}% win rate`} />
         <Metric label="Current Streak" value={user.streak > 0 ? `W${user.streak}` : `L${Math.abs(user.streak)}`} />
         <Metric label="Peak Rating" value={user.peakRating} />

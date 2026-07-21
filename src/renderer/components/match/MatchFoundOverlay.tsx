@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { formatDivisionForRating } from "../../../shared/contracts/matchmaking";
 import { FormPips } from "../common/FormPips";
 import { useAppStore } from "../../state/appStore";
 
@@ -33,7 +34,7 @@ export function MatchFoundOverlay() {
           <div>
             <strong>{opponent.displayName}</strong>
             <span>{opponent.rating} Elo · Rank #{opponent.rank}</span>
-            <span>{opponent.division} · {opponent.countryCode}</span>
+            <span>{formatDivisionForRating(opponent.rating)} · {opponent.countryCode}</span>
           </div>
         </div>
         <FormPips form={opponent.recentForm} />
