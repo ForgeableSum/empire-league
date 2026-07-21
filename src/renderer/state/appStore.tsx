@@ -348,6 +348,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         log(`Lobby created: ${discoveredLobby.platformLobbyId}`);
         await services.matchmaking.publishLobby(match.id, discoveredLobby);
         log("Lobby details published to opponent");
+        // Lifecycle timing test intentionally disabled until real game-start and
+        // game-end detection can trigger the fullscreen and victory transitions.
+        // await window.electronApi.showAoe2FullscreenAfterDelay();
         setState((previous) => ({
           ...previous,
           activeMatch: previous.activeMatch ? { ...previous.activeMatch, lobby: discoveredLobby } : null,

@@ -73,7 +73,7 @@ while ($true) {
   offscreenWindowProcess.once("exit", () => { offscreenWindowProcess = undefined; });
 }
 
-function restoreAoe2Window(focus = false): void {
+function restoreAoe2Window(focus = false, maximize = false): void {
   if (process.platform !== "win32") return;
   offscreenWindowProcess?.kill();
   offscreenWindowProcess = undefined;
@@ -94,7 +94,7 @@ $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Obje
 if ($game -and $game.MainWindowHandle -ne 0) {
   $restored = [AoeRestore]::SetWindowPos($game.MainWindowHandle, [IntPtr]::Zero, 0, 0, 0, 0, 0x0015)
   if (${focus ? "$true" : "$false"}) {
-    [AoeRestore]::ShowWindow($game.MainWindowHandle, 9) | Out-Null
+    [AoeRestore]::ShowWindow($game.MainWindowHandle, ${maximize ? 3 : 9}) | Out-Null
     [AoeRestore]::SetForegroundWindow($game.MainWindowHandle) | Out-Null
   }
   Write-Output "OFFSCREEN|Restored=$restored"
@@ -937,6 +937,21 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:focus", async () => {
     restoreAoe2Window(true);
     await delay(180);
+    return { focused: true };
+  });
+
+  ipcMain.handle("game:show-fullscreen-after-delay", async (event) => {
+    const appWindow = BrowserWindow.fromWebContents(event.sender);
+    await delay(5000);
+    restoreAoe2Window(true, true);
+    console.info("[AoE2 automation] FULLSCREEN_TEST|Delay=5000ms|Mode=Maximized|Focused=True");
+    await delay(5000);
+    moveAoe2WindowOffscreen();
+    if (appWindow && !appWindow.isDestroyed()) {
+      appWindow.show();
+      appWindow.focus();
+    }
+    console.info("[AoE2 automation] VICTORY_TEST|DelayAfterFullscreen=5000ms|GameOffscreen=True|ElectronFocused=True");
     return { focused: true };
   });
 

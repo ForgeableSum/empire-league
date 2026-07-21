@@ -6,6 +6,7 @@ const electronApi: ElectronGameApi = {
   detectAoe2Process: () => ipcRenderer.invoke("game:detect-process"),
   launchAoe2: () => ipcRenderer.invoke("game:launch"),
   focusAoe2: () => ipcRenderer.invoke("game:focus"),
+  showAoe2FullscreenAfterDelay: () => ipcRenderer.invoke("game:show-fullscreen-after-delay"),
   startAoe2TabTest: () => ipcRenderer.invoke("game:start-tab-test"),
   stopAoe2TabTest: () => ipcRenderer.invoke("game:stop-tab-test"),
   sendAoe2Key: (key) => ipcRenderer.invoke("game:send-background-key", key),

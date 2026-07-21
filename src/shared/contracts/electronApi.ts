@@ -16,6 +16,7 @@ export interface ElectronGameApi {
   detectAoe2Process(): Promise<GameProcessStatus>;
   launchAoe2(): Promise<GameLaunchResult>;
   focusAoe2(): Promise<GameFocusResult>;
+  showAoe2FullscreenAfterDelay(): Promise<GameFocusResult>;
   startAoe2TabTest(): Promise<GameInputTestResult>;
   stopAoe2TabTest(): Promise<void>;
   sendAoe2Key(key: GameInputKey): Promise<GameInputResult>;
