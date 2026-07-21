@@ -63,6 +63,11 @@ export function QueuePage() {
                 </div>
               </div>
               <p>{queue.description}</p>
+              {queue.supportedFormats && (
+                <div className="tag-list">
+                  {queue.supportedFormats.map((format) => <span key={format}>{format}</span>)}
+                </div>
+              )}
               <div className="queue-stats">
                 <span><Search size={16} /> {queue.playersSearching} searching</span>
                 <span><Clock size={16} /> {queue.estimatedWaitSeconds}s wait</span>

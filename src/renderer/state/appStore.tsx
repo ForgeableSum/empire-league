@@ -69,26 +69,16 @@ export const queueDefinitions: QueueDefinition[] = [
     playersSearching: 128
   },
   {
-    id: "arabia-1v1",
-    name: "Arabia 1v1",
-    description: "Prototype map-specific queue.",
+    id: "team-games",
+    name: "Team Games",
+    description: "Find a match for solo, two-player, or three-player teams.",
     format: "1v1",
+    supportedFormats: ["1v1", "2v2", "3v3"],
     ruleset: "Random Map",
-    mapPool: [maps[0]],
+    mapPool: maps,
     ranked: false,
     estimatedWaitSeconds: 90,
-    playersSearching: 24
-  },
-  {
-    id: "empire-wars-1v1",
-    name: "Empire Wars 1v1",
-    description: "Visual-only future queue.",
-    format: "1v1",
-    ruleset: "Empire Wars",
-    mapPool: maps.slice(0, 5),
-    ranked: false,
-    estimatedWaitSeconds: 120,
-    playersSearching: 18
+    playersSearching: 42
   }
 ];
 
