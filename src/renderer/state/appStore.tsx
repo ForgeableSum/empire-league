@@ -43,7 +43,7 @@ interface AppContextValue {
 
 const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
-const roomSetupTimeoutMs = 55_000;
+const roomSetupTimeoutMs = 65_000;
 const defaultSettings: UserSettings = {
   aoePath: "C:\\Program Files (x86)\\Steam\\steamapps\\common\\AoE2DE",
   autoDetect: true,
@@ -429,7 +429,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 log("Guest lobby opened; sending 10 Tabs and Enter to ready");
                 await sendAoe2TabsAndEnter(10);
                 log("Guest ready input sent; waiting for the lobby state to settle");
-                await delayForLobbyInput(2000);
+                await delayForLobbyInput(5000);
                 await services.matchmaking.reportGuestLobbyReady(event.matchId);
                 log("Guest readied and notified the host");
                 notify("Joined and readied in the host lobby", "success");
@@ -446,7 +446,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           void (async () => {
             try {
               log("Guest reported ready; waiting for the host lobby state to settle");
-              await delayForLobbyInput(2000);
+              await delayForLobbyInput(5000);
               log("Guest is ready; sending 20 Tabs and Enter to ready the host");
               await sendAoe2TabsAndEnter(20);
               log("Host ready input sent; waiting for the Start button state to settle");

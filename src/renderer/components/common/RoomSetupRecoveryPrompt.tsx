@@ -13,7 +13,7 @@ export function RoomSetupRecoveryPrompt() {
         </div>
         <span className="eyebrow">Room setup failed</span>
         <h2 id="room-setup-failed-title">Something went wrong.</h2>
-        <p>Empire League couldn’t finish setting up the game room within 55 seconds.</p>
+        <p>Empire League couldn’t finish setting up the game room within 65 seconds.</p>
         <div className="modal-actions">
           <button autoFocus className="primary" type="button" onClick={() => void exitAfterRoomSetupFailure(true)}>
             <RotateCcw size={18} /> Restart
