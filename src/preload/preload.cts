@@ -28,7 +28,8 @@ const electronApi: ElectronGameApi = {
   loadAuthToken: () => ipcRenderer.invoke("auth:load-token"),
   storeAuthToken: (token) => ipcRenderer.invoke("auth:store-token", token),
   clearAuthToken: () => ipcRenderer.invoke("auth:clear-token"),
-  quitApp: () => ipcRenderer.invoke("system:quit")
+  quitApp: () => ipcRenderer.invoke("system:quit"),
+  restartApp: () => ipcRenderer.invoke("system:restart")
 };
 
 contextBridge.exposeInMainWorld("electronApi", electronApi);

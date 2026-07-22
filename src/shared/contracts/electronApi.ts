@@ -36,4 +36,5 @@ export interface ElectronGameApi {
   storeAuthToken(token: string): Promise<void>;
   clearAuthToken(): Promise<void>;
   quitApp(): Promise<void>;
+  restartApp(): Promise<void>;
 }

@@ -248,6 +248,18 @@ const server = createServer(async (request, response) => {
       return send(response, 200, { ready: true });
     }
 
+    const startedMatch = url.pathname.match(/^\/matches\/([^/]+)\/started$/);
+    if (request.method === "POST" && startedMatch) {
+      const match = matches.get(startedMatch[1]);
+      const body = await readJson(request);
+      if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only the host may report game start" });
+      }
+      await updateMatchStatus(match.id, "in_game");
+      emit(match.guest, { type: "game_started", matchId: match.id });
+      return send(response, 200, { started: true });
+    }
+
     return send(response, 404, { error: "not found" });
   } catch (error) {
     console.error("[matchmaker]", error);

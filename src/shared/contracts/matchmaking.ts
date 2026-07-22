@@ -168,6 +168,7 @@ export type QueueEvent =
   | { type: "opponent_accepted"; matchId: string; role?: "host" | "guest" }
   | { type: "lobby_ready"; matchId: string; lobby: LobbySession }
   | { type: "guest_lobby_ready"; matchId: string }
+  | { type: "game_started"; matchId: string }
   | { type: "error"; code: string; message: string };
 
 export type QueueEventListener = (event: QueueEvent) => void;

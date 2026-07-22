@@ -8,6 +8,7 @@ import { Shell } from "./components/layout/Shell";
 import { MatchFoundOverlay } from "./components/match/MatchFoundOverlay";
 import { Toasts } from "./components/common/Toasts";
 import { StartupGamePrompt } from "./components/common/StartupGamePrompt";
+import { RoomSetupRecoveryPrompt } from "./components/common/RoomSetupRecoveryPrompt";
 import { useAppStore } from "./state/appStore";
 import { Loader2, LogIn } from "lucide-react";
 
@@ -28,6 +29,7 @@ export function App() {
           </div>
         </main>
         <StartupGamePrompt />
+        <RoomSetupRecoveryPrompt />
       </>
     );
   }
@@ -53,6 +55,7 @@ export function App() {
           </div>
         </main>
         <StartupGamePrompt />
+        <RoomSetupRecoveryPrompt />
       </>
     );
   }
@@ -70,6 +73,7 @@ export function App() {
       {state.queueStatus === "match_found" && state.activeMatch && <MatchFoundOverlay />}
       <Toasts />
       <StartupGamePrompt />
+      <RoomSetupRecoveryPrompt />
     </>
   );
 }

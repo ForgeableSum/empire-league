@@ -8,6 +8,10 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:quit", async () => {
     app.quit();
   });
+  ipcMain.handle("system:restart", async () => {
+    app.relaunch();
+    app.quit();
+  });
   ipcMain.handle("overlay:toggle", async () => ({ visible: toggleTestOverlay() }));
   ipcMain.handle("overlay:close", async () => {
     closeTestOverlay();

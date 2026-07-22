@@ -37,10 +37,13 @@ interface AppContextValue {
   signOut: () => Promise<void>;
   startupGamePrompt: "restart" | "force-close" | null;
   respondToStartupGamePrompt: (confirmed: boolean) => void;
+  roomSetupFailed: boolean;
+  exitAfterRoomSetupFailure: (restart: boolean) => Promise<void>;
 }
 
 const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
+const roomSetupTimeoutMs = 45_000;
 const defaultSettings: UserSettings = {
   aoePath: "C:\\Program Files (x86)\\Steam\\steamapps\\common\\AoE2DE",
   autoDetect: true,
@@ -115,8 +118,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const ticketRef = useRef<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const lobbyAutomationRef = useRef<Promise<GameInputResult> | null>(null);
+  const roomSetupTimeoutRef = useRef<number | null>(null);
   const startupPromptResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [startupGamePrompt, setStartupGamePrompt] = useState<AppContextValue["startupGamePrompt"]>(null);
+  const [roomSetupFailed, setRoomSetupFailed] = useState(false);
 
   const services = useMemo(
     () => ({
@@ -166,6 +171,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut(): Promise<void> {
+    clearRoomSetupWatchdog();
     if (ticketRef.current) await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
     unsubscribeRef.current?.();
     ticketRef.current = null;
@@ -307,6 +313,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     resolve?.(confirmed);
   }
 
+  function startRoomSetupWatchdog(): void {
+    clearRoomSetupWatchdog();
+    roomSetupTimeoutRef.current = window.setTimeout(() => {
+      roomSetupTimeoutRef.current = null;
+      setRoomSetupFailed(true);
+    }, roomSetupTimeoutMs);
+  }
+
+  function clearRoomSetupWatchdog(): void {
+    if (roomSetupTimeoutRef.current === null) return;
+    window.clearTimeout(roomSetupTimeoutRef.current);
+    roomSetupTimeoutRef.current = null;
+  }
+
+  async function exitAfterRoomSetupFailure(restart: boolean): Promise<void> {
+    clearRoomSetupWatchdog();
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    if (ticketRef.current) {
+      await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+      ticketRef.current = null;
+    }
+    if (!window.electronApi) return;
+    if (restart) await window.electronApi.restartApp();
+    else await window.electronApi.quitApp();
+  }
+
   function dismissNotificationById(id: string): void {
     setState((previous) => ({
       ...previous,
@@ -331,6 +364,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: state.currentUser, canHost: true });
       ticketRef.current = ticket.id;
+      setRoomSetupFailed(false);
       setState((previous) => ({
         ...previous,
         selectedQueue: queue,
@@ -347,6 +381,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setState((previous) => ({ ...previous, searchRange: { min: event.minRating, max: event.maxRating } }));
         }
         if (event.type === "match_found") {
+          startRoomSetupWatchdog();
           const matchedSession = {
             ...event.match,
             player: state.currentUser,
@@ -401,12 +436,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               await sendAoe2TabsAndEnter(19);
               log("Host readied; sending Tab and Enter to start the game");
               await sendAoe2TabsAndEnter(1);
+              clearRoomSetupWatchdog();
               setState((previous) => ({
                 ...previous,
                 queueStatus: "in_game",
                 gameStatus: "in_match",
                 activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
               }));
+              await services.matchmaking.reportGameStarted(event.matchId);
               notify("Automated game start sent", "success");
             } catch (error) {
               log(`Automated host start failed: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -414,7 +451,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
           })();
         }
+        if (event.type === "game_started") {
+          clearRoomSetupWatchdog();
+          setState((previous) => ({
+            ...previous,
+            queueStatus: "in_game",
+            gameStatus: "in_match",
+            activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
+          }));
+          log("Host started the game");
+        }
         if (event.type === "error") {
+          if (event.code === "MATCH_DECLINED") clearRoomSetupWatchdog();
           setError({ code: event.code, message: event.message, retryable: true });
         }
       });
@@ -429,6 +477,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function cancelQueue(): Promise<void> {
+    clearRoomSetupWatchdog();
     if (ticketRef.current) {
       await services.matchmaking.leaveQueue(ticketRef.current);
     }
@@ -461,6 +510,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function declineMatch(): Promise<void> {
+    clearRoomSetupWatchdog();
     if (state.activeMatch) {
       await services.matchmaking.declineMatch(state.activeMatch.id);
     }
@@ -651,7 +701,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     signInWithSteam,
     signOut,
     startupGamePrompt,
-    respondToStartupGamePrompt
+    respondToStartupGamePrompt,
+    roomSetupFailed,
+    exitAfterRoomSetupFailure
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
