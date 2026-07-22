@@ -452,12 +452,6 @@ function Send-Enter([string]$stage) {
   if (-not $sent) { exit 5 }
 }
 
-function Send-Down([string]$stage) {
-  $sent = [AoeSequence]::Send($window, 0x28, 0x01500001, [int]0xC1500001)
-  Write-Output "SEQUENCE|$stage|Down|Sent=$sent"
-  if (-not $sent) { exit 6 }
-}
-
 Write-Output 'SEQUENCE|Start|ExpectedScreen=Main Menu'
 Send-Tab 6 'Main Menu'
 $activated = [AoeSequence]::Activate($window)
@@ -468,15 +462,8 @@ Start-Sleep -Milliseconds 750
 Send-Tab 5 'Multiplayer'
 Send-Enter 'Open Host Game'
 Start-Sleep -Milliseconds 1350
-Send-Tab 2 'Create Lobby Dialog'
-Send-Enter 'Open Lobby Type'
-Start-Sleep -Milliseconds 225
-Send-Down 'Select Ranked Option'
-Start-Sleep -Milliseconds 150
-Send-Enter 'Confirm Ranked Lobby Type'
-Start-Sleep -Milliseconds 375
-Send-Tab 9 'Ranked Lobby Settings'
-Send-Enter 'Create Ranked Lobby'
+Send-Tab 11 'Lobby Settings'
+Send-Enter 'Create Lobby'
 Write-Output 'SEQUENCE|Lobby URI|Waiting=7000ms'
 Start-Sleep -Seconds 7
 Set-Clipboard -Value ''
