@@ -443,8 +443,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (event.type === "guest_lobby_ready" && window.electronApi) {
           void (async () => {
             try {
-              log("Guest is ready; sending 21 Tabs and Enter to ready the host");
-              await sendAoe2TabsAndEnter(21);
+              log("Guest is ready; sending 20 Tabs and Enter to ready the host");
+              await sendAoe2TabsAndEnter(20);
               log("Host readied; sending Tab and Enter to start the game");
               await sendAoe2TabsAndEnter(1);
               clearRoomSetupWatchdog();
