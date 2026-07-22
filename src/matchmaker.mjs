@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { database, checkDatabase, saveMatch, saveQueueTicket, updateMatchStatus, updateTicketStatus } from "./database.mjs";
+import { database, checkDatabase, getPlayerMatchHistory, saveMatch, saveQueueTicket, updateMatchStatus, updateTicketStatus } from "./database.mjs";
 import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
@@ -143,6 +143,10 @@ const server = createServer(async (request, response) => {
 
     const authenticatedPlayer = await authenticate(request);
     if (!authenticatedPlayer) return send(response, 401, { error: "authentication required" });
+
+    if (request.method === "GET" && url.pathname === "/matches/history") {
+      return send(response, 200, { matches: await getPlayerMatchHistory(authenticatedPlayer.id) });
+    }
 
     if (request.method === "POST" && url.pathname === "/queue") {
       const body = await readJson(request);

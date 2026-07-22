@@ -4,13 +4,13 @@ import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
 import { maps, currentUser } from "../mocks/mockPlayers";
-import { mockMatches } from "../mocks/mockMatches";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
 import { MockGameIntegrationService } from "../services/gameIntegrationService";
 import { LocalMatchmakingService, MockMatchmakingService } from "../services/matchmakingService";
 import { MockMatchResultService } from "../services/matchResultService";
 import { nowLog } from "../services/timing";
 import { authService } from "../services/authService";
+import { matchHistoryService } from "../services/matchHistoryService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
 
 type AppPage = "home" | "play" | "match-history" | "leaderboard" | "profile" | "settings";
@@ -96,7 +96,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     selectedQueue: null,
     queueStartedAt: null,
     activeMatch: null,
-    recentMatches: mockMatches,
+    recentMatches: [],
     connectionStatus: "online",
     gameStatus: "installed",
     searchRange: { min: currentUser.rating - 50, max: currentUser.rating + 50 },
@@ -129,7 +129,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     void authService.restore().then((player) => {
       if (cancelled) return;
       if (player) {
-        setState((previous) => ({ ...previous, currentUser: player }));
+        void matchHistoryService.getMine().then((recentMatches) => {
+          if (!cancelled) setState((previous) => ({ ...previous, currentUser: player, recentMatches }));
+        }).catch(() => {
+          if (!cancelled) setState((previous) => ({ ...previous, currentUser: player, recentMatches: [] }));
+        });
         setAuthStatus("authenticated");
       } else {
         setAuthStatus("unauthenticated");
@@ -147,7 +151,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAuthError(null);
     try {
       const player = await authService.signIn();
-      setState((previous) => ({ ...previous, currentUser: player }));
+      const recentMatches = await matchHistoryService.getMine();
+      setState((previous) => ({ ...previous, currentUser: player, recentMatches }));
       setAuthStatus("authenticated");
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Steam sign-in failed.");

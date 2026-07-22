@@ -5,6 +5,7 @@ import { useAppStore } from "../state/appStore";
 export function ProfilePage() {
   const { state } = useAppStore();
   const user = state.currentUser;
+  const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
   return (
     <section className="profile-layout">
       <div className="panel profile-card">
@@ -15,7 +16,7 @@ export function ProfilePage() {
         </div>
         <h2>{user.displayName}</h2>
         <span>{user.steamId ? `Steam ID ${user.steamId}` : "Steam account"}</span>
-        <FormPips form={user.recentForm} />
+        {recentForm.length > 0 && <FormPips form={recentForm} />}
       </div>
       <div className="metrics-grid">
         <Metric label="Current Rating" value={user.rating} />
@@ -25,19 +26,33 @@ export function ProfilePage() {
       </div>
       <div className="panel span-2">
         <h2>Rating History</h2>
-        <div className="chart-placeholder">
-          {[22, 38, 34, 48, 42, 58, 53, 68, 61, 74, 70, 82].map((height, index) => (
-            <i key={index} style={{ height: `${height}%` }} />
-          ))}
-        </div>
+        {state.recentMatches.length === 0 ? (
+          <div className="empty-state">Your rating history will appear after your first match.</div>
+        ) : (
+          <div className="table">
+            {state.recentMatches.slice(0, 10).map((match) => (
+              <div className="table-row" key={match.id}>
+                <span>{new Date(match.timestamp).toLocaleDateString()}</span>
+                <span>{match.opponent}</span>
+                <strong className={match.ratingChange >= 0 ? "win" : "loss"}>
+                  {match.ratingChange > 0 ? "+" : ""}{match.ratingChange}
+                </strong>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="panel">
         <h2>Favorite Maps</h2>
-        <div className="tag-list">{user.preferredMaps.map((map) => <span key={map}>{map}</span>)}</div>
+        {user.preferredMaps.length > 0
+          ? <div className="tag-list">{user.preferredMaps.map((map) => <span key={map}>{map}</span>)}</div>
+          : <div className="empty-state">No favorite maps yet.</div>}
       </div>
       <div className="panel">
         <h2>Favorite Civilizations</h2>
-        <div className="tag-list">{user.favoriteCivilizations.map((civ) => <span key={civ}>{civ}</span>)}</div>
+        {user.favoriteCivilizations.length > 0
+          ? <div className="tag-list">{user.favoriteCivilizations.map((civ) => <span key={civ}>{civ}</span>)}</div>
+          : <div className="empty-state">No favorite civilizations yet.</div>}
       </div>
     </section>
   );

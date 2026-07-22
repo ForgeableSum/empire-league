@@ -38,14 +38,18 @@ export function MatchHistoryPage() {
               <strong className={match.outcome}>{match.outcome}</strong>
               <span>{match.opponent} ({match.opponentRating})</span>
               <span>{match.map}</span>
-              <span>{match.civilization} vs {match.opponentCivilization}</span>
+              <span>{match.civilization && match.opponentCivilization ? `${match.civilization} vs ${match.opponentCivilization}` : "—"}</span>
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
               <span>{match.durationMinutes}m</span>
               <span>{new Date(match.timestamp).toLocaleDateString()}</span>
               <span>{match.verified ? "Verified" : "Pending"}</span>
             </button>
           ))}
-          {matches.length === 0 && <div className="empty-state">No match history results match these filters.</div>}
+          {matches.length === 0 && (
+            <div className="empty-state">
+              {state.recentMatches.length === 0 ? "You haven't played any matches yet." : "No matches match these filters."}
+            </div>
+          )}
         </div>
       </div>
     </section>

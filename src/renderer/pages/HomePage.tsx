@@ -9,6 +9,7 @@ import { useAppStore } from "../state/appStore";
 export function HomePage() {
   const { state, setPage } = useAppStore();
   const user = state.currentUser;
+  const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
   return (
     <section className="page-grid">
       <div className="hero-panel">
@@ -22,7 +23,7 @@ export function HomePage() {
         </button>
       </div>
       <div className="metrics-grid">
-        <Metric label="Division" value={formatDivisionForRating(user.rating)} detail="Top 18% this season" />
+        <Metric label="Division" value={formatDivisionForRating(user.rating)} detail={`${user.wins + user.losses} ranked matches`} />
         <Metric label="Season Record" value={`${user.wins}-${user.losses}`} detail={`${user.winRate}% win rate`} />
         <Metric label="Current Streak" value={user.streak > 0 ? `W${user.streak}` : `L${Math.abs(user.streak)}`} />
         <Metric label="Peak Rating" value={user.peakRating} />
@@ -30,7 +31,7 @@ export function HomePage() {
       <div className="panel span-2">
         <div className="panel-title">
           <h2>Recent Matches</h2>
-          <FormPips form={user.recentForm} />
+          {recentForm.length > 0 && <FormPips form={recentForm} />}
         </div>
         <div className="table">
           {state.recentMatches.slice(0, 7).map((match) => (
@@ -38,11 +39,14 @@ export function HomePage() {
               <strong className={match.outcome}>{match.outcome === "win" ? "Victory" : match.outcome === "loss" ? "Defeat" : "No Contest"}</strong>
               <span>{match.opponent}</span>
               <span>{match.map}</span>
-              <span>{match.civilization}</span>
+              <span>{match.civilization || "—"}</span>
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
               <span>{match.durationMinutes}m</span>
             </div>
           ))}
+          {state.recentMatches.length === 0 && (
+            <div className="empty-state">You haven't played any matches yet.</div>
+          )}
         </div>
       </div>
       <div className="panel">
@@ -53,8 +57,8 @@ export function HomePage() {
         <h2>Platform Status</h2>
         <div className="status-list">
           <div><span>Matchmaking</span><strong>Operational</strong></div>
-          <div><span>Result service</span><strong>Mock verified</strong></div>
-          <div><span>Active season</span><strong>42 days left</strong></div>
+          <div><span>Result service</span><strong>Connected</strong></div>
+          <div><span>Match history</span><strong>{state.recentMatches.length} recorded</strong></div>
         </div>
       </div>
     </section>

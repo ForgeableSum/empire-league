@@ -706,23 +706,6 @@
   text-align: center;
 }
 
-.chart-placeholder {
-  height: 210px;
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  align-items: end;
-  gap: 8px;
-  padding: 20px;
-  border-radius: var(--radius);
-  background: #1a1816;
-}
-
-.chart-placeholder i {
-  display: block;
-  border-radius: 5px 5px 0 0;
-  background: linear-gradient(180deg, var(--accent-2), var(--accent));
-}
-
 .rating-swing strong {
   display: block;
   font-size: 36px;

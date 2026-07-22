@@ -87,3 +87,40 @@ export async function updateTicketStatus(ticketId, status) {
 export async function updateMatchStatus(matchId, status) {
   await database.execute("UPDATE matches SET status = ? WHERE id = ?", [status, matchId]);
 }
+
+export async function getPlayerMatchHistory(playerId) {
+  const [rows] = await database.execute(
+    `SELECT m.id, opponent.display_name AS opponent, opponent.rating AS opponent_rating,
+       m.selected_map_name AS map_name, m.queue_id AS queue_type,
+       CASE
+         WHEN mr.result = 'no_contest' THEN 'no_contest'
+         WHEN mr.winner_player_id = ? THEN 'win'
+         ELSE 'loss'
+       END AS outcome,
+       COALESCE(rh.rating_change, 0) AS rating_change,
+       TIMESTAMPDIFF(MINUTE, m.created_at, m.completed_at) AS duration_minutes,
+       m.completed_at, mr.verification_status
+     FROM matches m
+     JOIN players opponent ON opponent.id = CASE WHEN m.host_player_id = ? THEN m.guest_player_id ELSE m.host_player_id END
+     JOIN match_results mr ON mr.match_id = m.id
+     LEFT JOIN rating_history rh ON rh.match_id = m.id AND rh.player_id = ?
+     WHERE (m.host_player_id = ? OR m.guest_player_id = ?) AND m.status = 'completed'
+     ORDER BY m.completed_at DESC
+     LIMIT 100`,
+    [playerId, playerId, playerId, playerId, playerId]
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    opponent: row.opponent,
+    opponentRating: Number(row.opponent_rating),
+    outcome: row.outcome,
+    map: row.map_name,
+    civilization: "",
+    opponentCivilization: "",
+    ratingChange: Number(row.rating_change),
+    durationMinutes: Number(row.duration_minutes ?? 0),
+    timestamp: new Date(row.completed_at).toISOString(),
+    verified: row.verification_status === "verified",
+    queueType: row.queue_type
+  }));
+}
