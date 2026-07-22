@@ -40,6 +40,7 @@ interface AppContextValue {
 }
 
 const settingsKey = "empire-league-settings";
+const aoe2PostWindowReadyDelayMs = 7000;
 const defaultSettings: UserSettings = {
   aoePath: "C:\\Program Files (x86)\\Steam\\steamapps\\common\\AoE2DE",
   autoDetect: true,
@@ -229,15 +230,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const ready = await waitForAoe2Window(120_000);
         if (!ready) throw new Error("AoE2 started, but its game window did not become ready in time.");
 
+        if (loadingNotificationId) {
+          updateNotification(loadingNotificationId, { detail: "Finishing game startup." });
+        }
+        await delayForStartup(aoe2PostWindowReadyDelayMs);
+
         if (!cancelled) {
-          if (loadingNotificationId) dismissNotificationById(loadingNotificationId);
           setState((previous) => ({
             ...previous,
             gameStatus: "running",
             settings: { ...previous.settings, aoePath: installation.path as string }
           }));
           window.localStorage.setItem(settingsKey, JSON.stringify({ ...state.settings, aoePath: installation.path }));
-          notify("AoE2 DE is ready", "success");
+          if (loadingNotificationId) {
+            updateNotification(loadingNotificationId, {
+              message: "AoE2 DE is ready",
+              tone: "success",
+              detail: undefined,
+              durationMs: 5000
+            });
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -297,6 +309,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((previous) => ({
       ...previous,
       notifications: previous.notifications.filter((item) => item.id !== id)
+    }));
+  }
+
+  function updateNotification(id: string, patch: Partial<Omit<NotificationItem, "id">>): void {
+    setState((previous) => ({
+      ...previous,
+      notifications: previous.notifications.map((item) => item.id === id ? { ...item, ...patch } : item)
     }));
   }
 
@@ -656,6 +675,10 @@ async function waitForAoe2Window(timeoutMs: number): Promise<boolean> {
     await new Promise((resolve) => window.setTimeout(resolve, 500));
   }
   return false;
+}
+
+function delayForStartup(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 function delayForLobbyInput(milliseconds: number): Promise<void> {

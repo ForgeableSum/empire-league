@@ -16,7 +16,7 @@ export function Toasts() {
   return (
     <div className="toasts" aria-live="polite">
       {state.notifications.map((item) => (
-        <Toast key={item.id} item={item} dismiss={() => dismissNotification(item.id)} />
+        <Toast key={`${item.id}-${item.tone}`} item={item} dismiss={() => dismissNotification(item.id)} />
       ))}
     </div>
   );
