@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, screen, shell } from "electron";
+import { app, BrowserWindow, ipcMain, screen, shell } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -9,6 +9,8 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 const execFileAsync = promisify(execFile);
 const aoe2AppId = "813780";
 let launchRequested = false;
+let ownedAoe2Pid: number | undefined;
+let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
 let offscreenWindowProcess: ChildProcess | undefined;
 let aoe2WindowIsOffscreen = false;
@@ -43,6 +45,10 @@ async function waitForAoe2Exit(timeoutMs: number): Promise<boolean> {
     await delay(250);
   }
   return !(await detectAoe2Process()).running;
+}
+
+async function forceCloseAoe2Process(pid: number): Promise<void> {
+  await execFileAsync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }).catch(() => undefined);
 }
 
 function releaseCursorForElectron(): void {
@@ -917,11 +923,28 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 }
 
 export function registerGameHandlers(): void {
+  app.on("before-quit", (event) => {
+    if ((!ownedAoe2Pid && !launchRequested) || quittingAfterGameCleanup) return;
+    event.preventDefault();
+    quittingAfterGameCleanup = true;
+    void (async () => {
+      const pid = ownedAoe2Pid ?? (await detectAoe2Process()).pid;
+      ownedAoe2Pid = undefined;
+      if (pid) await forceCloseAoe2Process(pid);
+    })().finally(() => app.quit());
+  });
+
   ipcMain.handle("game:detect-installation", async () => {
     return detectAoe2Installation();
   });
 
-  ipcMain.handle("game:detect-process", async () => detectAoe2Process());
+  ipcMain.handle("game:detect-process", async () => {
+    const status = await detectAoe2Process();
+    if (launchRequested && status.running && status.pid && !ownedAoe2Pid) {
+      ownedAoe2Pid = status.pid;
+    }
+    return status;
+  });
 
   ipcMain.handle("game:close", async (_event, force: boolean) => {
     const processStatus = await detectAoe2Process();
@@ -929,7 +952,7 @@ export function registerGameHandlers(): void {
 
     restoreAoe2Window();
     if (force) {
-      await execFileAsync("taskkill.exe", ["/PID", String(processStatus.pid), "/T", "/F"], { windowsHide: true });
+      await forceCloseAoe2Process(processStatus.pid);
     } else {
       const script = String.raw`
 $game = Get-Process -Id ${processStatus.pid} -ErrorAction SilentlyContinue
@@ -942,7 +965,10 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     }
 
     const closed = await waitForAoe2Exit(force ? 5000 : 8000);
-    if (closed) launchRequested = false;
+    if (closed) {
+      launchRequested = false;
+      if (ownedAoe2Pid === processStatus.pid) ownedAoe2Pid = undefined;
+    }
     return {
       closed,
       running: !closed,
