@@ -8,6 +8,7 @@ const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
 const publicBaseUrl = (process.env.PUBLIC_MATCHMAKER_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, "");
 const tickets = new Map();
 const matches = new Map();
+const playersJoiningQueue = new Set();
 let eventSequence = 0;
 
 function send(response, status, body) {
@@ -61,6 +62,7 @@ function sessionFor(match, ticket) {
 async function tryMatch(ticket) {
   const opponent = [...tickets.values()].find((candidate) =>
     candidate.id !== ticket.id
+      && candidate.player.id !== ticket.player.id
       && !candidate.matchId
       && candidate.queueId === ticket.queueId
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
@@ -155,6 +157,11 @@ const server = createServer(async (request, response) => {
       if (!Array.isArray(body.queue.mapPool) || body.queue.mapPool.length === 0) {
         return send(response, 400, { error: "at least one selected map is required" });
       }
+      const alreadyActive = [...tickets.values()].some((ticket) => ticket.player.id === authenticatedPlayer.id);
+      if (alreadyActive || playersJoiningQueue.has(authenticatedPlayer.id)) {
+        return send(response, 409, { error: "player already has an active queue or match" });
+      }
+      playersJoiningQueue.add(authenticatedPlayer.id);
       const ticket = {
         id: `ticket-${randomUUID()}`,
         queueId: body.queue.id,
@@ -165,10 +172,17 @@ const server = createServer(async (request, response) => {
         matchId: null,
         events: []
       };
-      await saveQueueTicket(ticket);
       tickets.set(ticket.id, ticket);
-      await tryMatch(ticket);
-      return send(response, 201, { id: ticket.id, queueId: ticket.queueId, joinedAt: ticket.joinedAt });
+      try {
+        await saveQueueTicket(ticket);
+        await tryMatch(ticket);
+        return send(response, 201, { id: ticket.id, queueId: ticket.queueId, joinedAt: ticket.joinedAt });
+      } catch (error) {
+        tickets.delete(ticket.id);
+        throw error;
+      } finally {
+        playersJoiningQueue.delete(authenticatedPlayer.id);
+      }
     }
 
     const eventMatch = url.pathname.match(/^\/tickets\/([^/]+)\/events$/);

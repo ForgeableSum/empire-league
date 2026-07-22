@@ -116,6 +116,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const configRef = useRef(state.mockConfig);
   configRef.current = state.mockConfig;
   const ticketRef = useRef<string | null>(null);
+  const queueJoinInFlightRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const lobbyAutomationRef = useRef<Promise<GameInputResult> | null>(null);
   const roomSetupTimeoutRef = useRef<number | null>(null);
@@ -175,6 +176,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (ticketRef.current) await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
     unsubscribeRef.current?.();
     ticketRef.current = null;
+    queueJoinInFlightRef.current = false;
     await authService.logout();
     setState((previous) => ({ ...previous, currentUser, queueStatus: "idle", selectedQueue: null, activeMatch: null }));
     setAuthStatus("unauthenticated");
@@ -360,8 +362,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function startQueue(queue: QueueDefinition): Promise<void> {
-    if (state.gameStatus === "loading") return;
+    const canStartQueue = ["idle", "cancelled", "completed"].includes(state.queueStatus)
+      && (!state.activeMatch || state.queueStatus === "completed");
+    if (state.gameStatus === "loading" || !canStartQueue || queueJoinInFlightRef.current) return;
+    queueJoinInFlightRef.current = true;
     try {
+      if (ticketRef.current) {
+        await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
+        ticketRef.current = null;
+      }
       const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: state.currentUser, canHost: true });
       ticketRef.current = ticket.id;
       setRoomSetupFailed(false);
@@ -462,11 +473,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           log("Host started the game");
         }
         if (event.type === "error") {
-          if (event.code === "MATCH_DECLINED") clearRoomSetupWatchdog();
+          if (event.code === "MATCH_DECLINED") {
+            clearRoomSetupWatchdog();
+            queueJoinInFlightRef.current = false;
+            if (ticketRef.current) {
+              void services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+              ticketRef.current = null;
+            }
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+          }
           setError({ code: event.code, message: event.message, retryable: true });
         }
       });
     } catch (error) {
+      queueJoinInFlightRef.current = false;
       setError({
         code: "QUEUE_JOIN_FAILED",
         message: "Matchmaking is currently unavailable.",
@@ -483,6 +504,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     unsubscribeRef.current?.();
     ticketRef.current = null;
+    queueJoinInFlightRef.current = false;
     setState((previous) => ({ ...previous, queueStatus: "cancelled", selectedQueue: null, queueStartedAt: null }));
     log("Queue cancelled");
   }
@@ -514,6 +536,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (state.activeMatch) {
       await services.matchmaking.declineMatch(state.activeMatch.id);
     }
+    if (ticketRef.current) await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    ticketRef.current = null;
+    queueJoinInFlightRef.current = false;
     setState((previous) => ({ ...previous, queueStatus: "cancelled", activeMatch: null }));
     log("Match declined");
   }
@@ -629,6 +656,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   function completeResult(result: MatchResult): void {
+    queueJoinInFlightRef.current = false;
     setState((previous) => {
       const activeMatch = previous.activeMatch ? { ...previous.activeMatch, result, status: "completed" as const } : null;
       const updatedUser = {

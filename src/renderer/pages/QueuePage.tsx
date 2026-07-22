@@ -11,6 +11,9 @@ const favoriteMapsKey = "empire-league-favorite-maps";
 export function QueuePage() {
   const { state, queues, startQueue, cancelQueue, clearError } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
+  const canStartQueue = ["idle", "cancelled", "completed"].includes(state.queueStatus)
+    && (!state.activeMatch || state.queueStatus === "completed")
+    && state.gameStatus !== "loading";
   const [selectedMaps, setSelectedMaps] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(queues.map((queue) => [queue.id, queue.mapPool.map((map) => map.id)]))
   );
@@ -117,7 +120,7 @@ export function QueuePage() {
                 <button
                   className="secondary"
                   type="button"
-                  disabled={state.gameStatus === "loading" || (selectedMaps[queue.id]?.length ?? 0) === 0}
+                  disabled={!canStartQueue || (selectedMaps[queue.id]?.length ?? 0) === 0}
                   onClick={() => void startQueue({
                     ...queue,
                     mapPool: queue.mapPool.filter((map) => selectedMaps[queue.id]?.includes(map.id)),
