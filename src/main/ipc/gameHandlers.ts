@@ -467,14 +467,25 @@ Send-Enter 'Create Lobby'
 Write-Output 'SEQUENCE|Lobby URI|Waiting=14000ms'
 Start-Sleep -Seconds 14
 Set-Clipboard -Value ''
-Send-Tab 51 'Created Lobby'
-Send-Enter 'Copy Game ID'
+Send-Tab 49 'Created Lobby'
+Send-Enter 'Reset Lobby Settings'
+Start-Sleep -Milliseconds 300
+Send-Tab 2 'Reset or Copy Game ID'
+Send-Enter 'Copy Game ID or Decline Reset Confirmation'
 Start-Sleep -Milliseconds 600
 $clipboard = Get-Clipboard -Raw
 $lobbyUri = [regex]::Match([string]$clipboard, 'aoe2de://0/[0-9]+').Value
 if (-not $lobbyUri) {
-  Write-Output 'ERROR|Lobby URI was not copied'
-  exit 7
+  Write-Output 'SEQUENCE|Reset Confirmation|Detected=True|Action=No|SettingsReset=True'
+  Send-Tab 2 'Reset Lobby Settings Applied'
+  Send-Enter 'Copy Game ID After Reset'
+  Start-Sleep -Milliseconds 600
+  $clipboard = Get-Clipboard -Raw
+  $lobbyUri = [regex]::Match([string]$clipboard, 'aoe2de://0/[0-9]+').Value
+  if (-not $lobbyUri) {
+    Write-Output 'ERROR|Lobby URI was not copied after reset handling'
+    exit 7
+  }
 }
 Write-Output "LOBBY_URI|$lobbyUri"
 Write-Output 'SEQUENCE|Complete=True'
@@ -1166,7 +1177,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     const guardWatchdog = setTimeout(() => {
       if (!guardProcess.killed) guardProcess.kill();
       emitLog("INPUT_GUARD|Active=False|Reason=Watchdog");
-    }, 30000);
+    }, 45000);
     const encodedScript = Buffer.from(createLobbySequenceScript, "utf16le").toString("base64");
     const sequenceProcess = spawn("powershell.exe", [
       "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
