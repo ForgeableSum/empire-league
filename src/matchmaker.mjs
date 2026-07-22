@@ -81,7 +81,8 @@ async function tryMatch(ticket) {
     selectedMap: availableMaps[Math.floor(Math.random() * availableMaps.length)],
     createdAt: new Date().toISOString(),
     acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
-    lobby: null
+    lobby: null,
+    guestLobbyReady: false
   };
   host.matchId = match.id;
   guest.matchId = match.id;
@@ -230,6 +231,21 @@ const server = createServer(async (request, response) => {
       await updateMatchStatus(match.id, "lobby_ready");
       emit(match.guest, { type: "lobby_ready", matchId: match.id, lobby: match.lobby });
       return send(response, 200, { published: true });
+    }
+
+    const guestReadyMatch = url.pathname.match(/^\/matches\/([^/]+)\/guest-ready$/);
+    if (request.method === "POST" && guestReadyMatch) {
+      const match = matches.get(decodeURIComponent(guestReadyMatch[1]));
+      const body = await readJson(request);
+      if (!match || body.ticketId !== match.guest.id || match.guest.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only the guest may report lobby readiness" });
+      }
+      if (!match.lobby) return send(response, 409, { error: "the lobby has not been published" });
+      if (!match.guestLobbyReady) {
+        match.guestLobbyReady = true;
+        emit(match.host, { type: "guest_lobby_ready", matchId: match.id });
+      }
+      return send(response, 200, { ready: true });
     }
 
     return send(response, 404, { error: "not found" });

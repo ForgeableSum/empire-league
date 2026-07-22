@@ -297,10 +297,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           log(`Host published lobby: ${event.lobby.platformLobbyId ?? "pending"}`);
           notify("The host created the AoE2 lobby", "success");
           if (event.lobby.platformLobbyId?.startsWith("aoe2de://0/") && window.electronApi) {
-            void window.electronApi.openAoe2Lobby(event.lobby.platformLobbyId).then((result) => {
+            void window.electronApi.openAoe2Lobby(event.lobby.platformLobbyId).then(async (result) => {
               log(result.opened ? "Opened the host lobby in AoE2" : "The host lobby URI was rejected");
               if (result.opened) {
-                notify("Joined the host lobby", "success");
+                log("Guest lobby opened; sending 19 Tabs and Enter to ready");
+                await sendAoe2TabsAndEnter(19);
+                await services.matchmaking.reportGuestLobbyReady(event.matchId);
+                log("Guest readied and notified the host");
+                notify("Joined and readied in the host lobby", "success");
               } else {
                 notify("The host lobby could not be opened", "danger");
               }
@@ -309,6 +313,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               notify("The host lobby could not be opened", "danger");
             });
           }
+        }
+        if (event.type === "guest_lobby_ready" && window.electronApi) {
+          void (async () => {
+            try {
+              log("Guest is ready; sending 19 Tabs and Enter to ready the host");
+              await sendAoe2TabsAndEnter(19);
+              log("Host readied; sending Tab and Enter to start the game");
+              await sendAoe2TabsAndEnter(1);
+              setState((previous) => ({
+                ...previous,
+                queueStatus: "in_game",
+                gameStatus: "in_match",
+                activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
+              }));
+              notify("Automated game start sent", "success");
+            } catch (error) {
+              log(`Automated host start failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+              notify("The automated game start failed", "danger");
+            }
+          })();
         }
         if (event.type === "error") {
           setError({ code: event.code, message: event.message, retryable: true });
@@ -404,20 +428,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...previous,
           activeMatch: previous.activeMatch ? { ...previous.activeMatch, lobby: discoveredLobby } : null,
           queueStatus: "waiting_for_opponent"
-        }));
-        await services.game.waitForGameStart(discoveredLobby.platformLobbyId);
-        log("Opponent joined");
-        setState((previous) => ({ ...previous, queueStatus: "verifying_lobby" }));
-        await services.game.verifyLobby(discoveredLobby.platformLobbyId);
-        log("Lobby verified");
-        notify("Lobby created and verified", "success");
-        setState((previous) => ({
-          ...previous,
-          queueStatus: "ready",
-          gameStatus: "in_lobby",
-          activeMatch: previous.activeMatch
-            ? { ...previous.activeMatch, lobby: verifiedLobby(discoveredLobby), status: "ready" }
-            : null
         }));
         return;
       }
@@ -564,6 +574,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+async function sendAoe2TabsAndEnter(tabCount: number): Promise<void> {
+  if (!window.electronApi) throw new Error("AoE2 automation is unavailable.");
+  for (let index = 0; index < tabCount; index += 1) {
+    const tab = await window.electronApi.sendAoe2Key("TAB");
+    if (!tab.sent) throw new Error(tab.message);
+    await delayForLobbyInput(100);
+  }
+  const enter = await window.electronApi.sendAoe2Key("ENTER");
+  if (!enter.sent) throw new Error(enter.message);
+  await delayForLobbyInput(250);
+}
+
+function delayForLobbyInput(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
 export function useAppStore(): AppContextValue {
