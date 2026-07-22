@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs",
+    "dev:client": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --client-only",
     "matchmaker": "node --env-file-if-exists=.env src/matchmaker.mjs",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "build": "tsc -p tsconfig.json && npm run build:electron && vite build",
