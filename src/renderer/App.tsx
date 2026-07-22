@@ -9,7 +9,7 @@ import { MatchFoundOverlay } from "./components/match/MatchFoundOverlay";
 import { Toasts } from "./components/common/Toasts";
 import { StartupGamePrompt } from "./components/common/StartupGamePrompt";
 import { useAppStore } from "./state/appStore";
-import { LogIn } from "lucide-react";
+import { Loader2, LogIn } from "lucide-react";
 
 export function App() {
   if (new URLSearchParams(window.location.search).get("overlay") === "test") {
@@ -17,6 +17,20 @@ export function App() {
   }
 
   const { page, state, authStatus, authError, signInWithSteam } = useAppStore();
+
+  if (authStatus === "loading") {
+    return (
+      <>
+        <main className="auth-screen session-loading-screen" aria-label="Loading Empire League">
+          <div className="session-loading-mark">
+            <h1>Empire League</h1>
+            <Loader2 className="spin" size={24} aria-hidden="true" />
+          </div>
+        </main>
+        <StartupGamePrompt />
+      </>
+    );
+  }
 
   if (authStatus !== "authenticated") {
     return (
@@ -29,11 +43,11 @@ export function App() {
             <button
               className="primary large"
               type="button"
-              disabled={authStatus === "loading" || authStatus === "authenticating"}
+              disabled={authStatus === "authenticating"}
               onClick={() => void signInWithSteam()}
             >
               <LogIn size={20} />
-              {authStatus === "loading" ? "Checking session…" : authStatus === "authenticating" ? "Waiting for Steam…" : "Sign in through Steam"}
+              {authStatus === "authenticating" ? "Waiting for Steam…" : "Sign in through Steam"}
             </button>
             {authStatus === "authenticating" && <span>Complete sign-in in your browser.</span>}
           </div>
