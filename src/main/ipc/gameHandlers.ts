@@ -1016,7 +1016,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
 
   ipcMain.handle("game:focus", async () => {
     restoreAoe2Window(true, true);
-    await delay(180);
+    await delay(3000);
     return { focused: true };
   });
 
@@ -1324,6 +1324,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     // navigate to the lobby before revealing its window for the LAN test.
     await delay(10000);
     restoreAoe2Window(true, true);
+    await delay(3000);
     return { opened: true };
   });
 }
