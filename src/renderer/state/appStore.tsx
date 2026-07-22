@@ -748,7 +748,7 @@ async function sendAoe2TabsAndEnter(tabCount: number): Promise<void> {
   for (let index = 0; index < tabCount; index += 1) {
     const tab = await window.electronApi.sendAoe2Key("TAB");
     if (!tab.sent) throw new Error(tab.message);
-    await delayForLobbyInput(100);
+    await delayForLobbyInput(200);
   }
   const enter = await window.electronApi.sendAoe2Key("ENTER");
   if (!enter.sent) throw new Error(enter.message);
