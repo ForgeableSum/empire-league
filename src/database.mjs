@@ -37,7 +37,7 @@ export async function saveQueueTicket(ticket) {
          aoe_profile_id = VALUES(aoe_profile_id), display_name = VALUES(display_name),
          country_code = VALUES(country_code), peak_rating = GREATEST(peak_rating, VALUES(peak_rating)),
          wins = VALUES(wins), losses = VALUES(losses), streak = VALUES(streak)`,
-      [ticket.player.id, ticket.player.aoeProfileId, ticket.player.displayName, ticket.player.countryCode ?? null,
+      [ticket.player.id, ticket.player.aoeProfileId || null, ticket.player.displayName, ticket.player.countryCode ?? null,
         ticket.player.rating, ticket.player.peakRating, ticket.player.wins, ticket.player.losses, ticket.player.streak]
     );
     await connection.execute(

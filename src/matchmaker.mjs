@@ -1,8 +1,11 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { database, checkDatabase, saveMatch, saveQueueTicket, updateMatchStatus, updateTicketStatus } from "./database.mjs";
+import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
+const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
+const publicBaseUrl = (process.env.PUBLIC_MATCHMAKER_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, "");
 const tickets = new Map();
 const matches = new Map();
 let eventSequence = 0;
@@ -10,11 +13,16 @@ let eventSequence = 0;
 function send(response, status, body) {
   response.writeHead(status, {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
     "Content-Type": "application/json"
   });
   response.end(JSON.stringify(body));
+}
+
+function sendHtml(response, status, body) {
+  response.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+  response.end(body);
 }
 
 async function readJson(request) {
@@ -103,9 +111,42 @@ const server = createServer(async (request, response) => {
       });
     }
 
+    if (request.method === "POST" && url.pathname === "/auth/steam/start") {
+      return send(response, 201, await beginSteamLogin(publicBaseUrl));
+    }
+
+    if (request.method === "GET" && url.pathname === "/auth/steam/callback") {
+      try {
+        await completeSteamLogin(url);
+        return sendHtml(response, 200, "<!doctype html><title>Empire League</title><style>body{background:#171614;color:#eee;font:18px system-ui;display:grid;place-items:center;height:100vh;margin:0}main{text-align:center}h1{color:#c58d45}</style><main><h1>Signed in to Empire League</h1><p>You can close this window and return to the app.</p></main>");
+      } catch (error) {
+        return sendHtml(response, 400, `<!doctype html><title>Sign-in failed</title><main><h1>Sign-in failed</h1><p>${escapeHtml(error instanceof Error ? error.message : "Steam authentication failed.")}</p></main>`);
+      }
+    }
+
+    if (request.method === "GET" && url.pathname === "/auth/steam/status") {
+      const attemptId = url.searchParams.get("attempt");
+      const pollToken = url.searchParams.get("token");
+      if (!attemptId || !pollToken) return send(response, 400, { error: "attempt and token are required" });
+      return send(response, 200, await pollSteamLogin(attemptId, pollToken));
+    }
+
+    if (request.method === "GET" && url.pathname === "/auth/me") {
+      const player = await authenticate(request, true);
+      return player ? send(response, 200, { player }) : send(response, 401, { error: "authentication required" });
+    }
+
+    if (request.method === "POST" && url.pathname === "/auth/logout") {
+      await revokeSession(request);
+      return send(response, 200, { ok: true });
+    }
+
+    const authenticatedPlayer = await authenticate(request);
+    if (!authenticatedPlayer) return send(response, 401, { error: "authentication required" });
+
     if (request.method === "POST" && url.pathname === "/queue") {
       const body = await readJson(request);
-      if (!body.queue?.id || !body.player) return send(response, 400, { error: "queue and player are required" });
+      if (!body.queue?.id) return send(response, 400, { error: "queue is required" });
       if (!Array.isArray(body.queue.mapPool) || body.queue.mapPool.length === 0) {
         return send(response, 400, { error: "at least one selected map is required" });
       }
@@ -113,7 +154,7 @@ const server = createServer(async (request, response) => {
         id: `ticket-${randomUUID()}`,
         queueId: body.queue.id,
         queue: body.queue,
-        player: body.player,
+        player: authenticatedPlayer,
         canHost: body.canHost !== false,
         joinedAt: new Date().toISOString(),
         matchId: null,
@@ -128,7 +169,7 @@ const server = createServer(async (request, response) => {
     const eventMatch = url.pathname.match(/^\/tickets\/([^/]+)\/events$/);
     if (request.method === "GET" && eventMatch) {
       const ticket = tickets.get(decodeURIComponent(eventMatch[1]));
-      if (!ticket) return send(response, 404, { error: "ticket not found" });
+      if (!ticket || ticket.player.id !== authenticatedPlayer.id) return send(response, 404, { error: "ticket not found" });
       const after = Number(url.searchParams.get("after") ?? 0);
       return send(response, 200, { events: ticket.events.filter((item) => item.sequence > after) });
     }
@@ -137,6 +178,7 @@ const server = createServer(async (request, response) => {
     if (request.method === "DELETE" && ticketMatch) {
       const ticketId = decodeURIComponent(ticketMatch[1]);
       const ticket = tickets.get(ticketId);
+      if (!ticket || ticket.player.id !== authenticatedPlayer.id) return send(response, 404, { error: "ticket not found" });
       if (ticket && !ticket.matchId) await updateTicketStatus(ticketId, "cancelled");
       tickets.delete(ticketId);
       return send(response, 200, { ok: true });
@@ -146,7 +188,8 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && acceptMatch) {
       const match = matches.get(decodeURIComponent(acceptMatch[1]));
       const body = await readJson(request);
-      if (!match || ![match.host.id, match.guest.id].includes(body.ticketId)) {
+      const actingTicket = tickets.get(body.ticketId);
+      if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id || ![match.host.id, match.guest.id].includes(body.ticketId)) {
         return send(response, 404, { error: "match or ticket not found" });
       }
       match.accepted.add(body.ticketId);
@@ -161,7 +204,11 @@ const server = createServer(async (request, response) => {
     const declineMatch = url.pathname.match(/^\/matches\/([^/]+)\/decline$/);
     if (request.method === "POST" && declineMatch) {
       const match = matches.get(decodeURIComponent(declineMatch[1]));
-      if (!match) return send(response, 404, { error: "match not found" });
+      const body = await readJson(request);
+      const actingTicket = tickets.get(body.ticketId);
+      if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id || ![match.host.id, match.guest.id].includes(body.ticketId)) {
+        return send(response, 404, { error: "match or ticket not found" });
+      }
       await updateMatchStatus(match.id, "declined");
       emit(match.host, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
       emit(match.guest, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
@@ -172,7 +219,9 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && lobbyMatch) {
       const match = matches.get(decodeURIComponent(lobbyMatch[1]));
       const body = await readJson(request);
-      if (!match || body.ticketId !== match.host.id) return send(response, 403, { error: "only the host may publish a lobby" });
+      if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only the host may publish a lobby" });
+      }
       match.lobby = body.lobby;
       await updateMatchStatus(match.id, "lobby_ready");
       emit(match.guest, { type: "lobby_ready", matchId: match.id, lobby: match.lobby });
@@ -186,10 +235,14 @@ const server = createServer(async (request, response) => {
   }
 });
 
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
+}
+
 const databaseInfo = await checkDatabase();
 console.log(`[matchmaker] MySQL ${databaseInfo.version} connected (${databaseInfo.databaseName}, schema ${databaseInfo.schemaVersion})`);
-server.listen(port, "127.0.0.1", () => {
-  console.log(`[matchmaker] listening on http://127.0.0.1:${port}`);
+server.listen(port, host, () => {
+  console.log(`[matchmaker] listening on http://${host}:${port}`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {

@@ -8,6 +8,7 @@ import type {
 import type { MockServiceConfig } from "../state/types";
 import { currentUser, maps, matchmakingOpponents } from "../mocks/mockPlayers";
 import { delay } from "./timing";
+import { authorizationHeaders, matchmakerUrl } from "./authService";
 
 export interface MatchmakingService {
   joinQueue(request: JoinQueueRequest): Promise<QueueTicket>;
@@ -18,7 +19,7 @@ export interface MatchmakingService {
   publishLobby(matchId: string, lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void>;
 }
 
-const localMatchmakerUrl = "http://127.0.0.1:4317";
+const localMatchmakerUrl = matchmakerUrl;
 
 export class LocalMatchmakingService implements MatchmakingService {
   private activeTicketId: string | null = null;
@@ -26,14 +27,14 @@ export class LocalMatchmakingService implements MatchmakingService {
   async joinQueue(request: JoinQueueRequest): Promise<QueueTicket> {
     const response = await fetch(`${localMatchmakerUrl}/queue`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ queue: request.queue, player: request.player, canHost: request.canHost })
+      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
+      body: JSON.stringify({ queue: request.queue, canHost: request.canHost })
     });
     return this.read<QueueTicket>(response);
   }
 
   async leaveQueue(ticketId: string): Promise<void> {
-    await this.read(await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}`, { method: "DELETE" }));
+    await this.read(await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}`, { method: "DELETE", headers: authorizationHeaders() }));
     if (this.activeTicketId === ticketId) this.activeTicketId = null;
   }
 
@@ -47,7 +48,7 @@ export class LocalMatchmakingService implements MatchmakingService {
       polling = true;
       try {
         const result = await this.read<{ events: Array<{ sequence: number; event: Parameters<QueueEventListener>[0] }> }>(
-          await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}/events?after=${after}`)
+          await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}/events?after=${after}`, { headers: authorizationHeaders() })
         );
         for (const item of result.events) {
           after = Math.max(after, item.sequence);
@@ -80,7 +81,7 @@ export class LocalMatchmakingService implements MatchmakingService {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
     await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/lobby`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
       body: JSON.stringify({ ticketId: this.activeTicketId, lobby })
     }));
   }
@@ -89,7 +90,7 @@ export class LocalMatchmakingService implements MatchmakingService {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
     await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/${action}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
       body: JSON.stringify({ ticketId: this.activeTicketId })
     }));
   }

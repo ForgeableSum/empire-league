@@ -10,6 +10,7 @@ import { MockGameIntegrationService } from "../services/gameIntegrationService";
 import { LocalMatchmakingService, MockMatchmakingService } from "../services/matchmakingService";
 import { MockMatchResultService } from "../services/matchResultService";
 import { nowLog } from "../services/timing";
+import { authService } from "../services/authService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
 
 type AppPage = "home" | "play" | "match-history" | "leaderboard" | "profile" | "settings";
@@ -30,6 +31,10 @@ interface AppContextValue {
   updateSettings: (patch: Partial<UserSettings>) => void;
   dismissNotification: (id: string) => void;
   clearError: () => void;
+  authStatus: "loading" | "unauthenticated" | "authenticating" | "authenticated";
+  authError: string | null;
+  signInWithSteam: () => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 const settingsKey = "empire-league-settings";
@@ -51,9 +56,7 @@ const defaultSettings: UserSettings = {
   reducedMotion: false,
   compactLayout: false,
   minimizeOnStart: false,
-  startWithWindows: false,
-  linkedIdentity: "Steam placeholder",
-  displayName: currentUser.displayName
+  startWithWindows: false
 };
 
 export const queueDefinitions: QueueDefinition[] = [
@@ -85,6 +88,8 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [page, setPage] = useState<AppPage>("home");
+  const [authStatus, setAuthStatus] = useState<AppContextValue["authStatus"]>("loading");
+  const [authError, setAuthError] = useState<string | null>(null);
   const [state, setState] = useState<AppState>(() => ({
     currentUser,
     queueStatus: "idle",
@@ -118,6 +123,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }),
     []
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void authService.restore().then((player) => {
+      if (cancelled) return;
+      if (player) {
+        setState((previous) => ({ ...previous, currentUser: player }));
+        setAuthStatus("authenticated");
+      } else {
+        setAuthStatus("unauthenticated");
+      }
+    }).catch((error) => {
+      if (cancelled) return;
+      setAuthError(error instanceof Error ? error.message : "Could not restore the Steam session.");
+      setAuthStatus("unauthenticated");
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function signInWithSteam(): Promise<void> {
+    setAuthStatus("authenticating");
+    setAuthError(null);
+    try {
+      const player = await authService.signIn();
+      setState((previous) => ({ ...previous, currentUser: player }));
+      setAuthStatus("authenticated");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Steam sign-in failed.");
+      setAuthStatus("unauthenticated");
+    }
+  }
+
+  async function signOut(): Promise<void> {
+    if (ticketRef.current) await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+    unsubscribeRef.current?.();
+    ticketRef.current = null;
+    await authService.logout();
+    setState((previous) => ({ ...previous, currentUser, queueStatus: "idle", selectedQueue: null, activeMatch: null }));
+    setAuthStatus("unauthenticated");
+    setPage("home");
+  }
 
   useEffect(() => {
     if (!state.settings.autoLaunch) return;
@@ -497,7 +543,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateSettings,
     dismissNotification: (id) =>
       setState((previous) => ({ ...previous, notifications: previous.notifications.filter((item) => item.id !== id) })),
-    clearError: () => setState((previous) => ({ ...previous, error: null, queueStatus: "idle" }))
+    clearError: () => setState((previous) => ({ ...previous, error: null, queueStatus: "idle" })),
+    authStatus,
+    authError,
+    signInWithSteam,
+    signOut
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

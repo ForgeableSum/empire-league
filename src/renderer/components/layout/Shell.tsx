@@ -1,4 +1,4 @@
-import { BarChart3, History, Home, Play, Settings, User } from "lucide-react";
+import { BarChart3, History, Home, LogOut, Play, Settings, User } from "lucide-react";
 import type { ReactNode } from "react";
 import appIcon from "../../assets/el-2.png";
 import { useAppStore, type AppPage } from "../../state/appStore";
@@ -13,7 +13,7 @@ const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { page, setPage, state } = useAppStore();
+  const { page, setPage, state, signOut } = useAppStore();
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
 
   return (
@@ -43,11 +43,18 @@ export function Shell({ children }: { children: ReactNode }) {
           <div><span>Version</span><strong>0.1.0</strong></div>
         </div>
         <div className="user-block">
-          <div className="avatar">{state.currentUser.displayName.slice(0, 2).toUpperCase()}</div>
+          <div className="avatar">
+            {state.currentUser.avatarUrl
+              ? <img src={state.currentUser.avatarUrl} alt="" />
+              : state.currentUser.displayName.slice(0, 2).toUpperCase()}
+          </div>
           <div>
             <strong>{state.currentUser.displayName}</strong>
             <span>{state.currentUser.rating} Elo · {record}</span>
           </div>
+          <button className="icon-button" type="button" aria-label="Sign out" title="Sign out" onClick={() => void signOut()}>
+            <LogOut size={16} />
+          </button>
         </div>
       </aside>
       <main className="main-area">

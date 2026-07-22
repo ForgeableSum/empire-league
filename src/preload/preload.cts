@@ -22,7 +22,11 @@ const electronApi: ElectronGameApi = {
   createRanked1v1Lobby: (request) => ipcRenderer.invoke("game:create-ranked-1v1-lobby", request),
   openAoe2Lobby: (lobbyId) => ipcRenderer.invoke("game:open-lobby", lobbyId),
   toggleTestOverlay: () => ipcRenderer.invoke("overlay:toggle"),
-  closeTestOverlay: () => ipcRenderer.invoke("overlay:close")
+  closeTestOverlay: () => ipcRenderer.invoke("overlay:close"),
+  openSteamLogin: (url) => ipcRenderer.invoke("auth:open-steam-login", url),
+  loadAuthToken: () => ipcRenderer.invoke("auth:load-token"),
+  storeAuthToken: (token) => ipcRenderer.invoke("auth:store-token", token),
+  clearAuthToken: () => ipcRenderer.invoke("auth:clear-token")
 };
 
 contextBridge.exposeInMainWorld("electronApi", electronApi);

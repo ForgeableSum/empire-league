@@ -56,8 +56,6 @@ export interface UserSettings {
   compactLayout: boolean;
   minimizeOnStart: boolean;
   startWithWindows: boolean;
-  linkedIdentity: string;
-  displayName: string;
 }
 
 export interface AppState {

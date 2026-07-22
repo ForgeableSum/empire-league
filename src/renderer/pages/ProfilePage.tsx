@@ -8,9 +8,13 @@ export function ProfilePage() {
   return (
     <section className="profile-layout">
       <div className="panel profile-card">
-        <div className="avatar huge-avatar">{user.displayName.slice(0, 2).toUpperCase()}</div>
+        <div className="avatar huge-avatar">
+          {user.avatarUrl
+            ? <img src={user.avatarUrl} alt="" />
+            : user.displayName.slice(0, 2).toUpperCase()}
+        </div>
         <h2>{user.displayName}</h2>
-        <span>{user.countryCode} · AoE Profile {user.aoeProfileId}</span>
+        <span>{user.steamId ? `Steam ID ${user.steamId}` : "Steam account"}</span>
         <FormPips form={user.recentForm} />
       </div>
       <div className="metrics-grid">

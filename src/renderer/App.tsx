@@ -8,13 +8,36 @@ import { Shell } from "./components/layout/Shell";
 import { MatchFoundOverlay } from "./components/match/MatchFoundOverlay";
 import { Toasts } from "./components/common/Toasts";
 import { useAppStore } from "./state/appStore";
+import { LogIn } from "lucide-react";
 
 export function App() {
   if (new URLSearchParams(window.location.search).get("overlay") === "test") {
     return <TestOverlay />;
   }
 
-  const { page, state } = useAppStore();
+  const { page, state, authStatus, authError, signInWithSteam } = useAppStore();
+
+  if (authStatus !== "authenticated") {
+    return (
+      <main className="auth-screen">
+        <div className="auth-card">
+          <h1>Empire League</h1>
+          <p>Sign in with Steam to use matchmaking and keep your rating tied to your account.</p>
+          {authError && <div className="auth-error">{authError}</div>}
+          <button
+            className="primary large"
+            type="button"
+            disabled={authStatus === "loading" || authStatus === "authenticating"}
+            onClick={() => void signInWithSteam()}
+          >
+            <LogIn size={20} />
+            {authStatus === "loading" ? "Checking session…" : authStatus === "authenticating" ? "Waiting for Steam…" : "Sign in through Steam"}
+          </button>
+          {authStatus === "authenticating" && <span>Complete sign-in in your browser.</span>}
+        </div>
+      </main>
+    );
+  }
 
   return (
     <>

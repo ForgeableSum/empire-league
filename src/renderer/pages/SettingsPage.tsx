@@ -5,7 +5,7 @@ import { useAppStore } from "../state/appStore";
 type DetectionFeedback = { tone: "success" | "error"; message: string };
 
 export function SettingsPage() {
-  const { state, updateSettings } = useAppStore();
+  const { state, updateSettings, signOut } = useAppStore();
   const settings = state.settings;
   const [detecting, setDetecting] = useState(false);
   const [detectionFeedback, setDetectionFeedback] = useState<DetectionFeedback | null>(null);
@@ -185,10 +185,21 @@ export function SettingsPage() {
         <Toggle label="Start client with Windows" checked={settings.startWithWindows} onChange={(startWithWindows) => updateSettings({ startWithWindows })} />
       </SettingsGroup>
       <SettingsGroup title="Account">
-        <label>Linked AoE profile ID<input value={state.currentUser.aoeProfileId} readOnly /></label>
-        <label>Linked identity<input value={settings.linkedIdentity} onChange={(event) => updateSettings({ linkedIdentity: event.target.value })} /></label>
-        <label>Display name<input value={settings.displayName} onChange={(event) => updateSettings({ displayName: event.target.value })} /></label>
-        <button type="button" className="secondary">Log Out</button>
+        <div className="account-summary">
+          <div className="avatar large-avatar">
+            {state.currentUser.avatarUrl
+              ? <img src={state.currentUser.avatarUrl} alt="" />
+              : state.currentUser.displayName.slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <strong>{state.currentUser.displayName}</strong>
+            <span>Authenticated through Steam</span>
+          </div>
+        </div>
+        <label>Steam display name<input value={state.currentUser.displayName} readOnly /></label>
+        <label>Steam ID64<input value={state.currentUser.steamId ?? "Unavailable"} readOnly /></label>
+        <label>Empire League player ID<input value={state.currentUser.id} readOnly /></label>
+        <button type="button" className="secondary" onClick={() => void signOut()}>Log Out</button>
       </SettingsGroup>
     </section>
   );

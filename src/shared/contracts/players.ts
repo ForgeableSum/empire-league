@@ -3,6 +3,7 @@ import type { Division, MatchOutcome } from "./matchmaking.js";
 export interface PlayerProfile {
   id: string;
   aoeProfileId: number;
+  steamId?: string;
   displayName: string;
   avatarUrl?: string;
   countryCode?: string;

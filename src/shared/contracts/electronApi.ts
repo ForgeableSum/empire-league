@@ -29,4 +29,8 @@ export interface ElectronGameApi {
   openAoe2Lobby(lobbyId: string): Promise<OpenLobbyResult>;
   toggleTestOverlay(): Promise<{ visible: boolean }>;
   closeTestOverlay(): Promise<{ visible: false }>;
+  openSteamLogin(url: string): Promise<void>;
+  loadAuthToken(): Promise<string | null>;
+  storeAuthToken(token: string): Promise<void>;
+  clearAuthToken(): Promise<void>;
 }
