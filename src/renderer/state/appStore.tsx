@@ -447,8 +447,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             try {
               log("Guest reported ready; waiting for the host lobby state to settle");
               await delayForLobbyInput(2000);
-              log("Guest is ready; sending 22 Tabs and Enter to ready the host");
-              await sendAoe2TabsAndEnter(22);
+              log("Guest is ready; sending 20 Tabs and Enter to ready the host");
+              await sendAoe2TabsAndEnter(20);
               log("Host ready input sent; waiting for the Start button state to settle");
               await delayForLobbyInput(1000);
               log("Host readied; sending Tab and Enter to start the game");
