@@ -6,7 +6,9 @@
   "main": "dist/main/main.js",
   "type": "module",
   "scripts": {
-    "dev": "tsc -p tsconfig.electron.json && node src/dev.mjs",
+    "dev": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs",
+    "matchmaker": "node --env-file-if-exists=.env src/matchmaker.mjs",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "build": "tsc -p tsconfig.json && npm run build:electron && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "package": "npm run build && electron-builder --dir",
@@ -14,13 +16,14 @@
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
+    "mysql2": "^3.23.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "typescript": "^5.7.2",

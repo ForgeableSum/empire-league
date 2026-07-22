@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { database, checkDatabase, saveMatch, saveQueueTicket, updateMatchStatus, updateTicketStatus } from "./database.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const tickets = new Map();
@@ -49,7 +50,7 @@ function sessionFor(match, ticket) {
   };
 }
 
-function tryMatch(ticket) {
+async function tryMatch(ticket) {
   const opponent = [...tickets.values()].find((candidate) =>
     candidate.id !== ticket.id
       && !candidate.matchId
@@ -77,6 +78,7 @@ function tryMatch(ticket) {
   host.matchId = match.id;
   guest.matchId = match.id;
   matches.set(match.id, match);
+  await saveMatch(match);
   emit(host, { type: "match_found", match: sessionFor(match, host) });
   emit(guest, { type: "match_found", match: sessionFor(match, guest) });
   console.log(`[matchmaker] ${match.id}: host=${host.player.displayName}, guest=${guest.player.displayName}`);
@@ -88,7 +90,17 @@ const server = createServer(async (request, response) => {
 
   try {
     if (request.method === "GET" && url.pathname === "/health") {
-      return send(response, 200, { ok: true, queued: [...tickets.values()].filter((ticket) => !ticket.matchId).length });
+      const connection = await checkDatabase();
+      return send(response, 200, {
+        ok: true,
+        database: {
+          connected: true,
+          name: connection.databaseName,
+          version: connection.version,
+          schemaVersion: connection.schemaVersion
+        },
+        queued: [...tickets.values()].filter((ticket) => !ticket.matchId).length
+      });
     }
 
     if (request.method === "POST" && url.pathname === "/queue") {
@@ -107,8 +119,9 @@ const server = createServer(async (request, response) => {
         matchId: null,
         events: []
       };
+      await saveQueueTicket(ticket);
       tickets.set(ticket.id, ticket);
-      tryMatch(ticket);
+      await tryMatch(ticket);
       return send(response, 201, { id: ticket.id, queueId: ticket.queueId, joinedAt: ticket.joinedAt });
     }
 
@@ -122,7 +135,10 @@ const server = createServer(async (request, response) => {
 
     const ticketMatch = url.pathname.match(/^\/tickets\/([^/]+)$/);
     if (request.method === "DELETE" && ticketMatch) {
-      tickets.delete(decodeURIComponent(ticketMatch[1]));
+      const ticketId = decodeURIComponent(ticketMatch[1]);
+      const ticket = tickets.get(ticketId);
+      if (ticket && !ticket.matchId) await updateTicketStatus(ticketId, "cancelled");
+      tickets.delete(ticketId);
       return send(response, 200, { ok: true });
     }
 
@@ -135,6 +151,7 @@ const server = createServer(async (request, response) => {
       }
       match.accepted.add(body.ticketId);
       if (match.accepted.size === 2) {
+        await updateMatchStatus(match.id, "accepted");
         emit(match.host, { type: "opponent_accepted", matchId: match.id, role: "host" });
         emit(match.guest, { type: "opponent_accepted", matchId: match.id, role: "guest" });
       }
@@ -145,6 +162,7 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && declineMatch) {
       const match = matches.get(decodeURIComponent(declineMatch[1]));
       if (!match) return send(response, 404, { error: "match not found" });
+      await updateMatchStatus(match.id, "declined");
       emit(match.host, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
       emit(match.guest, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
       return send(response, 200, { declined: true });
@@ -156,6 +174,7 @@ const server = createServer(async (request, response) => {
       const body = await readJson(request);
       if (!match || body.ticketId !== match.host.id) return send(response, 403, { error: "only the host may publish a lobby" });
       match.lobby = body.lobby;
+      await updateMatchStatus(match.id, "lobby_ready");
       emit(match.guest, { type: "lobby_ready", matchId: match.id, lobby: match.lobby });
       return send(response, 200, { published: true });
     }
@@ -167,10 +186,12 @@ const server = createServer(async (request, response) => {
   }
 });
 
+const databaseInfo = await checkDatabase();
+console.log(`[matchmaker] MySQL ${databaseInfo.version} connected (${databaseInfo.databaseName}, schema ${databaseInfo.schemaVersion})`);
 server.listen(port, "127.0.0.1", () => {
   console.log(`[matchmaker] listening on http://127.0.0.1:${port}`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => server.close(() => process.exit(0)));
+  process.on(signal, () => server.close(() => database.end().finally(() => process.exit(0))));
 }
