@@ -35,6 +35,8 @@ interface AppContextValue {
   authError: string | null;
   signInWithSteam: () => Promise<void>;
   signOut: () => Promise<void>;
+  startupGamePrompt: "restart" | "force-close" | null;
+  respondToStartupGamePrompt: (confirmed: boolean) => void;
 }
 
 const settingsKey = "empire-league-settings";
@@ -112,6 +114,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const ticketRef = useRef<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const lobbyAutomationRef = useRef<Promise<GameInputResult> | null>(null);
+  const startupPromptResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+  const [startupGamePrompt, setStartupGamePrompt] = useState<AppContextValue["startupGamePrompt"]>(null);
 
   const services = useMemo(
     () => ({
@@ -176,6 +180,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     async function autoLaunchAoe2(): Promise<void> {
+      let loadingNotificationId: string | null = null;
       try {
         if (!window.electronApi) {
           throw new Error("The Electron game integration bridge is unavailable.");
@@ -189,33 +194,63 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        const existingProcess = await window.electronApi.detectAoe2Process();
+        if (existingProcess.running) {
+          const shouldRestart = await requestStartupGameConfirmation("restart");
+          if (!shouldRestart) {
+            await window.electronApi.quitApp();
+            return;
+          }
+
+          const gracefulClose = await window.electronApi.closeAoe2(false);
+          if (!gracefulClose.closed) {
+            const shouldForceClose = await requestStartupGameConfirmation("force-close");
+            if (!shouldForceClose) {
+              await window.electronApi.quitApp();
+              return;
+            }
+            const forcedClose = await window.electronApi.closeAoe2(true);
+            if (!forcedClose.closed) {
+              throw new Error(forcedClose.message ?? "AoE2 could not be closed.");
+            }
+          }
+        }
+
+        loadingNotificationId = notify("Loading AoE2 DE…", "loading", {
+          detail: "Waiting for the game window to become ready.",
+          durationMs: null
+        });
+
         const result = await window.electronApi.launchAoe2();
         if (!result.launched) {
           throw new Error(result.message ?? "Steam did not accept the AoE2 DE launch request.");
         }
 
+        const ready = await waitForAoe2Window(120_000);
+        if (!ready) throw new Error("AoE2 started, but its game window did not become ready in time.");
+
         if (!cancelled) {
+          if (loadingNotificationId) dismissNotificationById(loadingNotificationId);
           setState((previous) => ({
             ...previous,
             gameStatus: "running",
             settings: { ...previous.settings, aoePath: installation.path as string }
           }));
           window.localStorage.setItem(settingsKey, JSON.stringify({ ...state.settings, aoePath: installation.path }));
-          notify("Launching AoE2 DE…", "success", {
-            detail: "Steam received the launch request.",
-            durationMs: 5000
-          });
+          notify("AoE2 DE is ready", "success");
         }
       } catch (error) {
         if (!cancelled) {
+          if (loadingNotificationId) dismissNotificationById(loadingNotificationId);
           notify(error instanceof Error ? error.message : "AoE2 DE could not be launched.", "danger");
         }
       }
     }
 
-    void autoLaunchAoe2();
+    const startupTimer = window.setTimeout(() => void autoLaunchAoe2(), 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(startupTimer);
     };
     // Auto-launch is intentionally evaluated once when the app starts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -228,17 +263,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   function notify(
     message: string,
     tone: NotificationItem["tone"] = "info",
-    options: { detail?: string; durationMs?: number } = {}
-  ): void {
+    options: { detail?: string; durationMs?: number | null } = {}
+  ): string {
+    const id = crypto.randomUUID();
     setState((previous) => ({
       ...previous,
       notifications: [{
-        id: crypto.randomUUID(),
+        id,
         message,
         tone,
         detail: options.detail,
-        durationMs: options.durationMs ?? (tone === "danger" ? 8000 : 5000)
+        durationMs: options.durationMs === undefined ? (tone === "danger" ? 8000 : 5000) : options.durationMs
       }, ...previous.notifications].slice(0, 4)
+    }));
+    return id;
+  }
+
+  function requestStartupGameConfirmation(prompt: NonNullable<AppContextValue["startupGamePrompt"]>): Promise<boolean> {
+    return new Promise((resolve) => {
+      startupPromptResolverRef.current = resolve;
+      setStartupGamePrompt(prompt);
+    });
+  }
+
+  function respondToStartupGamePrompt(confirmed: boolean): void {
+    const resolve = startupPromptResolverRef.current;
+    startupPromptResolverRef.current = null;
+    setStartupGamePrompt(null);
+    resolve?.(confirmed);
+  }
+
+  function dismissNotificationById(id: string): void {
+    setState((previous) => ({
+      ...previous,
+      notifications: previous.notifications.filter((item) => item.id !== id)
     }));
   }
 
@@ -564,13 +622,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     simulateMatchEnd,
     updateMockConfig,
     updateSettings,
-    dismissNotification: (id) =>
-      setState((previous) => ({ ...previous, notifications: previous.notifications.filter((item) => item.id !== id) })),
+    dismissNotification: dismissNotificationById,
     clearError: () => setState((previous) => ({ ...previous, error: null, queueStatus: "idle" })),
     authStatus,
     authError,
     signInWithSteam,
-    signOut
+    signOut,
+    startupGamePrompt,
+    respondToStartupGamePrompt
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -586,6 +645,17 @@ async function sendAoe2TabsAndEnter(tabCount: number): Promise<void> {
   const enter = await window.electronApi.sendAoe2Key("ENTER");
   if (!enter.sent) throw new Error(enter.message);
   await delayForLobbyInput(250);
+}
+
+async function waitForAoe2Window(timeoutMs: number): Promise<boolean> {
+  if (!window.electronApi) return false;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const process = await window.electronApi.detectAoe2Process();
+    if (process.running && process.windowReady) return true;
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
+  }
+  return false;
 }
 
 function delayForLobbyInput(milliseconds: number): Promise<void> {

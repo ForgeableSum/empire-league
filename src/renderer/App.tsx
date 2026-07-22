@@ -7,6 +7,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { Shell } from "./components/layout/Shell";
 import { MatchFoundOverlay } from "./components/match/MatchFoundOverlay";
 import { Toasts } from "./components/common/Toasts";
+import { StartupGamePrompt } from "./components/common/StartupGamePrompt";
 import { useAppStore } from "./state/appStore";
 import { LogIn } from "lucide-react";
 
@@ -19,23 +20,26 @@ export function App() {
 
   if (authStatus !== "authenticated") {
     return (
-      <main className="auth-screen">
-        <div className="auth-card">
-          <h1>Empire League</h1>
-          <p>Sign in with Steam to use matchmaking and keep your rating tied to your account.</p>
-          {authError && <div className="auth-error">{authError}</div>}
-          <button
-            className="primary large"
-            type="button"
-            disabled={authStatus === "loading" || authStatus === "authenticating"}
-            onClick={() => void signInWithSteam()}
-          >
-            <LogIn size={20} />
-            {authStatus === "loading" ? "Checking session…" : authStatus === "authenticating" ? "Waiting for Steam…" : "Sign in through Steam"}
-          </button>
-          {authStatus === "authenticating" && <span>Complete sign-in in your browser.</span>}
-        </div>
-      </main>
+      <>
+        <main className="auth-screen">
+          <div className="auth-card">
+            <h1>Empire League</h1>
+            <p>Sign in with Steam to use matchmaking and keep your rating tied to your account.</p>
+            {authError && <div className="auth-error">{authError}</div>}
+            <button
+              className="primary large"
+              type="button"
+              disabled={authStatus === "loading" || authStatus === "authenticating"}
+              onClick={() => void signInWithSteam()}
+            >
+              <LogIn size={20} />
+              {authStatus === "loading" ? "Checking session…" : authStatus === "authenticating" ? "Waiting for Steam…" : "Sign in through Steam"}
+            </button>
+            {authStatus === "authenticating" && <span>Complete sign-in in your browser.</span>}
+          </div>
+        </main>
+        <StartupGamePrompt />
+      </>
     );
   }
 
@@ -51,6 +55,7 @@ export function App() {
       </Shell>
       {state.queueStatus === "match_found" && state.activeMatch && <MatchFoundOverlay />}
       <Toasts />
+      <StartupGamePrompt />
     </>
   );
 }

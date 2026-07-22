@@ -31,10 +31,10 @@ export interface MockServiceConfig {
 
 export interface NotificationItem {
   id: string;
-  tone: "info" | "success" | "warning" | "danger";
+  tone: "info" | "success" | "warning" | "danger" | "loading";
   message: string;
   detail?: string;
-  durationMs: number;
+  durationMs: number | null;
 }
 
 export interface UserSettings {

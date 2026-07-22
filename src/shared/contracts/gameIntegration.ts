@@ -11,6 +11,13 @@ export interface GameInstallationStatus {
 export interface GameProcessStatus {
   running: boolean;
   pid?: number;
+  windowReady?: boolean;
+}
+
+export interface GameCloseResult {
+  closed: boolean;
+  running: boolean;
+  message?: string;
 }
 
 export interface GameLaunchResult {

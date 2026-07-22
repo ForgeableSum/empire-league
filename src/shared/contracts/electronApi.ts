@@ -2,6 +2,7 @@ import type {
   CreateLobbyRequest,
   CreateLobbyResult,
   GameFocusResult,
+  GameCloseResult,
   GameInputKey,
   GameInputResult,
   GameInputTestResult,
@@ -14,6 +15,7 @@ import type {
 export interface ElectronGameApi {
   detectAoe2Installation(): Promise<GameInstallationStatus>;
   detectAoe2Process(): Promise<GameProcessStatus>;
+  closeAoe2(force: boolean): Promise<GameCloseResult>;
   launchAoe2(): Promise<GameLaunchResult>;
   focusAoe2(): Promise<GameFocusResult>;
   showAoe2FullscreenAfterDelay(): Promise<GameFocusResult>;
@@ -33,4 +35,5 @@ export interface ElectronGameApi {
   loadAuthToken(): Promise<string | null>;
   storeAuthToken(token: string): Promise<void>;
   clearAuthToken(): Promise<void>;
+  quitApp(): Promise<void>;
 }

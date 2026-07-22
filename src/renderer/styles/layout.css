@@ -773,6 +773,50 @@
   color: var(--danger);
 }
 
+.startup-game-prompt-backdrop {
+  z-index: 30;
+  backdrop-filter: blur(5px);
+}
+
+.startup-game-prompt {
+  width: min(520px, calc(100vw - 40px));
+  border-color: var(--line);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58);
+}
+
+.startup-game-prompt__icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--warning);
+  background: rgba(224, 165, 65, 0.12);
+  border: 1px solid rgba(224, 165, 65, 0.32);
+}
+
+.startup-game-prompt__icon.danger {
+  color: var(--danger);
+  background: rgba(218, 84, 84, 0.12);
+  border-color: rgba(218, 84, 84, 0.32);
+}
+
+.startup-game-prompt button.danger {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: var(--danger);
+  color: #fff;
+  font-weight: 800;
+}
+
+.toast.loading .toast-icon {
+  color: var(--accent-2);
+}
+
 .toast-copy {
   min-width: 0;
   display: grid;

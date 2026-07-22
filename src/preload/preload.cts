@@ -4,6 +4,7 @@ import type { ElectronGameApi } from "../shared/contracts/electronApi.js";
 const electronApi: ElectronGameApi = {
   detectAoe2Installation: () => ipcRenderer.invoke("game:detect-installation"),
   detectAoe2Process: () => ipcRenderer.invoke("game:detect-process"),
+  closeAoe2: (force) => ipcRenderer.invoke("game:close", force),
   launchAoe2: () => ipcRenderer.invoke("game:launch"),
   focusAoe2: () => ipcRenderer.invoke("game:focus"),
   showAoe2FullscreenAfterDelay: () => ipcRenderer.invoke("game:show-fullscreen-after-delay"),
@@ -26,7 +27,8 @@ const electronApi: ElectronGameApi = {
   openSteamLogin: (url) => ipcRenderer.invoke("auth:open-steam-login", url),
   loadAuthToken: () => ipcRenderer.invoke("auth:load-token"),
   storeAuthToken: (token) => ipcRenderer.invoke("auth:store-token", token),
-  clearAuthToken: () => ipcRenderer.invoke("auth:clear-token")
+  clearAuthToken: () => ipcRenderer.invoke("auth:clear-token"),
+  quitApp: () => ipcRenderer.invoke("system:quit")
 };
 
 contextBridge.exposeInMainWorld("electronApi", electronApi);

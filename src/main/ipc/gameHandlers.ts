@@ -13,6 +13,38 @@ let tabTestProcess: ChildProcess | undefined;
 let offscreenWindowProcess: ChildProcess | undefined;
 let aoe2WindowIsOffscreen = false;
 
+async function detectAoe2Process(): Promise<{ running: boolean; pid?: number; windowReady?: boolean }> {
+  if (process.platform !== "win32") return { running: false, windowReady: false };
+  const script = String.raw`
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game) { Write-Output 'NOT_RUNNING'; exit 0 }
+$game.Refresh()
+Write-Output "$($game.Id)|$($game.MainWindowHandle -ne 0)|$($game.Responding)"
+`;
+  const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+  const { stdout } = await execFileAsync("powershell.exe", [
+    "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+  ], { windowsHide: true });
+  const output = stdout.trim();
+  if (!output || output.includes("NOT_RUNNING")) return { running: false, windowReady: false };
+  const [pidText, hasWindow, responding] = output.split("|");
+  const pid = Number.parseInt(pidText, 10);
+  return {
+    running: Number.isFinite(pid),
+    pid: Number.isFinite(pid) ? pid : undefined,
+    windowReady: hasWindow === "True" && responding === "True"
+  };
+}
+
+async function waitForAoe2Exit(timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await detectAoe2Process()).running) return true;
+    await delay(250);
+  }
+  return !(await detectAoe2Process()).running;
+}
+
 function releaseCursorForElectron(): void {
   if (process.platform !== "win32" || !aoe2WindowIsOffscreen) return;
   const script = String.raw`
@@ -889,9 +921,33 @@ export function registerGameHandlers(): void {
     return detectAoe2Installation();
   });
 
-  ipcMain.handle("game:detect-process", async () => {
-    await delay(250);
-    return { running: true, pid: 4242 };
+  ipcMain.handle("game:detect-process", async () => detectAoe2Process());
+
+  ipcMain.handle("game:close", async (_event, force: boolean) => {
+    const processStatus = await detectAoe2Process();
+    if (!processStatus.running || !processStatus.pid) return { closed: true, running: false };
+
+    restoreAoe2Window();
+    if (force) {
+      await execFileAsync("taskkill.exe", ["/PID", String(processStatus.pid), "/T", "/F"], { windowsHide: true });
+    } else {
+      const script = String.raw`
+$game = Get-Process -Id ${processStatus.pid} -ErrorAction SilentlyContinue
+if ($game) { Write-Output $game.CloseMainWindow() }
+`;
+      const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+      await execFileAsync("powershell.exe", [
+        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+      ], { windowsHide: true });
+    }
+
+    const closed = await waitForAoe2Exit(force ? 5000 : 8000);
+    if (closed) launchRequested = false;
+    return {
+      closed,
+      running: !closed,
+      message: closed ? undefined : force ? "AoE2 is still running after forced termination." : "AoE2 did not respond to the close request."
+    };
   });
 
   ipcMain.handle("game:launch", async (event) => {

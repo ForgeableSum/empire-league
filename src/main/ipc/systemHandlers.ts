@@ -5,6 +5,9 @@ import { closeTestOverlay, toggleTestOverlay } from "../window.js";
 
 export function registerSystemHandlers(): void {
   ipcMain.handle("system:ping", async () => ({ ok: true, at: new Date().toISOString() }));
+  ipcMain.handle("system:quit", async () => {
+    app.quit();
+  });
   ipcMain.handle("overlay:toggle", async () => ({ visible: toggleTestOverlay() }));
   ipcMain.handle("overlay:close", async () => {
     closeTestOverlay();
