@@ -426,8 +426,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             void window.electronApi.openAoe2Lobby(event.lobby.platformLobbyId).then(async (result) => {
               log(result.opened ? "Opened the host lobby in AoE2" : "The host lobby URI was rejected");
               if (result.opened) {
-                log("Guest lobby opened; sending 19 Tabs and Enter to ready");
-                await sendAoe2TabsAndEnter(19);
+                log("Guest lobby opened; sending 10 Tabs and Enter to ready");
+                await sendAoe2TabsAndEnter(10);
                 await services.matchmaking.reportGuestLobbyReady(event.matchId);
                 log("Guest readied and notified the host");
                 notify("Joined and readied in the host lobby", "success");

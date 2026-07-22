@@ -1322,7 +1322,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     await shell.openExternal(lobbyId);
     // Steam hands the URI to AoE2 asynchronously. Give the game time to
     // navigate to the lobby before revealing its window for the LAN test.
-    await delay(2000);
+    await delay(10000);
     restoreAoe2Window(true, true);
     return { opened: true };
   });
