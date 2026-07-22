@@ -935,7 +935,7 @@ export function registerGameHandlers(): void {
   });
 
   ipcMain.handle("game:focus", async () => {
-    restoreAoe2Window(true);
+    restoreAoe2Window(true, true);
     await delay(180);
     return { focused: true };
   });
@@ -1240,6 +1240,10 @@ export function registerGameHandlers(): void {
       return { opened: false };
     }
     await shell.openExternal(lobbyId);
+    // Steam hands the URI to AoE2 asynchronously. Give the game time to
+    // navigate to the lobby before revealing its window for the LAN test.
+    await delay(2000);
+    restoreAoe2Window(true, true);
     return { opened: true };
   });
 }

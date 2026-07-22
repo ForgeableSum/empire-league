@@ -298,8 +298,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           notify("The host created the AoE2 lobby", "success");
           if (event.lobby.platformLobbyId?.startsWith("aoe2de://0/") && window.electronApi) {
             void window.electronApi.openAoe2Lobby(event.lobby.platformLobbyId).then((result) => {
-              log(result.opened ? "Opening the host lobby in AoE2" : "The host lobby URI was rejected");
-              if (!result.opened) notify("The host lobby could not be opened", "danger");
+              log(result.opened ? "Opened the host lobby in AoE2" : "The host lobby URI was rejected");
+              if (result.opened) {
+                notify("Joined the host lobby", "success");
+              } else {
+                notify("The host lobby could not be opened", "danger");
+              }
+            }).catch((error: unknown) => {
+              log(`Opening the host lobby failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+              notify("The host lobby could not be opened", "danger");
             });
           }
         }
@@ -389,9 +396,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         log(`Lobby created: ${discoveredLobby.platformLobbyId}`);
         await services.matchmaking.publishLobby(match.id, discoveredLobby);
         log("Lobby details published to opponent");
-        // Lifecycle timing test intentionally disabled until real game-start and
-        // game-end detection can trigger the fullscreen and victory transitions.
-        // await window.electronApi.showAoe2FullscreenAfterDelay();
+        // Temporary LAN-debug behavior. Once game-start detection exists, this
+        // focus should move from lobby publication to the actual start event.
+        await window.electronApi.focusAoe2();
+        log("Showing the host lobby for LAN debugging");
         setState((previous) => ({
           ...previous,
           activeMatch: previous.activeMatch ? { ...previous.activeMatch, lobby: discoveredLobby } : null,
