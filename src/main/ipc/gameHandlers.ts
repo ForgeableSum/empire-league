@@ -464,8 +464,8 @@ Send-Enter 'Open Host Game'
 Start-Sleep -Milliseconds 1350
 Send-Tab 11 'Lobby Settings'
 Send-Enter 'Create Lobby'
-Write-Output 'SEQUENCE|Lobby URI|Waiting=7000ms'
-Start-Sleep -Seconds 7
+Write-Output 'SEQUENCE|Lobby URI|Waiting=14000ms'
+Start-Sleep -Seconds 14
 Set-Clipboard -Value ''
 Send-Tab 51 'Created Lobby'
 Send-Enter 'Copy Game ID'
