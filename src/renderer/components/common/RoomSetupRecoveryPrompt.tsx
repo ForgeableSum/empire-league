@@ -16,7 +16,7 @@ export function RoomSetupRecoveryPrompt() {
         <p>Empire League couldn’t finish setting up the game room within 45 seconds.</p>
         <div className="modal-actions">
           <button autoFocus className="primary" type="button" onClick={() => void exitAfterRoomSetupFailure(true)}>
-            <RotateCcw size={18} /> Restart Empire League
+            <RotateCcw size={18} /> Restart
           </button>
           <button className="secondary" type="button" onClick={() => void exitAfterRoomSetupFailure(false)}>
             <Power size={18} /> Quit

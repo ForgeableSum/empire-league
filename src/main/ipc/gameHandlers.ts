@@ -467,7 +467,7 @@ Send-Enter 'Create Lobby'
 Write-Output 'SEQUENCE|Lobby URI|Waiting=7000ms'
 Start-Sleep -Seconds 7
 Set-Clipboard -Value ''
-Send-Tab 50 'Created Lobby'
+Send-Tab 51 'Created Lobby'
 Send-Enter 'Copy Game ID'
 Start-Sleep -Milliseconds 600
 $clipboard = Get-Clipboard -Raw
