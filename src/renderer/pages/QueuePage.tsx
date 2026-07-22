@@ -117,14 +117,14 @@ export function QueuePage() {
                 <button
                   className="secondary"
                   type="button"
-                  disabled={(selectedMaps[queue.id]?.length ?? 0) === 0}
+                  disabled={state.gameStatus === "loading" || (selectedMaps[queue.id]?.length ?? 0) === 0}
                   onClick={() => void startQueue({
                     ...queue,
                     mapPool: queue.mapPool.filter((map) => selectedMaps[queue.id]?.includes(map.id)),
                     favoriteMapId: favoriteMaps[queue.id]
                   })}
                 >
-                  <Search size={18} /> Search
+                  <Search size={18} /> {state.gameStatus === "loading" ? "Loading AoE2…" : "Search"}
                 </button>
               </div>
             </article>

@@ -23,7 +23,9 @@ export function ResultScreen() {
         <div><span>Updated rank</span><strong>#{Math.max(1, state.currentUser.rank - 12).toLocaleString()}</strong></div>
       </div>
       <div className="button-row">
-        <button className="primary" type="button" onClick={() => void startQueue(match.queue)}>Rematch</button>
+        <button className="primary" type="button" disabled={state.gameStatus === "loading"} onClick={() => void startQueue(match.queue)}>
+          {state.gameStatus === "loading" ? "Loading AoE2…" : "Rematch"}
+        </button>
         <button className="secondary" type="button" onClick={() => setPage("home")}>Return Home</button>
       </div>
     </section>

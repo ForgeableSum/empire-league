@@ -1,6 +1,6 @@
 import type { LobbySession, LobbyVerification, MapDefinition } from "./matchmaking.js";
 
-export type GameStatus = "not_detected" | "installed" | "running" | "in_lobby" | "in_match";
+export type GameStatus = "not_detected" | "installed" | "loading" | "running" | "in_lobby" | "in_match";
 
 export interface GameInstallationStatus {
   installed: boolean;

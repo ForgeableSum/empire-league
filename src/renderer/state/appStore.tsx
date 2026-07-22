@@ -217,6 +217,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        setState((previous) => ({ ...previous, gameStatus: "loading" }));
         loadingNotificationId = notify("Loading AoE2 DE…", "loading", {
           detail: "Waiting for the game window to become ready.",
           durationMs: null
@@ -254,6 +255,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         if (!cancelled) {
           if (loadingNotificationId) dismissNotificationById(loadingNotificationId);
+          setState((previous) => ({ ...previous, gameStatus: "installed" }));
           notify(error instanceof Error ? error.message : "AoE2 DE could not be launched.", "danger");
         }
       }
@@ -325,6 +327,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function startQueue(queue: QueueDefinition): Promise<void> {
+    if (state.gameStatus === "loading") return;
     try {
       const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: state.currentUser, canHost: true });
       ticketRef.current = ticket.id;
