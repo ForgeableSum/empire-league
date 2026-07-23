@@ -1,9 +1,22 @@
-import { app, BrowserWindow, screen } from "electron";
+import { app, BrowserWindow, clipboard, globalShortcut, screen } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
-let overlayWindow: BrowserWindow | null = null;
+let pointerTimer: NodeJS.Timeout | undefined;
+let mouseTestHudVisible = false;
+let coveredMainWindow: BrowserWindow | null = null;
+let coveredMainWindowState: {
+  bounds: Electron.Rectangle;
+  alwaysOnTop: boolean;
+  focusable: boolean;
+  opacity: number;
+} | null = null;
+let latestPointer: {
+  screenX: number; screenY: number; clientX: number; clientY: number;
+  designX: number; designY: number; clientWidth: number; clientHeight: number; inside: boolean;
+} | undefined;
+const copyCoordinatesAccelerator = "CommandOrControl+Shift+C";
 
 function appIconPath(): string {
   return app.isPackaged
@@ -54,47 +67,113 @@ export function createMainWindow(): BrowserWindow {
   return mainWindow;
 }
 
-export function toggleTestOverlay(): boolean {
-  if (overlayWindow && !overlayWindow.isDestroyed()) {
-    if (overlayWindow.isVisible()) {
-      overlayWindow.hide();
-      return false;
-    }
-    overlayWindow.setBounds(screen.getPrimaryDisplay().bounds);
-    overlayWindow.showInactive();
-    return true;
+export function showMainWindowAsGameCover(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  if (coveredMainWindow !== window || !coveredMainWindowState) {
+    coveredMainWindow = window;
+    coveredMainWindowState = {
+      bounds: window.getBounds(),
+      alwaysOnTop: window.isAlwaysOnTop(),
+      focusable: window.isFocusable(),
+      opacity: window.getOpacity()
+    };
   }
-
   const area = screen.getPrimaryDisplay().bounds;
-  overlayWindow = new BrowserWindow({
-    width: area.width,
-    height: area.height,
-    x: area.x,
-    y: area.y,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    fullscreenable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    show: false,
-    hasShadow: false,
-    icon: appIconPath(),
-    webPreferences: {
-      preload: join(currentDir, "../preload/preload.cjs"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
+  window.setIgnoreMouseEvents(true);
+  window.setOpacity(0.72);
+  window.setBounds(area);
+  window.setAlwaysOnTop(true, "screen-saver");
+  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  window.showInactive();
+  window.webContents.send("overlay:mouse-test-active", true);
+}
+
+export function restoreMainWindowFromGameCover(): void {
+  const window = coveredMainWindow;
+  const state = coveredMainWindowState;
+  coveredMainWindow = null;
+  coveredMainWindowState = null;
+  if (!window || window.isDestroyed() || !state) return;
+  window.setIgnoreMouseEvents(false);
+  window.setOpacity(state.opacity);
+  window.setAlwaysOnTop(state.alwaysOnTop);
+  window.setVisibleOnAllWorkspaces(false);
+  window.setBounds(state.bounds);
+  window.setFocusable(state.focusable);
+  window.show();
+  window.focus();
+  window.webContents.send("overlay:mouse-test-active", false);
+}
+
+export function setMainWindowGameCoverOverAoe(active: boolean): void {
+  const window = coveredMainWindow;
+  if (!window || window.isDestroyed()) return;
+  if (active) {
+    window.setAlwaysOnTop(true, "screen-saver");
+    window.showInactive();
+  } else {
+    window.setAlwaysOnTop(false);
+  }
+}
+
+export function showMouseTestOverlay(): void {
+  if (!coveredMainWindow || coveredMainWindow.isDestroyed()) return;
+  mouseTestHudVisible = true;
+  coveredMainWindow.webContents.send("overlay:mouse-test-active", true);
+  globalShortcut.unregister(copyCoordinatesAccelerator);
+  globalShortcut.register(copyCoordinatesAccelerator, () => {
+    if (!latestPointer || !coveredMainWindow || coveredMainWindow.isDestroyed() || !mouseTestHudVisible) return;
+    const mouseData = [
+      `Screen: ${latestPointer.screenX}, ${latestPointer.screenY}`,
+      `Client: ${latestPointer.clientX}, ${latestPointer.clientY}`,
+      `Design 3840x2160: ${latestPointer.designX}, ${latestPointer.designY}`,
+      `Client size: ${latestPointer.clientWidth} x ${latestPointer.clientHeight}`,
+      `Inside AoE2: ${latestPointer.inside ? "Yes" : "No"}`
+    ].join("\n");
+    clipboard.writeText(mouseData);
+    coveredMainWindow.webContents.send(
+      "overlay:coordinates-copied",
+      `${latestPointer.designX}, ${latestPointer.designY}`
+    );
   });
-  overlayWindow.setAlwaysOnTop(true, "screen-saver");
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  overlayWindow.on("closed", () => { overlayWindow = null; });
-  overlayWindow.once("ready-to-show", () => overlayWindow?.showInactive());
-  loadRenderer(overlayWindow, "?overlay=test");
-  return true;
+  startPointerUpdates();
+}
+
+export function hideMouseTestOverlay(): void {
+  mouseTestHudVisible = false;
+  coveredMainWindow?.webContents.send("overlay:mouse-test-active", false);
+  globalShortcut.unregister(copyCoordinatesAccelerator);
+}
+
+function startPointerUpdates(): void {
+  if (pointerTimer) clearInterval(pointerTimer);
+  pointerTimer = setInterval(() => {
+    if (!coveredMainWindow || coveredMainWindow.isDestroyed() || !mouseTestHudVisible) return;
+    const area = screen.getPrimaryDisplay().bounds;
+    const point = screen.getCursorScreenPoint();
+    const clientX = point.x - area.x;
+    const clientY = point.y - area.y;
+    const pointer = {
+      screenX: point.x,
+      screenY: point.y,
+      clientX,
+      clientY,
+      designX: Math.round(clientX * 3840 / area.width),
+      designY: Math.round(clientY * 2160 / area.height),
+      clientWidth: area.width,
+      clientHeight: area.height,
+      inside: clientX >= 0 && clientY >= 0 && clientX < area.width && clientY < area.height
+    };
+    latestPointer = pointer;
+    coveredMainWindow.webContents.send("overlay:mouse-pointer", pointer);
+  }, 50);
 }
 
 export function closeTestOverlay(): void {
-  overlayWindow?.hide();
+  mouseTestHudVisible = false;
+  coveredMainWindow?.webContents.send("overlay:mouse-test-active", false);
+  globalShortcut.unregister(copyCoordinatesAccelerator);
+  latestPointer = undefined;
+  if (pointerTimer) clearInterval(pointerTimer);
+  pointerTimer = undefined;
 }

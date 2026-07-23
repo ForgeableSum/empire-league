@@ -4,7 +4,15 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
-import { showAoe2DuringLobbySetup } from "../../shared/runtimeConfig.js";
+import { mouseTestModeEnabled, showAoe2DuringLobbySetup } from "../../shared/runtimeConfig.js";
+import {
+  closeTestOverlay,
+  hideMouseTestOverlay,
+  restoreMainWindowFromGameCover,
+  setMainWindowGameCoverOverAoe,
+  showMainWindowAsGameCover,
+  showMouseTestOverlay
+} from "../window.js";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const execFileAsync = promisify(execFile);
@@ -70,6 +78,75 @@ Write-Output "CURSOR|Released=$released"
 function moveAoe2WindowOffscreen(): void {
   if (process.platform !== "win32") return;
   offscreenWindowProcess?.kill();
+  if (mouseTestModeEnabled) {
+    const script = String.raw`
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+public static class AoeMouseTestVisible {
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+  public static bool IsForegroundProcess(uint targetProcessId) {
+    uint foregroundProcessId;
+    GetWindowThreadProcessId(GetForegroundWindow(), out foregroundProcessId);
+    return foregroundProcessId == targetProcessId;
+  }
+}
+'@
+Add-Type -TypeDefinition $interop
+$lastWindow = [IntPtr]::Zero
+$lastForeground = $false
+$sawGame = $false
+while ($true) {
+  $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($game -and $game.MainWindowHandle -ne 0) {
+    $sawGame = $true
+    if ($game.MainWindowHandle -ne $lastWindow) {
+      [AoeMouseTestVisible]::SetForegroundWindow($game.MainWindowHandle) | Out-Null
+      Write-Output "MOUSE_TEST|Visible=True|DefaultWindowState=True|Window=$($game.MainWindowHandle)"
+      $lastWindow = $game.MainWindowHandle
+    }
+    $foreground = [AoeMouseTestVisible]::IsForegroundProcess([uint32]$game.Id)
+    if ($foreground -ne $lastForeground) {
+      Write-Output "MOUSE_TEST|Foreground=$foreground"
+      $lastForeground = $foreground
+    }
+  } elseif ($sawGame) {
+    Write-Output 'MOUSE_TEST|GameExited=True'
+    exit 0
+  }
+  Start-Sleep -Milliseconds 250
+}
+`;
+    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+    offscreenWindowProcess = spawn("powershell.exe", [
+      "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+    ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    offscreenWindowProcess.stdout?.on("data", (chunk: Buffer) => {
+      chunk.toString().split(/\r?\n/).filter(Boolean).forEach((message) => {
+        console.info(`[AoE2 automation] ${message}`);
+        if (message.includes("MOUSE_TEST|Foreground=True")) {
+          setMainWindowGameCoverOverAoe(true);
+          showMouseTestOverlay();
+        }
+        if (message.includes("MOUSE_TEST|Foreground=False")) {
+          hideMouseTestOverlay();
+          setMainWindowGameCoverOverAoe(false);
+        }
+        if (message.includes("MOUSE_TEST|GameExited=True")) {
+          closeTestOverlay();
+          restoreMainWindowFromGameCover();
+        }
+      });
+    });
+    offscreenWindowProcess.stderr?.on("data", (chunk: Buffer) => {
+      console.error(`[AoE2 automation] ${chunk.toString().trim()}`);
+    });
+    offscreenWindowProcess.once("exit", () => { offscreenWindowProcess = undefined; });
+    return;
+  }
   const script = String.raw`
 $interop = @'
 using System;
@@ -116,7 +193,6 @@ function restoreAoe2Window(focus = false, maximize = false): void {
   if (process.platform !== "win32") return;
   offscreenWindowProcess?.kill();
   offscreenWindowProcess = undefined;
-  if (!aoe2WindowIsOffscreen) return;
   aoe2WindowIsOffscreen = false;
   const script = String.raw`
 $interop = @'
@@ -541,10 +617,144 @@ $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Obje
 if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
 $window = [AoeMouseClick]::Find([uint32]$game.Id)
 if ($window -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 3 }
-$result = [AoeMouseClick]::ClickDesignPoint($window, 1905, 1855)
+$result = [AoeMouseClick]::ClickDesignPoint($window, __DESIGN_X__, __DESIGN_Y__)
 Write-Output $result
 if ($result.StartsWith('SENT')) { exit 0 }
 exit 4
+`;
+
+const multiplayerForegroundMouseClickScript = String.raw`
+$ProgressPreference = 'SilentlyContinue'
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+using System.Threading;
+public static class AoeForegroundMouseClick {
+  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+  [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+  [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hWnd, out Rect rect);
+  [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hWnd, ref Point point);
+  [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
+  [DllImport("user32.dll")] private static extern bool GetClipCursor(out Rect rect);
+  [DllImport("user32.dll", EntryPoint = "ClipCursor")] private static extern bool ClipCursorRect(ref Rect rect);
+  [DllImport("user32.dll", EntryPoint = "ClipCursor")] private static extern bool ReleaseCursorClip(IntPtr rect);
+  [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] private static extern bool BlockInput(bool block);
+  [DllImport("user32.dll")] private static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+  [DllImport("user32.dll")] private static extern void keybd_event(byte virtualKey, byte scanCode, uint flags, UIntPtr extraInfo);
+
+  public static IntPtr Find(uint targetProcessId) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((window, _) => {
+      uint processId;
+      GetWindowThreadProcessId(window, out processId);
+      if (processId == targetProcessId && IsWindowVisible(window)) {
+        found = window;
+        return false;
+      }
+      return true;
+    }, IntPtr.Zero);
+    return found;
+  }
+
+  public static string ClickDesignPoint(IntPtr window, int designX, int designY) {
+    Rect rect;
+    if (!GetClientRect(window, out rect)) return "CLIENT_RECT_FAILED";
+    int width = rect.Right - rect.Left;
+    int height = rect.Bottom - rect.Top;
+    if (width <= 0 || height <= 0) return "INVALID_CLIENT_SIZE";
+    Point point = new Point {
+      X = (int)Math.Round(designX * width / 3840.0),
+      Y = (int)Math.Round(designY * height / 2160.0)
+    };
+    if (!ClientToScreen(window, ref point)) return "SCREEN_POINT_FAILED";
+    bool focused = SetForegroundWindow(window);
+    Point original;
+    if (!GetCursorPos(out original)) return "CURSOR_POSITION_FAILED";
+    Rect originalClip;
+    bool hadOriginalClip = GetClipCursor(out originalClip);
+    Rect targetClip = new Rect {
+      Left = point.X,
+      Top = point.Y,
+      Right = point.X + 1,
+      Bottom = point.Y + 1
+    };
+    bool clipped = ClipCursorRect(ref targetClip);
+    bool blocked = BlockInput(true);
+    bool moved = false;
+    bool restored = false;
+    try {
+      moved = SetCursorPos(point.X, point.Y);
+      Thread.Sleep(25);
+      mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
+      Thread.Sleep(15);
+      mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
+    } finally {
+      if (blocked) BlockInput(false);
+      if (hadOriginalClip) {
+        ClipCursorRect(ref originalClip);
+      } else {
+        ReleaseCursorClip(IntPtr.Zero);
+      }
+      restored = SetCursorPos(original.X, original.Y);
+    }
+    return String.Format("SENT|Mode=ForegroundPhysicalRestore|Focused={0}|CursorClipped={1}|InputBlocked={2}|Moved={3}|Restored={4}|BorrowedMs=40|Client={5}x{6}|ScreenPoint={7},{8}|OriginalPoint={9},{10}",
+      focused, clipped, blocked, moved, restored, width, height, point.X, point.Y, original.X, original.Y);
+  }
+
+  public static string SendEnter(IntPtr window) {
+    bool focused = SetForegroundWindow(window);
+    bool blocked = BlockInput(true);
+    try {
+      Thread.Sleep(25);
+      keybd_event(0x0D, 0x1C, 0, UIntPtr.Zero);
+      Thread.Sleep(15);
+      keybd_event(0x0D, 0x1C, 0x0002, UIntPtr.Zero);
+    } finally {
+      if (blocked) BlockInput(false);
+    }
+    return String.Format("SENT|Mode=ForegroundPhysicalKey|Key=ENTER|Focused={0}|InputBlocked={1}", focused, blocked);
+  }
+}
+'@
+Add-Type -TypeDefinition $interop
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
+$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
+if ($window -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 3 }
+$multiplayer = [AoeForegroundMouseClick]::ClickDesignPoint($window, 734, 1085)
+Write-Output "STEP|Multiplayer|DesignPoint=734,1085|$multiplayer"
+if (-not $multiplayer.StartsWith('SENT')) { exit 4 }
+Start-Sleep -Milliseconds 1000
+$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
+$hostGame = [AoeForegroundMouseClick]::ClickDesignPoint($window, 2774, 1202)
+Write-Output "STEP|Host Game|DesignPoint=2774,1202|$hostGame"
+if (-not $hostGame.StartsWith('SENT')) { exit 5 }
+Start-Sleep -Milliseconds 2000
+$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
+$createLobby = [AoeForegroundMouseClick]::ClickDesignPoint($window, 1688, 1614)
+Write-Output "STEP|Create Lobby|DesignPoint=1688,1614|$createLobby"
+if (-not $createLobby.StartsWith('SENT')) { exit 6 }
+Start-Sleep -Milliseconds 8000
+$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
+$civilization = [AoeForegroundMouseClick]::ClickDesignPoint($window, 1739, 558)
+Write-Output "STEP|Open Civilization Select|DesignPoint=1739,558|$civilization"
+if (-not $civilization.StartsWith('SENT')) { exit 7 }
+Start-Sleep -Milliseconds 1000
+$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
+$goths = [AoeForegroundMouseClick]::ClickDesignPoint($window, 2273, 996)
+Write-Output "STEP|Select Goths|DesignPoint=2273,996|$goths"
+if (-not $goths.StartsWith('SENT')) { exit 8 }
+Start-Sleep -Milliseconds 250
+$confirm = [AoeForegroundMouseClick]::SendEnter($window)
+Write-Output "STEP|Confirm Goths|Key=ENTER|$confirm"
+if (-not $confirm.StartsWith('SENT')) { exit 9 }
+exit 0
 `;
 
 const hostGameMouseCalibrationScript = String.raw`
@@ -1004,8 +1214,9 @@ if ($game) { Write-Output $game.CloseMainWindow() }
         windowsHide: false
       });
       gameProcess.unref();
-      moveAoe2WindowOffscreen();
       const appWindow = BrowserWindow.fromWebContents(event.sender);
+      if (mouseTestModeEnabled && appWindow) showMainWindowAsGameCover(appWindow);
+      moveAoe2WindowOffscreen();
       appWindow?.on("focus", releaseCursorForElectron);
       appWindow?.once("closed", restoreAoe2Window);
       return { launched: true, status: "running", message: "Launching AoE2 DE." };
@@ -1019,6 +1230,20 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     restoreAoe2Window(true, true);
     await delay(3000);
     return { focused: true };
+  });
+
+  ipcMain.handle("game:start-mouse-test-mode", async () => {
+    if (process.platform !== "win32") return { focused: false };
+    moveAoe2WindowOffscreen();
+    await delay(1000);
+    return { focused: true };
+  });
+
+  ipcMain.handle("game:stop-mouse-test-mode", async () => {
+    offscreenWindowProcess?.kill();
+    offscreenWindowProcess = undefined;
+    closeTestOverlay();
+    restoreMainWindowFromGameCover();
   });
 
   ipcMain.handle("game:show-fullscreen-after-delay", async (event) => {
@@ -1124,6 +1349,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
       : null;
     let appOverlayVisible = false;
     const showAppOverlay = () => {
+      if (mouseTestModeEnabled) return;
       if (!appWindow || appWindow.isDestroyed() || appOverlayVisible) return;
       const display = screen.getDisplayMatching(appWindow.getBounds());
       appWindow.setFocusable(false);
@@ -1212,7 +1438,10 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     if (process.platform !== "win32") {
       return { sent: false, message: "Background mouse testing is only supported on Windows." };
     }
-    const encodedScript = Buffer.from(hostGameMouseClickScript, "utf16le").toString("base64");
+    const script = hostGameMouseClickScript
+      .replace("__DESIGN_X__", "1905")
+      .replace("__DESIGN_Y__", "1855");
+    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
     try {
       const { stdout } = await execFileAsync("powershell.exe", [
         "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
@@ -1229,6 +1458,30 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     } catch (error) {
       console.error("[AoE2 automation] Host Game mouse test failed", error);
       return { sent: false, message: "The Host Game mouse test failed." };
+    }
+  });
+
+  ipcMain.handle("game:test-multiplayer-mouse-click", async (event) => {
+    if (process.platform !== "win32") {
+      return { sent: false, message: "Background mouse testing is only supported on Windows." };
+    }
+    const encodedScript = Buffer.from(multiplayerForegroundMouseClickScript, "utf16le").toString("base64");
+    try {
+      const { stdout } = await execFileAsync("powershell.exe", [
+        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+      ], { windowsHide: true });
+      const result = stdout.trim();
+      const sent = result.includes("STEP|Confirm Goths") && !result.includes("FAILED");
+      const logMessage = `MOUSE_SEQUENCE|Targets=Multiplayer,Host Game,Create Lobby,Civilization,Goths,Enter|${result.replace(/\r?\n/g, "|")}`;
+      console.info(`[AoE2 automation] ${logMessage}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", logMessage);
+      return {
+        sent,
+        message: sent ? "Mouse sequence selected and confirmed Goths." : "The mouse sequence did not complete."
+      };
+    } catch (error) {
+      console.error("[AoE2 automation] Multiplayer mouse test failed", error);
+      return { sent: false, message: "The Multiplayer mouse test failed." };
     }
   });
 

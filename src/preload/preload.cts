@@ -13,8 +13,26 @@ const electronApi: ElectronGameApi = {
   sendAoe2Key: (key) => ipcRenderer.invoke("game:send-background-key", key),
   runAoe2CreateLobbySequence: () => ipcRenderer.invoke("game:run-create-lobby-sequence"),
   testAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:test-host-game-mouse-click"),
+  testAoe2MultiplayerMouseClick: () => ipcRenderer.invoke("game:test-multiplayer-mouse-click"),
   calibrateAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:calibrate-host-game-mouse-click"),
   testAoe2FakeActivationMouseClick: () => ipcRenderer.invoke("game:test-fake-activation-mouse-click"),
+  startAoe2MouseTestMode: () => ipcRenderer.invoke("game:start-mouse-test-mode"),
+  stopAoe2MouseTestMode: () => ipcRenderer.invoke("game:stop-mouse-test-mode"),
+  onMouseTestPointer: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, pointer: Parameters<typeof listener>[0]) => listener(pointer);
+    ipcRenderer.on("overlay:mouse-pointer", handler);
+    return () => ipcRenderer.removeListener("overlay:mouse-pointer", handler);
+  },
+  onMouseTestCoordinatesCopied: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, coordinates: string) => listener(coordinates);
+    ipcRenderer.on("overlay:coordinates-copied", handler);
+    return () => ipcRenderer.removeListener("overlay:coordinates-copied", handler);
+  },
+  onMouseTestModeChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, active: boolean) => listener(active);
+    ipcRenderer.on("overlay:mouse-test-active", handler);
+    return () => ipcRenderer.removeListener("overlay:mouse-test-active", handler);
+  },
   onAoe2AutomationLog: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, message: string) => listener(message);
     ipcRenderer.on("game:automation-log", handler);
@@ -22,8 +40,6 @@ const electronApi: ElectronGameApi = {
   },
   createRanked1v1Lobby: (request) => ipcRenderer.invoke("game:create-ranked-1v1-lobby", request),
   openAoe2Lobby: (lobbyId) => ipcRenderer.invoke("game:open-lobby", lobbyId),
-  toggleTestOverlay: () => ipcRenderer.invoke("overlay:toggle"),
-  closeTestOverlay: () => ipcRenderer.invoke("overlay:close"),
   openSteamLogin: (url) => ipcRenderer.invoke("auth:open-steam-login", url),
   loadAuthToken: () => ipcRenderer.invoke("auth:load-token"),
   storeAuthToken: (token) => ipcRenderer.invoke("auth:store-token", token),

@@ -11,11 +11,12 @@ import { StartupGamePrompt } from "./components/common/StartupGamePrompt";
 import { RoomSetupRecoveryPrompt } from "./components/common/RoomSetupRecoveryPrompt";
 import { useAppStore } from "./state/appStore";
 import { Loader2, LogIn } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
 
 export function App() {
-  if (new URLSearchParams(window.location.search).get("overlay") === "test") {
-    return <TestOverlay />;
-  }
+  const [mouseTestActive, setMouseTestActive] = useState(false);
+  useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
 
   const { page, state, authStatus, authError, signInWithSteam } = useAppStore();
 
@@ -74,17 +75,70 @@ export function App() {
       <Toasts />
       <StartupGamePrompt />
       <RoomSetupRecoveryPrompt />
+      {mouseTestActive && <TestOverlay />}
     </>
   );
 }
 
 function TestOverlay() {
+  const [pointer, setPointer] = useState<MouseTestPointerInfo | null>(null);
+  const [copiedCoordinates, setCopiedCoordinates] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.documentElement.classList.add("mouse-test-hud-active");
+    document.body.classList.add("mouse-test-hud-active");
+    const removePointerListener = window.electronApi?.onMouseTestPointer(setPointer);
+    const removeCopiedListener = window.electronApi?.onMouseTestCoordinatesCopied((coordinates) => {
+      setCopiedCoordinates(coordinates);
+      window.setTimeout(() => setCopiedCoordinates(null), 1600);
+    });
+    return () => {
+      removePointerListener?.();
+      removeCopiedListener?.();
+      document.documentElement.classList.remove("mouse-test-hud-active");
+      document.body.classList.remove("mouse-test-hud-active");
+    };
+  }, []);
+
+  return (
+    <>
+      <section className="mouse-test-hud">
+        <div className="test-overlay__status"><span /> AOE2 MOUSE TEST MODE</div>
+        <strong>Live pointer coordinates</strong>
+        {pointer ? (
+          <dl>
+            <div><dt>Screen</dt><dd>{pointer.screenX}, {pointer.screenY}</dd></div>
+            <div><dt>Client</dt><dd>{pointer.clientX}, {pointer.clientY}</dd></div>
+            <div><dt>Design 3840×2160</dt><dd>{pointer.designX}, {pointer.designY}</dd></div>
+            <div><dt>Client size</dt><dd>{pointer.clientWidth} × {pointer.clientHeight}</dd></div>
+            <div><dt>Inside AoE2</dt><dd>{pointer.inside ? "Yes" : "No"}</dd></div>
+          </dl>
+        ) : <p>Waiting for pointer data…</p>}
+        <div className="mouse-test-hotkey">
+          <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>
+          <span>{copiedCoordinates ? `Copied all data at ${copiedCoordinates}` : "Copy all mouse data"}</span>
+        </div>
+        <small>Overlay is click-through. Alt+Tab to Empire League to stop the mode.</small>
+      </section>
+      {pointer?.inside && (
+        <div
+          className="mouse-test-crosshair"
+          style={{ transform: `translate(${pointer.clientX}px, ${pointer.clientY}px)` }}
+        >
+          <span>{pointer.designX}, {pointer.designY}</span>
+        </div>
+      )}
+    </>
+  );
+}
+
+function LegacyTestOverlay() {
   return (
     <main className="test-overlay">
       <div className="test-overlay__status"><span /> EMPIRE LEAGUE OVERLAY</div>
       <strong>Searching for an opponent</strong>
       <p>Queue time 00:42 · Ranked 1v1</p>
-      <button type="button" onClick={() => void window.electronApi?.closeTestOverlay()}>Hide overlay</button>
+      <button type="button">Legacy overlay</button>
     </main>
   );
 }

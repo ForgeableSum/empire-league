@@ -43,6 +43,18 @@ export interface GameInputResult {
   lobbyUri?: string;
 }
 
+export interface MouseTestPointerInfo {
+  screenX: number;
+  screenY: number;
+  clientX: number;
+  clientY: number;
+  designX: number;
+  designY: number;
+  clientWidth: number;
+  clientHeight: number;
+  inside: boolean;
+}
+
 export interface CreateLobbyRequest {
   matchId: string;
   hostProfileId: number;

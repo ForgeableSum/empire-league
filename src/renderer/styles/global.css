@@ -135,17 +135,87 @@ label {
   box-sizing: border-box;
   width: 100vw;
   height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px;
+  position: relative;
+  padding: 24px;
   color: #f8f2e7;
-  text-align: center;
-  background: linear-gradient(145deg, rgba(25, 22, 18, 0.96), rgba(48, 36, 22, 0.94));
+  background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
+}
+
+html.mouse-test-hud-active,
+body.mouse-test-hud-active {
+  overflow: hidden !important;
+}
+
+.mouse-test-hud {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  width: 310px;
+  padding: 18px 20px;
+  text-align: left;
+  background: rgba(15, 14, 13, 0.88);
+  border: 1px solid rgba(217, 173, 98, 0.8);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+
+.mouse-test-hud dl { margin: 14px 0; }
+.mouse-test-hud dl div { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; }
+.mouse-test-hud dt { color: #c8bfae; }
+.mouse-test-hud dd { margin: 0; color: #fff; font-family: Consolas, monospace; }
+.mouse-test-hud small { color: #9d9588; }
+.mouse-test-hotkey {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 12px;
+  color: #d9ad62;
+  font-size: 12px;
+}
+.mouse-test-hotkey span { margin-left: 5px; color: #f8f2e7; }
+.mouse-test-hotkey kbd {
+  min-width: 20px;
+  padding: 2px 5px;
+  color: #fff;
+  text-align: center;
+  background: #302a24;
+  border: 1px solid #6c5d4c;
+  border-radius: 4px;
+  box-shadow: 0 1px 0 #000;
+}
+
+.mouse-test-crosshair {
+  position: fixed;
+  top: -18px;
+  left: -18px;
+  width: 36px;
+  height: 36px;
+  border: 2px solid #ff315c;
+  border-radius: 50%;
+  filter: drop-shadow(0 0 3px #000);
+}
+
+.mouse-test-crosshair::before,
+.mouse-test-crosshair::after {
+  content: "";
+  position: absolute;
+  background: #ff315c;
+}
+
+.mouse-test-crosshair::before { left: -10px; top: 16px; width: 52px; height: 2px; }
+.mouse-test-crosshair::after { left: 16px; top: -10px; width: 2px; height: 52px; }
+.mouse-test-crosshair span {
+  position: absolute;
+  top: 42px;
+  left: 18px;
+  padding: 2px 5px;
+  color: #fff;
+  background: rgba(15, 14, 13, 0.9);
+  font: 11px Consolas, monospace;
+  white-space: nowrap;
 }
 
 .test-overlay__status {

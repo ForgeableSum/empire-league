@@ -12,6 +12,7 @@ export function SettingsPage() {
   const [tabTestRunning, setTabTestRunning] = useState(false);
   const [lobbySequenceRunning, setLobbySequenceRunning] = useState(false);
   const [mouseCalibrationRunning, setMouseCalibrationRunning] = useState(false);
+  const [mouseTestRunning, setMouseTestRunning] = useState(false);
 
   useEffect(() => {
     return window.electronApi?.onAoe2AutomationLog((message) => {
@@ -130,6 +131,27 @@ export function SettingsPage() {
     setDetectionFeedback({ tone: result.sent ? "success" : "error", message: result.message });
   }
 
+  async function toggleMouseTestMode(): Promise<void> {
+    if (!window.electronApi) {
+      setDetectionFeedback({ tone: "error", message: "Mouse test mode is only available in the Electron app." });
+      return;
+    }
+    if (mouseTestRunning) {
+      await window.electronApi.stopAoe2MouseTestMode();
+      setMouseTestRunning(false);
+      setDetectionFeedback({ tone: "success", message: "Mouse test mode stopped." });
+      return;
+    }
+    const result = await window.electronApi.startAoe2MouseTestMode();
+    setMouseTestRunning(result.focused);
+    setDetectionFeedback({
+      tone: result.focused ? "success" : "error",
+      message: result.focused
+        ? "AoE2 mouse test mode started. Alt+Tab back here to stop it."
+        : "AoE2 could not be maximized for mouse test mode."
+    });
+  }
+
   return (
     <section className="settings-grid">
       <SettingsGroup title="Game">
@@ -177,7 +199,9 @@ export function SettingsPage() {
         <Toggle label="Allow rematch offers" checked={settings.rematchOffers} onChange={(rematchOffers) => updateSettings({ rematchOffers })} />
       </SettingsGroup>
       <SettingsGroup title="Interface">
-        <button type="button" className="secondary" onClick={() => void window.electronApi?.toggleTestOverlay()}>Show / Hide Test Overlay</button>
+        <button type="button" className="secondary" onClick={() => void toggleMouseTestMode()}>
+          {mouseTestRunning ? "Stop AoE2 Mouse Test Mode" : "Start AoE2 Mouse Test Mode"}
+        </button>
         <label>Sound volume<input type="range" min="0" max="100" value={settings.soundVolume} onChange={(event) => updateSettings({ soundVolume: Number(event.target.value) })} /></label>
         <Toggle label="Reduced motion" checked={settings.reducedMotion} onChange={(reducedMotion) => updateSettings({ reducedMotion })} />
         <Toggle label="Compact layout" checked={settings.compactLayout} onChange={(compactLayout) => updateSettings({ compactLayout })} />

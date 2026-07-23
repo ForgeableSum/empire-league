@@ -1,6 +1,10 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchResult } from "../../shared/contracts/matches";
-import { aoe2RevealDelayAfterStartMs, showAoe2DuringLobbySetup } from "../../shared/runtimeConfig";
+import {
+  aoe2RevealDelayAfterStartMs,
+  mouseTestModeEnabled,
+  showAoe2DuringLobbySetup
+} from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
@@ -259,6 +263,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               detail: undefined,
               durationMs: 5000
             });
+          }
+          if (mouseTestModeEnabled) {
+            void (async () => {
+              await delayForStartup(5000);
+              if (cancelled || !window.electronApi) return;
+              const click = await window.electronApi.testAoe2MultiplayerMouseClick();
+              log(`Mouse test menu sequence: ${click.sent ? "selected and confirmed Goths" : "failed"}`);
+            })();
           }
         }
       } catch (error) {

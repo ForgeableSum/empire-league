@@ -1,7 +1,6 @@
 import { app, ipcMain, safeStorage, shell } from "electron";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { closeTestOverlay, toggleTestOverlay } from "../window.js";
 
 export function registerSystemHandlers(): void {
   ipcMain.handle("system:ping", async () => ({ ok: true, at: new Date().toISOString() }));
@@ -11,11 +10,6 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:restart", async () => {
     app.relaunch();
     app.quit();
-  });
-  ipcMain.handle("overlay:toggle", async () => ({ visible: toggleTestOverlay() }));
-  ipcMain.handle("overlay:close", async () => {
-    closeTestOverlay();
-    return { visible: false as const };
   });
   ipcMain.handle("auth:open-steam-login", async (_event, value: string) => {
     const url = new URL(value);
