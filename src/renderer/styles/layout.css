@@ -205,7 +205,7 @@
 .main-area {
   position: relative;
   min-width: 0;
-  padding: 160px 22px 22px;
+  padding: 200px 22px 22px;
   overflow: auto;
   scrollbar-color: #4a4239 #141312;
 }
@@ -227,7 +227,7 @@
 }
 
 .main-area.page-home {
-  --page-art: url("../assets/battles/profile.jpg");
+  --page-art: url("../assets/battles/settings.jpg");
 }
 
 .main-area.page-play {
@@ -247,7 +247,7 @@
 }
 
 .main-area.page-settings {
-  --page-art: url("../assets/battles/settings.jpg");
+  --page-art: url("../assets/battles/profile.jpg");
 }
 
 .content-shell {
