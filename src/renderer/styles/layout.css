@@ -777,7 +777,7 @@
   min-height: 520px;
   padding: 12px;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 10px;
   border: 1px solid #8c642e;
   background:
@@ -814,7 +814,15 @@
   color: var(--muted);
 }
 
+.shorts-stage {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
 .shorts-player {
+  position: relative;
   min-height: 0;
   display: grid;
   place-items: center;
@@ -831,15 +839,76 @@
   background: #090909;
 }
 
-.shorts-player:fullscreen {
+.shorts-stage:fullscreen {
   width: 100vw;
   height: 100vh;
+  padding: 18px 22px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 14px;
   background: #090909;
 }
 
-.shorts-player:fullscreen iframe {
+.shorts-stage:fullscreen .shorts-player {
+  min-height: 0;
+}
+
+.shorts-stage:fullscreen iframe {
   width: 100%;
   height: 100%;
+  min-height: 0;
+}
+
+.shorts-stage:fullscreen .shorts-controls {
+  width: min(1100px, 100%);
+  min-height: 48px;
+  margin-inline: auto;
+  padding-inline: 10px;
+  grid-template-columns: 40px auto minmax(120px, 1fr) auto 40px 40px;
+}
+
+.shorts-stage:fullscreen .shorts-controls button {
+  width: 40px;
+  height: 38px;
+}
+
+.shorts-fullscreen-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 52px;
+  height: 74px;
+  display: none;
+  place-items: center;
+  border: 1px solid rgba(226, 181, 109, 0.72);
+  border-radius: 0;
+  color: var(--accent-2);
+  background: rgba(20, 19, 18, 0.82);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  transform: translateY(-50%);
+}
+
+.shorts-fullscreen-arrow.previous {
+  left: 20px;
+}
+
+.shorts-fullscreen-arrow.next {
+  right: 20px;
+}
+
+.shorts-stage:fullscreen .shorts-fullscreen-arrow {
+  display: grid;
+}
+
+.shorts-fullscreen-arrow:hover:not(:disabled) {
+  border-color: #f0cb7d;
+  color: #f0cb7d;
+  background: rgba(48, 43, 37, 0.94);
+}
+
+.shorts-fullscreen-arrow:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .shorts-loading {

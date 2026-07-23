@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Expand, Pause, Play, Volume2, VolumeX, Youtube } from "lucide-react";
+import { ChevronLeft, ChevronRight, Expand, Minimize, Pause, Play, Volume2, VolumeX, Youtube } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAoe2Shorts, type YouTubeShort } from "../../services/youtubeShortsService";
 
@@ -61,6 +61,7 @@ export function YouTubeShorts() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playerReady, setPlayerReady] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const playerFrame = useRef<HTMLIFrameElement>(null);
   const playerContainer = useRef<HTMLDivElement>(null);
   const player = useRef<YouTubePlayer | null>(null);
@@ -70,6 +71,25 @@ export function YouTubeShorts() {
     const controller = new AbortController();
     void getAoe2Shorts(controller.signal).then(setShorts);
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      player.current?.pauseVideo();
+      const fullscreenElement = document.fullscreenElement;
+      const stage = playerContainer.current;
+      if (fullscreenElement && stage && (fullscreenElement === stage || stage.contains(fullscreenElement))) {
+        void document.exitFullscreen();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const updateFullscreenState = () => {
+      setIsFullscreen(document.fullscreenElement === playerContainer.current);
+    };
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", updateFullscreenState);
   }, []);
 
   const current = shorts[currentIndex];
@@ -156,8 +176,22 @@ export function YouTubeShorts() {
     setCurrentTime(value);
   };
 
-  const enterFullscreen = () => {
-    void playerContainer.current?.requestFullscreen();
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void playerContainer.current?.requestFullscreen();
+    }
+  };
+
+  const playPrevious = () => {
+    autoplayNext.current = true;
+    showPrevious();
+  };
+
+  const playNext = () => {
+    autoplayNext.current = true;
+    showNext();
   };
 
   return (
@@ -166,55 +200,63 @@ export function YouTubeShorts() {
         <span><Youtube size={18} aria-hidden="true" /> AoE2 Shorts</span>
         {shorts.length > 0 && <small>{currentIndex + 1} / {shorts.length}</small>}
       </div>
-      <div className="shorts-player" ref={playerContainer}>
-        {current ? (
-          <iframe
-            ref={playerFrame}
-            key={current.id}
-            id={`aoe2-short-${current.id}`}
-            src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(current.id)}?playsinline=1&rel=0&enablejsapi=1&controls=0&disablekb=1&fs=0&iv_load_policy=3`}
-            title={current.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            referrerPolicy="strict-origin-when-cross-origin"
-            allowFullScreen
+      <div className="shorts-stage" ref={playerContainer}>
+        <div className="shorts-player">
+          {current ? (
+            <iframe
+              ref={playerFrame}
+              key={current.id}
+              id={`aoe2-short-${current.id}`}
+              src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(current.id)}?playsinline=1&rel=0&enablejsapi=1&controls=0&disablekb=1&fs=0&iv_load_policy=3`}
+              title={current.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+          ) : (
+            <div className="shorts-loading">Finding AoE2 shorts…</div>
+          )}
+          <button className="shorts-fullscreen-arrow previous" type="button" onClick={playPrevious} disabled={shorts.length < 2} aria-label="Previous short">
+            <ChevronLeft size={34} />
+          </button>
+          <button className="shorts-fullscreen-arrow next" type="button" onClick={playNext} disabled={shorts.length < 2} aria-label="Next short">
+            <ChevronRight size={34} />
+          </button>
+        </div>
+        <div className="shorts-controls" aria-label="Video controls">
+          <button type="button" onClick={togglePlayback} disabled={!playerReady} aria-label={isPlaying ? "Pause short" : "Play short"}>
+            {isPlaying ? <Pause size={18} /> : <Play size={18} />}
+          </button>
+          <span className="shorts-time">{formatTime(currentTime)}</span>
+          <input
+            type="range"
+            min="0"
+            max={Math.max(duration, 1)}
+            step="0.1"
+            value={Math.min(currentTime, Math.max(duration, 1))}
+            disabled={!playerReady}
+            onChange={(event) => seek(Number(event.target.value))}
+            aria-label="Video progress"
+            style={{ "--short-progress": `${duration > 0 ? (currentTime / duration) * 100 : 0}%` } as React.CSSProperties}
           />
-        ) : (
-          <div className="shorts-loading">Finding AoE2 shorts…</div>
-        )}
-      </div>
-      <div className="shorts-controls" aria-label="Video controls">
-        <button type="button" onClick={togglePlayback} disabled={!playerReady} aria-label={isPlaying ? "Pause short" : "Play short"}>
-          {isPlaying ? <Pause size={18} /> : <Play size={18} />}
-        </button>
-        <span className="shorts-time">{formatTime(currentTime)}</span>
-        <input
-          type="range"
-          min="0"
-          max={Math.max(duration, 1)}
-          step="0.1"
-          value={Math.min(currentTime, Math.max(duration, 1))}
-          disabled={!playerReady}
-          onChange={(event) => seek(Number(event.target.value))}
-          aria-label="Video progress"
-          style={{ "--short-progress": `${duration > 0 ? (currentTime / duration) * 100 : 0}%` } as React.CSSProperties}
-        />
-        <span className="shorts-time">{formatTime(duration)}</span>
-        <button type="button" onClick={toggleMute} disabled={!playerReady} aria-label={isMuted ? "Unmute short" : "Mute short"}>
-          {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-        </button>
-        <button type="button" onClick={enterFullscreen} aria-label="View short fullscreen">
-          <Expand size={18} />
-        </button>
+          <span className="shorts-time">{formatTime(duration)}</span>
+          <button type="button" onClick={toggleMute} disabled={!playerReady} aria-label={isMuted ? "Unmute short" : "Mute short"}>
+            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </button>
+          <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit fullscreen" : "View short fullscreen"}>
+            {isFullscreen ? <Minimize size={18} /> : <Expand size={18} />}
+          </button>
+        </div>
       </div>
       <div className="shorts-footer">
-        <button type="button" onClick={showPrevious} disabled={shorts.length < 2} aria-label="Previous short">
+        <button type="button" onClick={playPrevious} disabled={shorts.length < 2} aria-label="Previous short">
           <ChevronLeft size={22} />
         </button>
         <div>
           <strong>{current?.title ?? "Loading"}</strong>
           <span>{current?.channelTitle ?? "YouTube"}</span>
         </div>
-        <button type="button" onClick={showNext} disabled={shorts.length < 2} aria-label="Next short">
+        <button type="button" onClick={playNext} disabled={shorts.length < 2} aria-label="Next short">
           <ChevronRight size={22} />
         </button>
       </div>
