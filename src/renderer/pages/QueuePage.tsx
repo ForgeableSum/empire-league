@@ -11,6 +11,8 @@ const favoriteMapsKey = "empire-league-favorite-maps";
 export function QueuePage() {
   const { state, queues, startQueue, cancelQueue, clearError } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
+  const [selectedQueueId, setSelectedQueueId] = useState(() => queues[0]?.id ?? "");
+  const selectedQueue = queues.find((queue) => queue.id === selectedQueueId) ?? queues[0];
   const canStartQueue = ["idle", "cancelled", "completed"].includes(state.queueStatus)
     && (!state.activeMatch || state.queueStatus === "completed")
     && state.gameStatus !== "loading";
@@ -93,46 +95,60 @@ export function QueuePage() {
             <XCircle size={18} /> Cancel Search
           </button>
         </div>
-      ) : (
-        <div className="queue-grid">
-          {queues.map((queue) => (
-            <article className="queue-card" key={queue.id}>
+      ) : selectedQueue ? (
+        <>
+          <div className="queue-mode-picker">
+            <label>
+              Match type
+              <select value={selectedQueue.id} onChange={(event) => setSelectedQueueId(event.target.value)}>
+                {queues.map((queue) => (
+                  <option value={queue.id} key={queue.id}>
+                    {queue.id === "team-games" ? "Team vs Team" : "1v1"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="queue-grid">
+            <article className="queue-card" key={selectedQueue.id}>
               <div className="queue-heading">
                 <ShieldCheck size={22} />
                 <div>
-                  <h2>{queue.name}</h2>
-                  <span>{queue.ranked ? "Ranked" : "Prototype"}</span>
+                  <h2>{selectedQueue.name}</h2>
+                  <span>{selectedQueue.ranked ? "Ranked" : "Prototype"}</span>
                 </div>
               </div>
-              <p>{queue.description}</p>
+              <p>{selectedQueue.description}</p>
               <div className="queue-search-controls">
                 <div className="queue-stats">
-                  <span><Search size={16} /> {queue.playersSearching} searching</span>
-                  <span><Clock size={16} /> {queue.estimatedWaitSeconds}s wait</span>
+                  <span><Search size={16} /> {selectedQueue.playersSearching} searching</span>
+                  <span><Clock size={16} /> {selectedQueue.estimatedWaitSeconds}s wait</span>
                 </div>
                 <MapPool
-                  maps={queue.mapPool}
-                  selectedMapIds={selectedMaps[queue.id] ?? []}
-                  onToggle={(mapId) => toggleMap(queue.id, mapId)}
-                  favoriteMapId={favoriteMaps[queue.id]}
-                  onFavorite={(mapId) => toggleFavorite(queue.id, mapId)}
+                  maps={selectedQueue.mapPool}
+                  selectedMapIds={selectedMaps[selectedQueue.id] ?? []}
+                  onToggle={(mapId) => toggleMap(selectedQueue.id, mapId)}
+                  favoriteMapId={favoriteMaps[selectedQueue.id]}
+                  onFavorite={(mapId) => toggleFavorite(selectedQueue.id, mapId)}
                 />
                 <button
                   className="secondary"
                   type="button"
-                  disabled={!canStartQueue || (selectedMaps[queue.id]?.length ?? 0) === 0}
+                  disabled={!canStartQueue || (selectedMaps[selectedQueue.id]?.length ?? 0) === 0}
                   onClick={() => void startQueue({
-                    ...queue,
-                    mapPool: queue.mapPool.filter((map) => selectedMaps[queue.id]?.includes(map.id)),
-                    favoriteMapId: favoriteMaps[queue.id]
+                    ...selectedQueue,
+                    mapPool: selectedQueue.mapPool.filter((map) => selectedMaps[selectedQueue.id]?.includes(map.id)),
+                    favoriteMapId: favoriteMaps[selectedQueue.id]
                   })}
                 >
                   <Search size={18} /> {state.gameStatus === "loading" ? "Loading AoE2…" : "Search"}
                 </button>
               </div>
             </article>
-          ))}
-        </div>
+          </div>
+        </>
+      ) : (
+        <div className="empty-state">No matchmaking modes are available.</div>
       )}
     </section>
   );
