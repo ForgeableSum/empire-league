@@ -50,7 +50,7 @@ export function createMainWindow(): BrowserWindow {
     titleBarStyle: "hidden",
     titleBarOverlay: {
       color: "#141312",
-      symbolColor: "#e8dfca",
+      symbolColor: "#d8cebf",
       height: 40
     },
     backgroundColor: "#141312",
