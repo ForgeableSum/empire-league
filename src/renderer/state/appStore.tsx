@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import type { MatchResult } from "../../shared/contracts/matches";
 import {
   aoe2RevealDelayAfterStartMs,
-  mouseTestModeEnabled,
   showAoe2DuringLobbySetup
 } from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
@@ -264,14 +263,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               durationMs: 5000
             });
           }
-          if (mouseTestModeEnabled) {
-            void (async () => {
-              await delayForStartup(5000);
-              if (cancelled || !window.electronApi) return;
-              const click = await window.electronApi.testAoe2MultiplayerMouseClick();
-              log(`Mouse test menu sequence: ${click.sent ? "selected and confirmed Goths" : "failed"}`);
-            })();
-          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -439,9 +430,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             void window.electronApi.openAoe2Lobby(event.lobby.platformLobbyId).then(async (result) => {
               log(result.opened ? "Opened the host lobby in AoE2" : "The host lobby URI was rejected");
               if (result.opened) {
-                log("Guest lobby opened; sending 10 Tabs and Enter to ready");
-                await sendAoe2TabsAndEnter(10);
-                log("Guest ready input sent; waiting for the lobby state to settle");
+                log("Guest lobby opened; clicking Ready");
+                const ready = await window.electronApi!.runAoe2LobbyCursorAction("ready");
+                if (!ready.sent) throw new Error(ready.message);
+                log("Guest Ready click sent; waiting for the lobby state to settle");
                 await delayForLobbyInput(5000);
                 await services.matchmaking.reportGuestLobbyReady(event.matchId);
                 log("Guest readied and notified the host");
@@ -460,12 +452,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             try {
               log("Guest reported ready; waiting for the host lobby state to settle");
               await delayForLobbyInput(5000);
-              log("Guest is ready; sending 20 Tabs and Enter to ready the host");
-              await sendAoe2TabsAndEnter(20);
-              log("Host ready input sent; waiting for the Start button state to settle");
+              log("Guest is ready; clicking Ready for the host");
+              const ready = await window.electronApi!.runAoe2LobbyCursorAction("ready");
+              if (!ready.sent) throw new Error(ready.message);
+              log("Host Ready click sent; waiting for the Start button state to settle");
               await delayForLobbyInput(1000);
-              log("Host readied; sending Tab and Enter to start the game");
-              await sendAoe2TabsAndEnter(1);
+              log("Host readied; clicking Start Game");
+              const start = await window.electronApi!.runAoe2LobbyCursorAction("start");
+              if (!start.sent) throw new Error(start.message);
               clearRoomSetupWatchdog();
               setState((previous) => ({
                 ...previous,
@@ -763,19 +757,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
-}
-
-async function sendAoe2TabsAndEnter(tabCount: number): Promise<void> {
-  if (!window.electronApi) throw new Error("AoE2 automation is unavailable.");
-  for (let index = 0; index < tabCount; index += 1) {
-    const tab = await window.electronApi.sendAoe2Key("TAB");
-    if (!tab.sent) throw new Error(tab.message);
-    await delayForLobbyInput(200);
-  }
-
-  const enter = await window.electronApi.sendAoe2Key("ENTER");
-  if (!enter.sent) throw new Error(enter.message);
-  await delayForLobbyInput(250);
 }
 
 async function waitForAoe2Window(timeoutMs: number): Promise<boolean> {

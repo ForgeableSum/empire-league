@@ -24,8 +24,8 @@ export interface ElectronGameApi {
   stopAoe2TabTest(): Promise<void>;
   sendAoe2Key(key: GameInputKey): Promise<GameInputResult>;
   runAoe2CreateLobbySequence(): Promise<GameInputResult>;
+  runAoe2LobbyCursorAction(target: "ready" | "start"): Promise<GameInputResult>;
   testAoe2HostGameMouseClick(): Promise<GameInputResult>;
-  testAoe2MultiplayerMouseClick(): Promise<GameInputResult>;
   calibrateAoe2HostGameMouseClick(): Promise<GameInputResult>;
   testAoe2FakeActivationMouseClick(): Promise<GameInputResult>;
   startAoe2MouseTestMode(): Promise<GameFocusResult>;

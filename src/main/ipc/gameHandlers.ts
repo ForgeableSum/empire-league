@@ -623,7 +623,7 @@ if ($result.StartsWith('SENT')) { exit 0 }
 exit 4
 `;
 
-const multiplayerForegroundMouseClickScript = String.raw`
+const foregroundPhysicalInputScriptTemplate = String.raw`
 $ProgressPreference = 'SilentlyContinue'
 $interop = @'
 using System;
@@ -723,39 +723,66 @@ public static class AoeForegroundMouseClick {
 }
 '@
 Add-Type -TypeDefinition $interop
+__ACTION_SCRIPT__
+`;
+
+const createLobbyCursorSequenceScript = foregroundPhysicalInputScriptTemplate.replace("__ACTION_SCRIPT__", String.raw`
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
+
+function Click-Step([string]$name, [int]$x, [int]$y, [int]$exitCode) {
+  $window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
+  if ($window -eq [IntPtr]::Zero) { Write-Output "STEP|$name|WINDOW_NOT_FOUND"; exit 3 }
+  $result = [AoeForegroundMouseClick]::ClickDesignPoint($window, $x, $y)
+  Write-Output "STEP|$name|DesignPoint=$x,$y|$result"
+  if (-not $result.StartsWith('SENT')) { exit $exitCode }
+}
+
+Click-Step 'Multiplayer' 734 1085 4
+Start-Sleep -Milliseconds 1000
+Click-Step 'Host Game' 2774 1202 5
+Start-Sleep -Milliseconds 2000
+Click-Step 'Create Lobby' 1688 1614 6
+Start-Sleep -Milliseconds 8000
+Click-Step 'Reset Settings' 3101 1976 7
+Start-Sleep -Milliseconds 250
+$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
+$confirmReset = [AoeForegroundMouseClick]::SendEnter($window)
+Write-Output "STEP|Confirm Reset|Key=ENTER|$confirmReset"
+Start-Sleep -Milliseconds 1000
+Set-Clipboard -Value 'EL_CURSOR_COPY_PENDING'
+Click-Step 'Copy Game ID' 3245 372 8
+Start-Sleep -Milliseconds 800
+$clipboard = Get-Clipboard -Raw
+$lobbyUri = [regex]::Match([string]$clipboard, 'aoe2de://0/[0-9]+').Value
+if (-not $lobbyUri) {
+  Start-Sleep -Milliseconds 1000
+  Click-Step 'Copy Game ID Retry' 3245 372 9
+  Start-Sleep -Milliseconds 800
+  $clipboard = Get-Clipboard -Raw
+  $lobbyUri = [regex]::Match([string]$clipboard, 'aoe2de://0/[0-9]+').Value
+}
+if (-not $lobbyUri) { Write-Output 'ERROR|Lobby URI was not copied'; exit 10 }
+Write-Output "LOBBY_URI|$lobbyUri"
+Write-Output 'SEQUENCE|Complete=True|Mode=Cursor'
+exit 0
+`);
+
+function createLobbyCursorActionScript(target: "ready" | "start"): string {
+  const action = target === "ready"
+    ? { label: "Ready", x: 1388, y: 1979 }
+    : { label: "Start Game", x: 1974, y: 1979 };
+  return foregroundPhysicalInputScriptTemplate.replace("__ACTION_SCRIPT__", String.raw`
 $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
 $window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
 if ($window -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 3 }
-$multiplayer = [AoeForegroundMouseClick]::ClickDesignPoint($window, 734, 1085)
-Write-Output "STEP|Multiplayer|DesignPoint=734,1085|$multiplayer"
-if (-not $multiplayer.StartsWith('SENT')) { exit 4 }
-Start-Sleep -Milliseconds 1000
-$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
-$hostGame = [AoeForegroundMouseClick]::ClickDesignPoint($window, 2774, 1202)
-Write-Output "STEP|Host Game|DesignPoint=2774,1202|$hostGame"
-if (-not $hostGame.StartsWith('SENT')) { exit 5 }
-Start-Sleep -Milliseconds 2000
-$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
-$createLobby = [AoeForegroundMouseClick]::ClickDesignPoint($window, 1688, 1614)
-Write-Output "STEP|Create Lobby|DesignPoint=1688,1614|$createLobby"
-if (-not $createLobby.StartsWith('SENT')) { exit 6 }
-Start-Sleep -Milliseconds 8000
-$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
-$civilization = [AoeForegroundMouseClick]::ClickDesignPoint($window, 1739, 558)
-Write-Output "STEP|Open Civilization Select|DesignPoint=1739,558|$civilization"
-if (-not $civilization.StartsWith('SENT')) { exit 7 }
-Start-Sleep -Milliseconds 1000
-$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
-$goths = [AoeForegroundMouseClick]::ClickDesignPoint($window, 2273, 996)
-Write-Output "STEP|Select Goths|DesignPoint=2273,996|$goths"
-if (-not $goths.StartsWith('SENT')) { exit 8 }
-Start-Sleep -Milliseconds 250
-$confirm = [AoeForegroundMouseClick]::SendEnter($window)
-Write-Output "STEP|Confirm Goths|Key=ENTER|$confirm"
-if (-not $confirm.StartsWith('SENT')) { exit 9 }
-exit 0
-`;
+$result = [AoeForegroundMouseClick]::ClickDesignPoint($window, ${action.x}, ${action.y})
+Write-Output "STEP|${action.label}|DesignPoint=${action.x},${action.y}|$result"
+if ($result.StartsWith('SENT')) { exit 0 }
+exit 4
+`);
+}
 
 const hostGameMouseCalibrationScript = String.raw`
 $ProgressPreference = 'SilentlyContinue'
@@ -1339,73 +1366,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
-    const appWindow = BrowserWindow.fromWebContents(event.sender);
-    const originalWindowState = appWindow && !appWindow.isDestroyed()
-      ? {
-          bounds: appWindow.getBounds(),
-          alwaysOnTop: appWindow.isAlwaysOnTop(),
-          focusable: appWindow.isFocusable()
-        }
-      : null;
-    let appOverlayVisible = false;
-    const showAppOverlay = () => {
-      if (mouseTestModeEnabled) return;
-      if (!appWindow || appWindow.isDestroyed() || appOverlayVisible) return;
-      const display = screen.getDisplayMatching(appWindow.getBounds());
-      appWindow.setFocusable(false);
-      appWindow.setBounds(display.bounds);
-      appWindow.setAlwaysOnTop(true, "screen-saver");
-      appWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-      appWindow.showInactive();
-      appOverlayVisible = true;
-      emitLog("APP_OVERLAY|Visible=True|Focusable=False");
-    };
-    const restoreAppWindow = () => {
-      if (!appWindow || appWindow.isDestroyed() || !originalWindowState || !appOverlayVisible) return;
-      appWindow.setAlwaysOnTop(originalWindowState.alwaysOnTop);
-      appWindow.setVisibleOnAllWorkspaces(false);
-      appWindow.setBounds(originalWindowState.bounds);
-      appWindow.setFocusable(originalWindowState.focusable);
-      appOverlayVisible = false;
-      emitLog("APP_OVERLAY|Visible=False|Restored=True");
-    };
-
-    const encodedGuard = Buffer.from(inputGuardScript, "utf16le").toString("base64");
-    const guardProcess = spawn("powershell.exe", [
-      "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedGuard
-    ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-    const guardReady = await new Promise<boolean>((resolve) => {
-      let resolved = false;
-      const finish = (ready: boolean) => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timeout);
-        resolve(ready);
-      };
-      const timeout = setTimeout(() => finish(false), 5000);
-      guardProcess.stdout?.on("data", (chunk: Buffer) => {
-        const output = chunk.toString();
-        output.split(/\r?\n/).filter(Boolean).forEach((message) => emitLog(`INPUT_GUARD|${message}`));
-        if (output.includes("GUARD_READY")) finish(true);
-      });
-      guardProcess.stderr?.on("data", (chunk: Buffer) => {
-        chunk.toString().split(/\r?\n/).filter(Boolean).forEach((message) => emitLog(`INPUT_GUARD|${message}`));
-      });
-      guardProcess.once("exit", () => finish(false));
-    });
-
-    if (!guardReady) {
-      if (!guardProcess.killed) guardProcess.kill();
-      restoreAoe2Window();
-      return { sent: false, message: "The temporary AoE2 input guard could not be started." };
-    }
-
-    emitLog("INPUT_GUARD|Active=True|EmergencyUnlock=Ctrl+Shift+F12");
-    const guardWatchdog = setTimeout(() => {
-      if (!guardProcess.killed) guardProcess.kill();
-      emitLog("INPUT_GUARD|Active=False|Reason=Watchdog");
-    }, 45000);
-    const encodedScript = Buffer.from(createLobbySequenceScript, "utf16le").toString("base64");
+    const encodedScript = Buffer.from(createLobbyCursorSequenceScript, "utf16le").toString("base64");
     const sequenceProcess = spawn("powershell.exe", [
       "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
     ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
@@ -1414,24 +1375,38 @@ if ($game) { Write-Output $game.CloseMainWindow() }
       const output = chunk.toString();
       sequenceOutput += output;
       output.split(/\r?\n/).filter(Boolean).forEach(emitLog);
-      if (output.includes("SEQUENCE|Main Menu|ActivateBeforeMultiplayer=True")) {
-        showAppOverlay();
-      }
     });
     sequenceProcess.stderr?.on("data", (chunk: Buffer) => {
       chunk.toString().split(/\r?\n/).filter(Boolean).forEach(emitLog);
     });
 
     const exitCode = await new Promise<number | null>((resolve) => sequenceProcess.once("close", resolve));
-    clearTimeout(guardWatchdog);
-    if (!guardProcess.killed) guardProcess.kill();
-    emitLog("INPUT_GUARD|Active=False|Reason=SequenceComplete");
-    restoreAppWindow();
     const lobbyUri = sequenceOutput.match(/LOBBY_URI\|(aoe2de:\/\/0\/\d+)/)?.[1];
-    if (exitCode !== 0 || !lobbyUri) restoreAoe2Window();
-    return exitCode === 0
-      ? { sent: true, message: "Create Lobby sequence completed.", lobbyUri }
+    return exitCode === 0 && lobbyUri
+      ? { sent: true, message: "Cursor lobby creation completed.", lobbyUri }
       : { sent: false, message: "The Create Lobby sequence stopped before completion." };
+  });
+
+  ipcMain.handle("game:run-lobby-cursor-action", async (event, target: "ready" | "start") => {
+    if (process.platform !== "win32" || (target !== "ready" && target !== "start")) {
+      return { sent: false, message: "That lobby cursor action is not supported." };
+    }
+    const script = createLobbyCursorActionScript(target);
+    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+    try {
+      const { stdout } = await execFileAsync("powershell.exe", [
+        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+      ], { windowsHide: true });
+      const output = stdout.trim().replace(/\r?\n/g, "|");
+      const sent = output.includes("SENT");
+      const message = `CURSOR_ACTION|Target=${target}|${output}`;
+      console.info(`[AoE2 automation] ${message}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+      return { sent, message: sent ? `${target} clicked.` : `${target} could not be clicked.` };
+    } catch (error) {
+      console.error(`[AoE2 automation] Cursor action ${target} failed`, error);
+      return { sent: false, message: `${target} cursor action failed.` };
+    }
   });
 
   ipcMain.handle("game:test-host-game-mouse-click", async (event) => {
@@ -1458,30 +1433,6 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     } catch (error) {
       console.error("[AoE2 automation] Host Game mouse test failed", error);
       return { sent: false, message: "The Host Game mouse test failed." };
-    }
-  });
-
-  ipcMain.handle("game:test-multiplayer-mouse-click", async (event) => {
-    if (process.platform !== "win32") {
-      return { sent: false, message: "Background mouse testing is only supported on Windows." };
-    }
-    const encodedScript = Buffer.from(multiplayerForegroundMouseClickScript, "utf16le").toString("base64");
-    try {
-      const { stdout } = await execFileAsync("powershell.exe", [
-        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-      ], { windowsHide: true });
-      const result = stdout.trim();
-      const sent = result.includes("STEP|Confirm Goths") && !result.includes("FAILED");
-      const logMessage = `MOUSE_SEQUENCE|Targets=Multiplayer,Host Game,Create Lobby,Civilization,Goths,Enter|${result.replace(/\r?\n/g, "|")}`;
-      console.info(`[AoE2 automation] ${logMessage}`);
-      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", logMessage);
-      return {
-        sent,
-        message: sent ? "Mouse sequence selected and confirmed Goths." : "The mouse sequence did not complete."
-      };
-    } catch (error) {
-      console.error("[AoE2 automation] Multiplayer mouse test failed", error);
-      return { sent: false, message: "The Multiplayer mouse test failed." };
     }
   });
 
