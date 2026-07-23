@@ -38,11 +38,12 @@ function loadRenderer(window: BrowserWindow, route = ""): void {
 
 export function createMainWindow(): BrowserWindow {
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+  const area = screen.getPrimaryDisplay().bounds;
   const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1050,
-    minHeight: 680,
+    x: area.x,
+    y: area.y,
+    width: area.width,
+    height: area.height,
     title: "Empire League",
     icon: appIconPath(),
     autoHideMenuBar: true,
@@ -139,6 +140,10 @@ export function setMainWindowGameCoverOverAoe(active: boolean): void {
 export function setMainWindowGameCoverClickThrough(clickThrough: boolean): void {
   const window = coveredMainWindow;
   if (!window || window.isDestroyed()) return;
+  if (clickThrough) {
+    window.setAlwaysOnTop(true, "screen-saver");
+    if (mainCoverManuallyVisible) window.showInactive();
+  }
   window.setIgnoreMouseEvents(clickThrough);
 }
 
