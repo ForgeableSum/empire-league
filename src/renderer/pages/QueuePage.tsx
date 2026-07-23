@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { LobbyPreparation } from "../components/match/LobbyPreparation";
 import { ActiveMatch } from "../components/match/ActiveMatch";
 import { ResultScreen } from "../components/match/ResultScreen";
+import { YouTubeShorts } from "../components/match/YouTubeShorts";
 import { MapPool } from "../components/common/MapPool";
 import { useAppStore } from "../state/appStore";
 
@@ -81,19 +82,22 @@ export function QueuePage() {
         </div>
       )}
       {state.queueStatus === "searching" ? (
-        <div className="search-state">
-          <div className="search-orbit"><Search size={34} /></div>
-          <h2>Searching for an opponent</h2>
-          <div className="metrics-grid compact">
-            <div><span>Your rating</span><strong>{state.currentUser.rating}</strong></div>
-            <div><span>Current search range</span><strong>{state.searchRange.min}-{state.searchRange.max}</strong></div>
-            <div><span>Time searching</span><strong>{formatTime(elapsed)}</strong></div>
-            <div><span>Estimated wait</span><strong>{state.selectedQueue?.estimatedWaitSeconds}s</strong></div>
+        <div className="search-waiting-layout">
+          <div className="search-state">
+            <div className="search-orbit"><Search size={34} /></div>
+            <h2>Searching for an opponent</h2>
+            <div className="metrics-grid compact">
+              <div><span>Your rating</span><strong>{state.currentUser.rating}</strong></div>
+              <div><span>Current search range</span><strong>{state.searchRange.min}-{state.searchRange.max}</strong></div>
+              <div><span>Time searching</span><strong>{formatTime(elapsed)}</strong></div>
+              <div><span>Estimated wait</span><strong>{state.selectedQueue?.estimatedWaitSeconds}s</strong></div>
+            </div>
+            <p>Rating range expands automatically while preserving connection quality and map-pool compatibility.</p>
+            <button className="secondary" type="button" onClick={() => void cancelQueue()}>
+              <XCircle size={18} /> Cancel Search
+            </button>
           </div>
-          <p>Rating range expands automatically while preserving connection quality and map-pool compatibility.</p>
-          <button className="secondary" type="button" onClick={() => void cancelQueue()}>
-            <XCircle size={18} /> Cancel Search
-          </button>
+          <YouTubeShorts />
         </div>
       ) : selectedQueue ? (
         <>
