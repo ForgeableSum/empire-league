@@ -1,9 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchResult } from "../../shared/contracts/matches";
-import {
-  aoe2RevealDelayAfterStartMs,
-  showAoe2DuringLobbySetup
-} from "../../shared/runtimeConfig";
+import { aoe2RevealDelayAfterStartMs } from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
@@ -589,10 +586,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         log(`Lobby created: ${discoveredLobby.platformLobbyId}`);
         await services.matchmaking.publishLobby(match.id, discoveredLobby);
         log("Lobby details published to opponent");
-        if (showAoe2DuringLobbySetup) {
-          await window.electronApi.focusAoe2();
-          log("Showing the host lobby for LAN debugging");
-        }
         setState((previous) => ({
           ...previous,
           activeMatch: previous.activeMatch ? { ...previous.activeMatch, lobby: discoveredLobby } : null,
@@ -713,7 +706,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function revealAoe2AfterGameStart(): Promise<void> {
-    if (showAoe2DuringLobbySetup || !window.electronApi) return;
+    if (!window.electronApi) return;
     await delayForLobbyInput(aoe2RevealDelayAfterStartMs);
     await window.electronApi.focusAoe2();
     log("Showing AoE2 after game start");

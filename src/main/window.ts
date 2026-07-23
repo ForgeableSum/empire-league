@@ -142,6 +142,13 @@ export function setMainWindowGameCoverClickThrough(clickThrough: boolean): void 
   window.setIgnoreMouseEvents(clickThrough);
 }
 
+export function hideMainWindowGameCover(): void {
+  const window = coveredMainWindow;
+  if (!window || window.isDestroyed()) return;
+  mainCoverManuallyVisible = false;
+  window.hide();
+}
+
 export function showMouseTestOverlay(): void {
   if (!coveredMainWindow || coveredMainWindow.isDestroyed()) return;
   mouseTestHudVisible = true;

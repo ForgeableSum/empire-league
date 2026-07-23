@@ -4,9 +4,10 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
-import { cursorAutomationEnabled, showAoe2DuringLobbySetup } from "../../shared/runtimeConfig.js";
+import { cursorAutomationEnabled } from "../../shared/runtimeConfig.js";
 import {
   closeTestOverlay,
+  hideMainWindowGameCover,
   restoreMainWindowFromGameCover,
   setMouseCoordinateOverlayEnabled,
   setMainWindowGameCoverClickThrough,
@@ -1292,8 +1293,29 @@ if ($game) { Write-Output $game.CloseMainWindow() }
   });
 
   ipcMain.handle("game:focus", async () => {
+    if (cursorAutomationEnabled && process.platform === "win32") {
+      hideMainWindowGameCover();
+      const script = String.raw`
+$signature = '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);'
+$foreground = Add-Type -MemberDefinition $signature -Name Foreground -Namespace EmpireLeague -PassThru
+$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $game -or $game.MainWindowHandle -eq 0) { Write-Output 'WINDOW_NOT_FOUND'; exit 2 }
+$focused = $foreground::SetForegroundWindow($game.MainWindowHandle)
+Write-Output "FOCUS|SetForeground=$focused"
+if ($focused) { exit 0 }
+exit 3
+`;
+      const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+      try {
+        await execFileAsync("powershell.exe", [
+          "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+        ], { windowsHide: true });
+        return { focused: true };
+      } catch {
+        return { focused: false };
+      }
+    }
     restoreAoe2Window(true, true);
-    await delay(3000);
     return { focused: true };
   });
 
@@ -1567,12 +1589,8 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     }
     await shell.openExternal(lobbyId);
     // Steam hands the URI to AoE2 asynchronously. Give the game time to
-    // navigate to the lobby before revealing its window for the LAN test.
+    // navigate to and finish joining the lobby before Ready automation.
     await delay(10000);
-    if (showAoe2DuringLobbySetup) {
-      restoreAoe2Window(true, true);
-      await delay(3000);
-    }
     return { opened: true };
   });
 }
