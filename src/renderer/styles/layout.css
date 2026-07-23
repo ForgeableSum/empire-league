@@ -205,7 +205,7 @@
 .main-area {
   position: relative;
   min-width: 0;
-  padding: clamp(22px, calc(22px + (100vw - 1440px) * 0.035), 60px) 22px 22px;
+  padding: 160px 22px 22px;
   overflow: auto;
   scrollbar-color: #4a4239 #141312;
 }
@@ -219,8 +219,8 @@
   background-position: center 28%;
   background-size: cover;
   background-repeat: no-repeat;
-  opacity: 0.2;
-  filter: saturate(0.58) contrast(0.82) brightness(0.68);
+  opacity: 0.3;
+  filter: saturate(0.78) contrast(0.92) brightness(1.04);
   pointer-events: none;
   -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.9) 32%, rgba(0, 0, 0, 0.38) 72%, transparent 100%);
   mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.9) 32%, rgba(0, 0, 0, 0.38) 72%, transparent 100%);
@@ -334,7 +334,7 @@
   padding: 14px;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius);
-  background: var(--panel-2);
+  background: var(--panel);
 }
 
 .metric span,

@@ -59,25 +59,9 @@ export function Shell({ children }: { children: ReactNode }) {
       </aside>
       <main className={`main-area page-${page}`}>
         <div className="content-shell">
-          <header className="topbar">
-            <div>
-              <h1>{titleFor(page)}</h1>
-            </div>
-          </header>
           {children}
         </div>
       </main>
     </div>
   );
-}
-
-function titleFor(page: AppPage): string {
-  return {
-    home: "Home",
-    play: "Play",
-    "match-history": "Match History",
-    leaderboard: "Leaderboard",
-    profile: "Player Profile",
-    settings: "Settings"
-  }[page];
 }
