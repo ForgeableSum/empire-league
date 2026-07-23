@@ -1186,7 +1186,10 @@ export function registerGameHandlers(): void {
     if (launchRequested && status.running && status.pid && !ownedAoe2Pid) {
       ownedAoe2Pid = status.pid;
     }
-    return status;
+    return {
+      ...status,
+      owned: Boolean(status.pid && status.pid === ownedAoe2Pid)
+    };
   });
 
   ipcMain.handle("game:close", async (_event, force: boolean) => {

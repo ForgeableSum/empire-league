@@ -29,7 +29,7 @@ export class MockGameIntegrationService implements GameIntegrationService {
 
   async detectRunningGame(): Promise<GameProcessStatus> {
     await delay(500);
-    return { running: true, pid: 4242 };
+    return { running: true, pid: 4242, owned: true };
   }
 
   async launchGame(): Promise<GameLaunchResult> {

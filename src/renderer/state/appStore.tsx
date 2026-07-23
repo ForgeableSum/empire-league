@@ -39,7 +39,7 @@ interface AppContextValue {
   startupGamePrompt: "restart" | "force-close" | null;
   respondToStartupGamePrompt: (confirmed: boolean) => void;
   roomSetupFailed: boolean;
-  roomSetupFailureReason: "lobby_setup" | "game_not_running" | null;
+  roomSetupFailureReason: "lobby_setup" | "game_not_running" | "game_not_owned" | null;
   exitAfterRoomSetupFailure: (restart: boolean) => Promise<void>;
 }
 
@@ -375,8 +375,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       if (window.electronApi) {
         const gameProcess = await window.electronApi.detectAoe2Process();
-        if (!gameProcess.running) {
-          setRoomSetupFailureReason("game_not_running");
+        if (!gameProcess.running || !gameProcess.owned) {
+          setRoomSetupFailureReason(gameProcess.running ? "game_not_owned" : "game_not_running");
           setRoomSetupFailed(true);
           return;
         }

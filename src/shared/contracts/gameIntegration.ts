@@ -12,6 +12,7 @@ export interface GameProcessStatus {
   running: boolean;
   pid?: number;
   windowReady?: boolean;
+  owned: boolean;
 }
 
 export interface GameCloseResult {
