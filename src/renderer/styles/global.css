@@ -160,6 +160,7 @@ body.mouse-test-hud-active {
   border: 1px solid rgba(217, 173, 98, 0.8);
   border-radius: 8px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
 }
 
 .mouse-test-hud dl { margin: 14px 0; }
@@ -196,6 +197,7 @@ body.mouse-test-hud-active {
   border: 2px solid #ff315c;
   border-radius: 50%;
   filter: drop-shadow(0 0 3px #000);
+  pointer-events: none;
 }
 
 .mouse-test-crosshair::before,
