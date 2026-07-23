@@ -204,9 +204,16 @@
 
 .main-area {
   min-width: 0;
-  padding: 22px;
+  padding: clamp(22px, calc(22px + (100vw - 1440px) * 0.035), 60px) 22px 22px;
   overflow: auto;
   scrollbar-color: #4a4239 #141312;
+}
+
+.content-shell {
+  width: 100%;
+  max-width: 1400px;
+  min-height: 100%;
+  margin-inline: auto;
 }
 
 .main-area::-webkit-scrollbar {

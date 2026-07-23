@@ -58,14 +58,14 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </aside>
       <main className="main-area">
-        {page !== "home" && (
+        <div className="content-shell">
           <header className="topbar">
             <div>
               <h1>{titleFor(page)}</h1>
             </div>
           </header>
-        )}
-        {children}
+          {children}
+        </div>
       </main>
     </div>
   );
@@ -73,8 +73,8 @@ export function Shell({ children }: { children: ReactNode }) {
 
 function titleFor(page: AppPage): string {
   return {
-    home: "Competitive Home",
-    play: "Play 1v1",
+    home: "Home",
+    play: "Play",
     "match-history": "Match History",
     leaderboard: "Leaderboard",
     profile: "Player Profile",
