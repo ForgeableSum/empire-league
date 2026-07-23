@@ -98,6 +98,16 @@
   -webkit-app-region: no-drag;
 }
 
+.window-controls .font-preview-select {
+  width: 205px;
+  min-height: 30px;
+  height: 30px;
+  margin: 5px 8px 5px 0;
+  padding: 3px 9px;
+  font-size: 12px;
+  -webkit-app-region: no-drag;
+}
+
 .window-controls button {
   width: 46px;
   height: 40px;
