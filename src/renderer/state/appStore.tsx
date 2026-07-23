@@ -415,8 +415,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           log(`Match found: ${event.match.id}`);
           notify("Match found", "warning");
           if (event.match.role === "host" && window.electronApi) {
-            log("Assigned as host; starting AoE2 lobby automation");
-            lobbyAutomationRef.current = window.electronApi.runAoe2CreateLobbySequence();
+            log("Assigned as host; waiting for AoE2 lobby automation to settle");
+            lobbyAutomationRef.current = delayForLobbyInput(lobbySetupTiming.hostLobbyAutomationSettleMs)
+              .then(() => {
+                log("Starting AoE2 lobby automation");
+                return window.electronApi!.runAoe2CreateLobbySequence();
+              });
             void prepareLobby(matchedSession);
           }
         }
@@ -470,6 +474,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               if (!ready.sent) throw new Error(ready.message);
               log("Host Ready click sent; waiting for the Start button state to settle");
               await delayForLobbyInput(lobbySetupTiming.hostReadyToStartMs);
+              await delayForLobbyInput(lobbySetupTiming.startGameSettleMs);
               log("Host readied; clicking Start Game");
               const start = await window.electronApi!.runAoe2LobbyCursorAction("start");
               if (!start.sent) throw new Error(start.message);
