@@ -34,6 +34,8 @@ const GetWindowThreadProcessId = user32?.func("uint32_t __stdcall GetWindowThrea
 const IsWindowVisible = user32?.func("bool __stdcall IsWindowVisible(HWND hwnd)");
 const GetClientRect = user32?.func("bool __stdcall GetClientRect(HWND hwnd, _Out_ EL_RECT *rect)");
 const ClientToScreen = user32?.func("bool __stdcall ClientToScreen(HWND hwnd, _Inout_ EL_POINT *point)");
+const ShowWindow = user32?.func("bool __stdcall ShowWindow(HWND hwnd, int32_t command)");
+const SetWindowPos = user32?.func("bool __stdcall SetWindowPos(HWND hwnd, HWND insertAfter, int32_t x, int32_t y, int32_t width, int32_t height, uint32_t flags)");
 const SetForegroundWindow = user32?.func("bool __stdcall SetForegroundWindow(HWND hwnd)");
 const GetForegroundWindow = user32?.func("HWND __stdcall GetForegroundWindow()");
 const WindowFromPoint = user32?.func("HWND __stdcall WindowFromPoint(EL_POINT point)");
@@ -114,6 +116,21 @@ export function closeAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   return Boolean(window) && Boolean(PostMessageW!(window, 0x0010, 0, 0));
+}
+
+export function minimizeAoe2NativeWindow(processId: number): boolean {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  return Boolean(window) && Boolean(ShowWindow!(window, 6));
+}
+
+export function restoreAoe2NativeWindowBehind(processId: number): boolean {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return false;
+  ShowWindow!(window, 9);
+  SetWindowPos!(window, null, 0, 0, 0, 0, 0x0015);
+  return true;
 }
 
 export async function clickAoe2DesignPoint(

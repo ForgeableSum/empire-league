@@ -9,6 +9,7 @@ import { MatchFoundOverlay } from "./components/match/MatchFoundOverlay";
 import { Toasts } from "./components/common/Toasts";
 import { StartupGamePrompt } from "./components/common/StartupGamePrompt";
 import { RoomSetupRecoveryPrompt } from "./components/common/RoomSetupRecoveryPrompt";
+import { WindowControls } from "./components/layout/WindowControls";
 import { useAppStore } from "./state/appStore";
 import { Loader2, LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,6 +24,7 @@ export function App() {
   if (authStatus === "loading") {
     return (
       <>
+        <WindowControls />
         <main className="auth-screen session-loading-screen" aria-label="Loading Empire League">
           <div className="session-loading-mark">
             <h1>Empire League</h1>
@@ -38,6 +40,7 @@ export function App() {
   if (authStatus !== "authenticated") {
     return (
       <>
+        <WindowControls />
         <main className="auth-screen">
           <div className="auth-card">
             <h1>Empire League</h1>

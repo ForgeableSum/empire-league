@@ -2,6 +2,7 @@ import { BarChart3, History, Home, LogOut, Play, Settings, User } from "lucide-r
 import type { ReactNode } from "react";
 import appIcon from "../../assets/el-2.png";
 import { useAppStore, type AppPage } from "../../state/appStore";
+import { WindowControls } from "./WindowControls";
 
 const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
   { page: "home", label: "Home", icon: <Home size={18} /> },
@@ -22,6 +23,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <img src={appIcon} alt="" />
         <span>Empire League - AoE2 DE</span>
       </div>
+      <WindowControls />
       <aside className="sidebar">
         <nav className="nav-list" aria-label="Primary navigation">
           {navItems.map((item) => (

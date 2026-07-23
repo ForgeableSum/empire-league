@@ -88,6 +88,38 @@
   object-fit: contain;
 }
 
+.window-controls {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 1002;
+  height: 40px;
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.window-controls button {
+  width: 46px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 0;
+  color: var(--muted);
+  background: transparent;
+  transition: color 120ms ease, background-color 120ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.window-controls button:hover {
+  color: var(--accent-2);
+  background: rgba(197, 141, 69, 0.14);
+}
+
+.window-controls .window-close:hover {
+  color: #fff;
+  background: #a43b36;
+}
+
 .sidebar {
   border-right: 1px solid var(--line-soft);
   background: #181715;

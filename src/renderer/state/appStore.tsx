@@ -30,6 +30,11 @@ interface AppContextValue {
   simulateMatchEnd: () => Promise<void>;
   updateMockConfig: (patch: Partial<MockServiceConfig>) => void;
   updateSettings: (patch: Partial<UserSettings>) => void;
+  notify: (
+    message: string,
+    tone?: NotificationItem["tone"],
+    options?: { detail?: string; durationMs?: number | null }
+  ) => string;
   dismissNotification: (id: string) => void;
   clearError: () => void;
   authStatus: "loading" | "unauthenticated" | "authenticating" | "authenticated";
@@ -786,6 +791,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     simulateMatchEnd,
     updateMockConfig,
     updateSettings,
+    notify,
     dismissNotification: dismissNotificationById,
     clearError: () => setState((previous) => ({ ...previous, error: null, queueStatus: "idle" })),
     authStatus,

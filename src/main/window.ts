@@ -1,6 +1,11 @@
 import { app, BrowserWindow, clipboard, globalShortcut, screen } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  detectAoe2NativeProcess,
+  minimizeAoe2NativeWindow,
+  restoreAoe2NativeWindowBehind
+} from "./aoe2Win32Automation.js";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 let pointerTimer: NodeJS.Timeout | undefined;
@@ -8,6 +13,7 @@ let mouseTestHudVisible = false;
 let mouseCoordinateOverlayEnabled = false;
 let mainCoverManuallyVisible = true;
 let coveredMainWindow: BrowserWindow | null = null;
+let taskbarMinimizedWindow: BrowserWindow | null = null;
 let coveredMainWindowState: {
   alwaysOnTop: boolean;
   focusable: boolean;
@@ -35,6 +41,29 @@ function loadRenderer(window: BrowserWindow, route = ""): void {
   }
 }
 
+function restoreFromTaskbar(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  if (process.platform === "win32") {
+    const game = detectAoe2NativeProcess();
+    if (game.pid && game.windowReady) restoreAoe2NativeWindowBehind(game.pid);
+  }
+  taskbarMinimizedWindow = null;
+  window.setKiosk(true);
+  window.show();
+  window.focus();
+}
+
+export function minimizeMainWindowToTaskbar(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  if (process.platform === "win32") {
+    const game = detectAoe2NativeProcess();
+    if (game.pid && game.windowReady) minimizeAoe2NativeWindow(game.pid);
+  }
+  taskbarMinimizedWindow = window;
+  window.setKiosk(false);
+  window.minimize();
+}
+
 export function createMainWindow(): BrowserWindow {
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
   const displayId = screen.getPrimaryDisplay().id;
@@ -51,7 +80,7 @@ export function createMainWindow(): BrowserWindow {
     fullscreen: true,
     kiosk: true,
     resizable: false,
-    minimizable: false,
+    minimizable: true,
     maximizable: false,
     autoHideMenuBar: true,
     backgroundColor: "#141312",
@@ -90,16 +119,20 @@ export function createMainWindow(): BrowserWindow {
     mainWindow.focus();
   });
   mainWindow.on("leave-full-screen", () => {
-    if (mainWindow.isDestroyed()) return;
+    if (mainWindow.isDestroyed() || taskbarMinimizedWindow === mainWindow) return;
     setImmediate(() => {
-      if (mainWindow.isDestroyed()) return;
+      if (mainWindow.isDestroyed() || taskbarMinimizedWindow === mainWindow) return;
       mainWindow.setKiosk(true);
       fitKioskToDisplay();
     });
   });
+  mainWindow.on("restore", () => {
+    if (taskbarMinimizedWindow === mainWindow) restoreFromTaskbar(mainWindow);
+  });
   screen.on("display-metrics-changed", handleDisplayMetricsChanged);
   mainWindow.once("closed", () => {
     screen.off("display-metrics-changed", handleDisplayMetricsChanged);
+    if (taskbarMinimizedWindow === mainWindow) taskbarMinimizedWindow = null;
   });
 
   if (isDev) {
