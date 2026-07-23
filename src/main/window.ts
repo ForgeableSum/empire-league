@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 let pointerTimer: NodeJS.Timeout | undefined;
 let mouseTestHudVisible = false;
+let mainCoverManuallyVisible = true;
 let coveredMainWindow: BrowserWindow | null = null;
 let coveredMainWindowState: {
   bounds: Electron.Rectangle;
@@ -17,6 +18,7 @@ let latestPointer: {
   designX: number; designY: number; clientWidth: number; clientHeight: number; inside: boolean;
 } | undefined;
 const copyCoordinatesAccelerator = "CommandOrControl+Shift+C";
+const toggleCoverAccelerator = "CommandOrControl+Shift+H";
 
 function appIconPath(): string {
   return app.isPackaged
@@ -79,13 +81,24 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
     };
   }
   const area = screen.getPrimaryDisplay().bounds;
+  mainCoverManuallyVisible = true;
   window.setIgnoreMouseEvents(true);
-  window.setOpacity(0.72);
+  window.setOpacity(1);
   window.setBounds(area);
   window.setAlwaysOnTop(true, "screen-saver");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.showInactive();
   window.webContents.send("overlay:mouse-test-active", true);
+  globalShortcut.unregister(toggleCoverAccelerator);
+  globalShortcut.register(toggleCoverAccelerator, () => {
+    if (!coveredMainWindow || coveredMainWindow.isDestroyed()) return;
+    mainCoverManuallyVisible = !mainCoverManuallyVisible;
+    if (mainCoverManuallyVisible) {
+      coveredMainWindow.showInactive();
+    } else {
+      coveredMainWindow.hide();
+    }
+  });
 }
 
 export function restoreMainWindowFromGameCover(): void {
@@ -93,6 +106,8 @@ export function restoreMainWindowFromGameCover(): void {
   const state = coveredMainWindowState;
   coveredMainWindow = null;
   coveredMainWindowState = null;
+  mainCoverManuallyVisible = true;
+  globalShortcut.unregister(toggleCoverAccelerator);
   if (!window || window.isDestroyed() || !state) return;
   window.setIgnoreMouseEvents(false);
   window.setOpacity(state.opacity);
@@ -110,7 +125,7 @@ export function setMainWindowGameCoverOverAoe(active: boolean): void {
   if (!window || window.isDestroyed()) return;
   if (active) {
     window.setAlwaysOnTop(true, "screen-saver");
-    window.showInactive();
+    if (mainCoverManuallyVisible) window.showInactive();
   } else {
     window.setAlwaysOnTop(false);
   }

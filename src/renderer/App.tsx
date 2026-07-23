@@ -118,6 +118,10 @@ function TestOverlay() {
           <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>
           <span>{copiedCoordinates ? `Copied all data at ${copiedCoordinates}` : "Copy all mouse data"}</span>
         </div>
+        <div className="mouse-test-hotkey">
+          <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>H</kbd>
+          <span>Hide or show Empire League</span>
+        </div>
         <small>Overlay is click-through. Alt+Tab to Empire League to stop the mode.</small>
       </section>
       {pointer?.inside && (
