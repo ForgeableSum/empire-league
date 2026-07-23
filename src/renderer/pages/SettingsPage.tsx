@@ -133,13 +133,13 @@ export function SettingsPage() {
 
   async function toggleMouseTestMode(): Promise<void> {
     if (!window.electronApi) {
-      setDetectionFeedback({ tone: "error", message: "Mouse test mode is only available in the Electron app." });
+      setDetectionFeedback({ tone: "error", message: "Mouse coordinates are only available in the Electron app." });
       return;
     }
     if (mouseTestRunning) {
       await window.electronApi.stopAoe2MouseTestMode();
       setMouseTestRunning(false);
-      setDetectionFeedback({ tone: "success", message: "Mouse test mode stopped." });
+      setDetectionFeedback({ tone: "success", message: "Mouse coordinate overlay hidden." });
       return;
     }
     const result = await window.electronApi.startAoe2MouseTestMode();
@@ -147,8 +147,8 @@ export function SettingsPage() {
     setDetectionFeedback({
       tone: result.focused ? "success" : "error",
       message: result.focused
-        ? "AoE2 mouse test mode started. Alt+Tab back here to stop it."
-        : "AoE2 could not be maximized for mouse test mode."
+        ? "Mouse coordinate overlay shown."
+        : "Mouse coordinate overlay could not be shown."
     });
   }
 
@@ -200,7 +200,7 @@ export function SettingsPage() {
       </SettingsGroup>
       <SettingsGroup title="Interface">
         <button type="button" className="secondary" onClick={() => void toggleMouseTestMode()}>
-          {mouseTestRunning ? "Stop AoE2 Mouse Test Mode" : "Start AoE2 Mouse Test Mode"}
+          {mouseTestRunning ? "Hide Mouse Coordinates" : "Show Mouse Coordinates"}
         </button>
         <label>Sound volume<input type="range" min="0" max="100" value={settings.soundVolume} onChange={(event) => updateSettings({ soundVolume: Number(event.target.value) })} /></label>
         <Toggle label="Reduced motion" checked={settings.reducedMotion} onChange={(reducedMotion) => updateSettings({ reducedMotion })} />

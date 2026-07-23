@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 let pointerTimer: NodeJS.Timeout | undefined;
 let mouseTestHudVisible = false;
+let mouseCoordinateOverlayEnabled = false;
 let mainCoverManuallyVisible = true;
 let coveredMainWindow: BrowserWindow | null = null;
 let coveredMainWindowState: {
@@ -88,7 +89,11 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   window.setAlwaysOnTop(true, "screen-saver");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.showInactive();
-  window.webContents.send("overlay:mouse-test-active", true);
+  if (mouseCoordinateOverlayEnabled) {
+    showMouseTestOverlay();
+  } else {
+    window.webContents.send("overlay:mouse-test-active", false);
+  }
   globalShortcut.unregister(toggleCoverAccelerator);
   globalShortcut.register(toggleCoverAccelerator, () => {
     if (!coveredMainWindow || coveredMainWindow.isDestroyed()) return;
@@ -164,6 +169,12 @@ export function hideMouseTestOverlay(): void {
   mouseTestHudVisible = false;
   coveredMainWindow?.webContents.send("overlay:mouse-test-active", false);
   globalShortcut.unregister(copyCoordinatesAccelerator);
+}
+
+export function setMouseCoordinateOverlayEnabled(enabled: boolean): void {
+  mouseCoordinateOverlayEnabled = enabled;
+  if (enabled) showMouseTestOverlay();
+  else hideMouseTestOverlay();
 }
 
 function startPointerUpdates(): void {

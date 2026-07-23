@@ -4,15 +4,14 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
-import { mouseTestModeEnabled, showAoe2DuringLobbySetup } from "../../shared/runtimeConfig.js";
+import { cursorAutomationEnabled, showAoe2DuringLobbySetup } from "../../shared/runtimeConfig.js";
 import {
   closeTestOverlay,
-  hideMouseTestOverlay,
   restoreMainWindowFromGameCover,
+  setMouseCoordinateOverlayEnabled,
   setMainWindowGameCoverClickThrough,
   setMainWindowGameCoverOverAoe,
-  showMainWindowAsGameCover,
-  showMouseTestOverlay
+  showMainWindowAsGameCover
 } from "../window.js";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -79,7 +78,7 @@ Write-Output "CURSOR|Released=$released"
 function moveAoe2WindowOffscreen(): void {
   if (process.platform !== "win32") return;
   offscreenWindowProcess?.kill();
-  if (mouseTestModeEnabled) {
+  if (cursorAutomationEnabled) {
     const script = String.raw`
 $interop = @'
 using System;
@@ -130,10 +129,8 @@ while ($true) {
         console.info(`[AoE2 automation] ${message}`);
         if (message.includes("MOUSE_TEST|Foreground=True")) {
           setMainWindowGameCoverOverAoe(true);
-          showMouseTestOverlay();
         }
         if (message.includes("MOUSE_TEST|Foreground=False")) {
-          hideMouseTestOverlay();
           setMainWindowGameCoverOverAoe(false);
         }
         if (message.includes("MOUSE_TEST|GameExited=True")) {
@@ -1243,7 +1240,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
       });
       gameProcess.unref();
       const appWindow = BrowserWindow.fromWebContents(event.sender);
-      if (mouseTestModeEnabled && appWindow) showMainWindowAsGameCover(appWindow);
+      if (cursorAutomationEnabled && appWindow) showMainWindowAsGameCover(appWindow);
       moveAoe2WindowOffscreen();
       appWindow?.on("focus", releaseCursorForElectron);
       appWindow?.once("closed", restoreAoe2Window);
@@ -1261,17 +1258,12 @@ if ($game) { Write-Output $game.CloseMainWindow() }
   });
 
   ipcMain.handle("game:start-mouse-test-mode", async () => {
-    if (process.platform !== "win32") return { focused: false };
-    moveAoe2WindowOffscreen();
-    await delay(1000);
+    setMouseCoordinateOverlayEnabled(true);
     return { focused: true };
   });
 
   ipcMain.handle("game:stop-mouse-test-mode", async () => {
-    offscreenWindowProcess?.kill();
-    offscreenWindowProcess = undefined;
-    closeTestOverlay();
-    restoreMainWindowFromGameCover();
+    setMouseCoordinateOverlayEnabled(false);
   });
 
   ipcMain.handle("game:show-fullscreen-after-delay", async (event) => {
