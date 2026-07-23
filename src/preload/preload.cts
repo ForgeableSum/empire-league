@@ -7,7 +7,6 @@ const electronApi: ElectronGameApi = {
   closeAoe2: (force) => ipcRenderer.invoke("game:close", force),
   launchAoe2: () => ipcRenderer.invoke("game:launch"),
   focusAoe2: () => ipcRenderer.invoke("game:focus"),
-  showAoe2LobbyDebug: () => ipcRenderer.invoke("game:show-lobby-debug"),
   showAoe2FullscreenAfterDelay: () => ipcRenderer.invoke("game:show-fullscreen-after-delay"),
   startAoe2TabTest: () => ipcRenderer.invoke("game:start-tab-test"),
   stopAoe2TabTest: () => ipcRenderer.invoke("game:stop-tab-test"),
