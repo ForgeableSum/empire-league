@@ -107,6 +107,11 @@
   gap: 12px;
 }
 
+.user-block,
+.account-summary {
+  padding: 10px;
+}
+
 .avatar {
   width: 42px;
   height: 42px;
@@ -294,10 +299,74 @@
 .search-state,
 .match-focus,
 .result-screen,
-.error-panel {
-  border: 1px solid var(--line);
+.error-panel,
+.metric,
+.metrics-grid.compact > div,
+.sidebar-meta,
+.user-block,
+.account-summary {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid #8c642e;
   border-radius: var(--radius);
-  background: var(--panel);
+  background:
+    linear-gradient(135deg, rgba(229, 185, 93, 0.07), transparent 18% 82%, rgba(120, 76, 24, 0.1)),
+    var(--panel);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(32, 20, 8, 0.9),
+    inset 0 0 0 1px rgba(245, 211, 139, 0.18),
+    inset 0 0 18px rgba(197, 141, 69, 0.05);
+}
+
+.hero-panel::before,
+.panel::before,
+.queue-card::before,
+.search-state::before,
+.match-focus::before,
+.result-screen::before,
+.error-panel::before,
+.metric::before,
+.metrics-grid.compact > div::before,
+.sidebar-meta::before,
+.user-block::before,
+.account-summary::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 4px;
+  border: 1px solid rgba(205, 158, 75, 0.42);
+  border-radius: calc(var(--radius) + 2px);
+  background:
+    linear-gradient(90deg, transparent, rgba(250, 218, 145, 0.44) 50%, transparent) center top / calc(100% - 20px) 1px no-repeat,
+    linear-gradient(90deg, transparent, rgba(91, 55, 18, 0.72) 50%, transparent) center bottom / calc(100% - 20px) 1px no-repeat;
+  pointer-events: none;
+}
+
+.hero-panel::after,
+.panel::after,
+.queue-card::after,
+.search-state::after,
+.match-focus::after,
+.result-screen::after,
+.error-panel::after,
+.metric::after,
+.metrics-grid.compact > div::after,
+.sidebar-meta::after,
+.user-block::after,
+.account-summary::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-radius: calc(var(--radius) + 2px);
+  background:
+    radial-gradient(circle at 7px 7px, #fae2a5 0 1.5px, #d19a43 2px 3px, #7b4d1d 3.5px 4.5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 7px) 7px, #fae2a5 0 1.5px, #d19a43 2px 3px, #7b4d1d 3.5px 4.5px, transparent 5px),
+    radial-gradient(circle at 7px calc(100% - 7px), #fae2a5 0 1.5px, #d19a43 2px 3px, #7b4d1d 3.5px 4.5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), #fae2a5 0 1.5px, #d19a43 2px 3px, #7b4d1d 3.5px 4.5px, transparent 5px);
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.65));
+  pointer-events: none;
 }
 
 .hero-panel {
@@ -332,9 +401,6 @@
 .metrics-grid.compact > div {
   min-height: 92px;
   padding: 14px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  background: var(--panel);
 }
 
 .metric span,
