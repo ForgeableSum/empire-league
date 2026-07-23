@@ -9,7 +9,6 @@ let mouseCoordinateOverlayEnabled = false;
 let mainCoverManuallyVisible = true;
 let coveredMainWindow: BrowserWindow | null = null;
 let coveredMainWindowState: {
-  bounds: Electron.Rectangle;
   alwaysOnTop: boolean;
   focusable: boolean;
   opacity: number;
@@ -38,21 +37,23 @@ function loadRenderer(window: BrowserWindow, route = ""): void {
 
 export function createMainWindow(): BrowserWindow {
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
+  const displayId = screen.getPrimaryDisplay().id;
   const area = screen.getPrimaryDisplay().bounds;
   const mainWindow = new BrowserWindow({
+    show: false,
     x: area.x,
     y: area.y,
     width: area.width,
     height: area.height,
     title: "Empire League",
     icon: appIconPath(),
+    frame: false,
+    fullscreen: true,
+    kiosk: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
     autoHideMenuBar: true,
-    titleBarStyle: "hidden",
-    titleBarOverlay: {
-      color: "#141312",
-      symbolColor: "#d8cebf",
-      height: 40
-    },
     backgroundColor: "#141312",
     webPreferences: {
       preload: join(currentDir, "../preload/preload.cjs"),
@@ -60,6 +61,45 @@ export function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: true
     }
+  });
+
+  const fitKioskToDisplay = (): void => {
+    if (mainWindow.isDestroyed()) return;
+    const display = screen.getAllDisplays().find((item) => item.id === displayId) ?? screen.getPrimaryDisplay();
+    const currentBounds = mainWindow.getBounds();
+    const targetBounds = display.bounds;
+    if (
+      currentBounds.x !== targetBounds.x ||
+      currentBounds.y !== targetBounds.y ||
+      currentBounds.width !== targetBounds.width ||
+      currentBounds.height !== targetBounds.height
+    ) {
+      mainWindow.setBounds(targetBounds, false);
+    }
+  };
+  const handleDisplayMetricsChanged = (): void => {
+    setImmediate(fitKioskToDisplay);
+  };
+
+  mainWindow.setMenuBarVisibility(false);
+  mainWindow.once("ready-to-show", () => {
+    if (mainWindow.isDestroyed()) return;
+    mainWindow.setKiosk(true);
+    fitKioskToDisplay();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+  mainWindow.on("leave-full-screen", () => {
+    if (mainWindow.isDestroyed()) return;
+    setImmediate(() => {
+      if (mainWindow.isDestroyed()) return;
+      mainWindow.setKiosk(true);
+      fitKioskToDisplay();
+    });
+  });
+  screen.on("display-metrics-changed", handleDisplayMetricsChanged);
+  mainWindow.once("closed", () => {
+    screen.off("display-metrics-changed", handleDisplayMetricsChanged);
   });
 
   if (isDev) {
@@ -76,17 +116,15 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   if (coveredMainWindow !== window || !coveredMainWindowState) {
     coveredMainWindow = window;
     coveredMainWindowState = {
-      bounds: window.getBounds(),
       alwaysOnTop: window.isAlwaysOnTop(),
       focusable: window.isFocusable(),
       opacity: window.getOpacity()
     };
   }
-  const area = screen.getPrimaryDisplay().bounds;
   mainCoverManuallyVisible = true;
   window.setIgnoreMouseEvents(false);
   window.setOpacity(1);
-  window.setBounds(area);
+  window.setKiosk(true);
   window.setAlwaysOnTop(true, "screen-saver");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.showInactive();
@@ -119,8 +157,8 @@ export function restoreMainWindowFromGameCover(): void {
   window.setOpacity(state.opacity);
   window.setAlwaysOnTop(state.alwaysOnTop);
   window.setVisibleOnAllWorkspaces(false);
-  window.setBounds(state.bounds);
   window.setFocusable(state.focusable);
+  window.setKiosk(true);
   window.show();
   window.focus();
   window.webContents.send("overlay:mouse-test-active", false);
