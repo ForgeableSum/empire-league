@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, screen, shell } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain, screen, shell } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -18,6 +18,14 @@ import {
   setMainWindowGameCoverOverAoe,
   showMainWindowAsGameCover
 } from "../window.js";
+import {
+  closeAoe2NativeWindow,
+  clickAoe2DesignPoint,
+  detectAoe2NativeProcess,
+  focusAoe2NativeWindow,
+  isAoe2NativeWindowForeground,
+  sendAoe2Enter
+} from "../aoe2Win32Automation.js";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const execFileAsync = promisify(execFile);
@@ -27,29 +35,12 @@ let ownedAoe2Pid: number | undefined;
 let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
 let offscreenWindowProcess: ChildProcess | undefined;
+let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
 
 async function detectAoe2Process(): Promise<{ running: boolean; pid?: number; windowReady?: boolean }> {
   if (process.platform !== "win32") return { running: false, windowReady: false };
-  const script = String.raw`
-$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $game) { Write-Output 'NOT_RUNNING'; exit 0 }
-$game.Refresh()
-Write-Output "$($game.Id)|$($game.MainWindowHandle -ne 0)|$($game.Responding)"
-`;
-  const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-  const { stdout } = await execFileAsync("powershell.exe", [
-    "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-  ], { windowsHide: true });
-  const output = stdout.trim();
-  if (!output || output.includes("NOT_RUNNING")) return { running: false, windowReady: false };
-  const [pidText, hasWindow, responding] = output.split("|");
-  const pid = Number.parseInt(pidText, 10);
-  return {
-    running: Number.isFinite(pid),
-    pid: Number.isFinite(pid) ? pid : undefined,
-    windowReady: hasWindow === "True" && responding === "True"
-  };
+  return detectAoe2NativeProcess();
 }
 
 async function waitForAoe2Exit(timeoutMs: number): Promise<boolean> {
@@ -83,71 +74,35 @@ Write-Output "CURSOR|Released=$released"
 function moveAoe2WindowOffscreen(): void {
   if (process.platform !== "win32") return;
   offscreenWindowProcess?.kill();
+  if (aoe2WindowMonitor) clearInterval(aoe2WindowMonitor);
+  aoe2WindowMonitor = undefined;
   if (cursorAutomationEnabled) {
-    const script = String.raw`
-$interop = @'
-using System;
-using System.Runtime.InteropServices;
-public static class AoeMouseTestVisible {
-  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
-  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
-
-  public static bool IsForegroundProcess(uint targetProcessId) {
-    uint foregroundProcessId;
-    GetWindowThreadProcessId(GetForegroundWindow(), out foregroundProcessId);
-    return foregroundProcessId == targetProcessId;
-  }
-}
-'@
-Add-Type -TypeDefinition $interop
-$lastWindow = [IntPtr]::Zero
-$lastForeground = $false
-$sawGame = $false
-while ($true) {
-  $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($game -and $game.MainWindowHandle -ne 0) {
-    $sawGame = $true
-    if ($game.MainWindowHandle -ne $lastWindow) {
-      [AoeMouseTestVisible]::SetForegroundWindow($game.MainWindowHandle) | Out-Null
-      Write-Output "MOUSE_TEST|Visible=True|DefaultWindowState=True|Window=$($game.MainWindowHandle)"
-      $lastWindow = $game.MainWindowHandle
-    }
-    $foreground = [AoeMouseTestVisible]::IsForegroundProcess([uint32]$game.Id)
-    if ($foreground -ne $lastForeground) {
-      Write-Output "MOUSE_TEST|Foreground=$foreground"
-      $lastForeground = $foreground
-    }
-  } elseif ($sawGame) {
-    Write-Output 'MOUSE_TEST|GameExited=True'
-    exit 0
-  }
-  Start-Sleep -Milliseconds 250
-}
-`;
-    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-    offscreenWindowProcess = spawn("powershell.exe", [
-      "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-    ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-    offscreenWindowProcess.stdout?.on("data", (chunk: Buffer) => {
-      chunk.toString().split(/\r?\n/).filter(Boolean).forEach((message) => {
-        console.info(`[AoE2 automation] ${message}`);
-        if (message.includes("MOUSE_TEST|Foreground=True")) {
-          setMainWindowGameCoverOverAoe(true);
+    let lastPid: number | undefined;
+    let lastForeground = false;
+    let sawGame = false;
+    aoe2WindowMonitor = setInterval(() => {
+      const game = detectAoe2NativeProcess();
+      if (game.running && game.pid && game.windowReady) {
+        sawGame = true;
+        if (game.pid !== lastPid) {
+          focusAoe2NativeWindow(game.pid);
+          console.info(`[AoE2 automation] MOUSE_TEST|Visible=True|DefaultWindowState=True|Pid=${game.pid}|Mode=Koffi`);
+          lastPid = game.pid;
         }
-        if (message.includes("MOUSE_TEST|Foreground=False")) {
-          setMainWindowGameCoverOverAoe(false);
+        const foreground = isAoe2NativeWindowForeground(game.pid);
+        if (foreground !== lastForeground) {
+          console.info(`[AoE2 automation] MOUSE_TEST|Foreground=${foreground}|Mode=Koffi`);
+          setMainWindowGameCoverOverAoe(foreground);
+          lastForeground = foreground;
         }
-        if (message.includes("MOUSE_TEST|GameExited=True")) {
-          closeTestOverlay();
-          restoreMainWindowFromGameCover();
-        }
-      });
-    });
-    offscreenWindowProcess.stderr?.on("data", (chunk: Buffer) => {
-      console.error(`[AoE2 automation] ${chunk.toString().trim()}`);
-    });
-    offscreenWindowProcess.once("exit", () => { offscreenWindowProcess = undefined; });
+      } else if (sawGame) {
+        console.info("[AoE2 automation] MOUSE_TEST|GameExited=True|Mode=Koffi");
+        if (aoe2WindowMonitor) clearInterval(aoe2WindowMonitor);
+        aoe2WindowMonitor = undefined;
+        closeTestOverlay();
+        restoreMainWindowFromGameCover();
+      }
+    }, 250);
     return;
   }
   const script = String.raw`
@@ -196,7 +151,16 @@ function restoreAoe2Window(focus = false, maximize = false): void {
   if (process.platform !== "win32") return;
   offscreenWindowProcess?.kill();
   offscreenWindowProcess = undefined;
+  if (aoe2WindowMonitor) clearInterval(aoe2WindowMonitor);
+  aoe2WindowMonitor = undefined;
   aoe2WindowIsOffscreen = false;
+  if (cursorAutomationEnabled) {
+    if (focus) {
+      const game = detectAoe2NativeProcess();
+      if (game.pid) focusAoe2NativeWindow(game.pid);
+    }
+    return;
+  }
   const script = String.raw`
 $interop = @'
 using System;
@@ -1233,14 +1197,7 @@ export function registerGameHandlers(): void {
     if (force) {
       await forceCloseAoe2Process(processStatus.pid);
     } else {
-      const script = String.raw`
-$game = Get-Process -Id ${processStatus.pid} -ErrorAction SilentlyContinue
-if ($game) { Write-Output $game.CloseMainWindow() }
-`;
-      const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-      await execFileAsync("powershell.exe", [
-        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-      ], { windowsHide: true });
+      closeAoe2NativeWindow(processStatus.pid);
     }
 
     const closed = await waitForAoe2Exit(force ? 5000 : 8000);
@@ -1299,25 +1256,8 @@ if ($game) { Write-Output $game.CloseMainWindow() }
   ipcMain.handle("game:focus", async () => {
     if (cursorAutomationEnabled && process.platform === "win32") {
       hideMainWindowGameCover();
-      const script = String.raw`
-$signature = '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);'
-$foreground = Add-Type -MemberDefinition $signature -Name Foreground -Namespace EmpireLeague -PassThru
-$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $game -or $game.MainWindowHandle -eq 0) { Write-Output 'WINDOW_NOT_FOUND'; exit 2 }
-$focused = $foreground::SetForegroundWindow($game.MainWindowHandle)
-Write-Output "FOCUS|SetForeground=$focused"
-if ($focused) { exit 0 }
-exit 3
-`;
-      const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-      try {
-        await execFileAsync("powershell.exe", [
-          "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-        ], { windowsHide: true });
-        return { focused: true };
-      } catch {
-        return { focused: false };
-      }
+      const game = detectAoe2NativeProcess();
+      return { focused: Boolean(game.pid) && focusAoe2NativeWindow(game.pid as number) };
     }
     restoreAoe2Window(true, true);
     return { focused: true };
@@ -1425,27 +1365,51 @@ exit 3
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
-    const encodedScript = Buffer.from(createLobbyCursorSequenceScript, "utf16le").toString("base64");
     setMainWindowGameCoverClickThrough(true);
-    const sequenceProcess = spawn("powershell.exe", [
-      "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-    ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-    let sequenceOutput = "";
-    sequenceProcess.stdout?.on("data", (chunk: Buffer) => {
-      const output = chunk.toString();
-      sequenceOutput += output;
-      output.split(/\r?\n/).filter(Boolean).forEach(emitLog);
-    });
-    sequenceProcess.stderr?.on("data", (chunk: Buffer) => {
-      chunk.toString().split(/\r?\n/).filter(Boolean).forEach(emitLog);
-    });
+    try {
+      const process = await detectAoe2Process();
+      if (!process.running || !process.pid) {
+        return { sent: false, message: "The AoE2 process was not found." };
+      }
+      const clickStep = async (name: string, x: number, y: number) => {
+        const result = await clickAoe2DesignPoint(process.pid as number, x, y);
+        emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
+        if (!result.sent) throw new Error(`${name} could not be clicked.`);
+      };
 
-    const exitCode = await new Promise<number | null>((resolve) => sequenceProcess.once("close", resolve));
-    setMainWindowGameCoverClickThrough(false);
-    const lobbyUri = sequenceOutput.match(/LOBBY_URI\|(aoe2de:\/\/0\/\d+)/)?.[1];
-    return exitCode === 0 && lobbyUri
-      ? { sent: true, message: "Cursor lobby creation completed.", lobbyUri }
-      : { sent: false, message: "The Create Lobby sequence stopped before completion." };
+      await clickStep("Multiplayer", 734, 1085);
+      await delay(lobbySetupTiming.multiplayerMenuMs);
+      await clickStep("Host Game", 2774, 1202);
+      await delay(lobbySetupTiming.hostGameMenuMs);
+      await clickStep("Create Lobby", 1688, 1614);
+      await delay(lobbySetupTiming.lobbyCreationMs);
+      await clickStep("Reset Settings", 3101, 1976);
+      await delay(lobbySetupTiming.resetFocusMs);
+      const reset = await sendAoe2Enter(process.pid);
+      emitLog(`STEP|Confirm Reset|Key=ENTER|${reset.detail}`);
+      if (!reset.sent) throw new Error("The reset confirmation could not be sent.");
+      await delay(lobbySetupTiming.resetConfirmationMs);
+
+      clipboard.writeText("EL_CURSOR_COPY_PENDING");
+      await clickStep("Copy Game ID", 3245, 372);
+      await delay(lobbySetupTiming.clipboardReadMs);
+      let lobbyUri = clipboard.readText().match(/aoe2de:\/\/0\/\d+/)?.[0];
+      if (!lobbyUri) {
+        await delay(lobbySetupRetryTiming.beforeClipboardRetryMs);
+        await clickStep("Copy Game ID Retry", 3245, 372);
+        await delay(lobbySetupRetryTiming.clipboardReadMs);
+        lobbyUri = clipboard.readText().match(/aoe2de:\/\/0\/\d+/)?.[0];
+      }
+      if (!lobbyUri) throw new Error("Lobby URI was not copied.");
+      emitLog(`LOBBY_URI|${lobbyUri}`);
+      emitLog("SEQUENCE|Complete=True|Mode=KoffiCursor");
+      return { sent: true, message: "Cursor lobby creation completed.", lobbyUri };
+    } catch (error) {
+      emitLog(`ERROR|${error instanceof Error ? error.message : "Native lobby automation failed."}`);
+      return { sent: false, message: "The Create Lobby sequence stopped before completion." };
+    } finally {
+      setMainWindowGameCoverClickThrough(false);
+    }
   });
 
   ipcMain.handle("game:run-lobby-cursor-action", async (
@@ -1455,19 +1419,22 @@ exit 3
     if (process.platform !== "win32" || !["guest-ready", "host-ready", "start"].includes(target)) {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
-    const script = createLobbyCursorActionScript(target);
-    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
     setMainWindowGameCoverClickThrough(true);
     try {
-      const { stdout } = await execFileAsync("powershell.exe", [
-        "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-      ], { windowsHide: true });
-      const output = stdout.trim().replace(/\r?\n/g, "|");
-      const sent = output.includes("SENT");
-      const message = `CURSOR_ACTION|Target=${target}|${output}`;
+      const process = await detectAoe2Process();
+      if (!process.running || !process.pid) {
+        return { sent: false, message: "The AoE2 process was not found." };
+      }
+      const action = target === "guest-ready"
+        ? { label: "Guest Ready", x: 1413, y: 1875 }
+        : target === "host-ready"
+          ? { label: "Host Ready", x: 1388, y: 1979 }
+          : { label: "Start Game", x: 1974, y: 1979 };
+      const result = await clickAoe2DesignPoint(process.pid, action.x, action.y);
+      const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.x},${action.y}|${result.detail}`;
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
-      return { sent, message: sent ? `${target} clicked.` : `${target} could not be clicked.` };
+      return { sent: result.sent, message: result.sent ? `${target} clicked.` : `${target} could not be clicked.` };
     } catch (error) {
       console.error(`[AoE2 automation] Cursor action ${target} failed`, error);
       return { sent: false, message: `${target} cursor action failed.` };
