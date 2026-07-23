@@ -9,6 +9,8 @@ export const lobbySetupTiming = {
   clipboardReadMs: 800,
   lobbyMetadataMs: 700,
   guestJoinMs: 10000,
+  guestReadySettleMs: 2000,
+  hostReadySettleMs: 2000,
   hostReadyToStartMs: 1000,
   revealAfterStartMs: 8000
 } as const;
