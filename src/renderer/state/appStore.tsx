@@ -587,7 +587,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await services.matchmaking.publishLobby(match.id, discoveredLobby);
         log("Lobby details published to opponent");
         if (showAoe2DuringLobbySetup) {
-          await window.electronApi.focusAoe2();
+          await window.electronApi.showAoe2LobbyDebug();
           log("Showing the host lobby for LAN debugging");
         }
         setState((previous) => ({

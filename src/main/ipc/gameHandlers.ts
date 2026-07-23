@@ -70,6 +70,7 @@ Write-Output "CURSOR|Released=$released"
 function moveAoe2WindowOffscreen(): void {
   if (process.platform !== "win32") return;
   offscreenWindowProcess?.kill();
+  const displayBounds = screen.getPrimaryDisplay().bounds;
   const script = String.raw`
 $interop = @'
 using System;
@@ -87,7 +88,7 @@ while ($true) {
   $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
   if ($game -and $game.MainWindowHandle -ne 0) {
     [AoeOffscreen]::ShowWindow($game.MainWindowHandle, 9) | Out-Null
-    $moved = [AoeOffscreen]::SetWindowPos($game.MainWindowHandle, [IntPtr]::Zero, -32000, -32000, 0, 0, 0x0015)
+    $moved = [AoeOffscreen]::SetWindowPos($game.MainWindowHandle, [IntPtr]::Zero, -32000, -32000, ${displayBounds.width}, ${displayBounds.height}, 0x0014)
     if ($game.MainWindowHandle -ne $lastWindow) {
       Write-Output "OFFSCREEN|Moved=$moved|Attempt=$attempt|GamePid=$($game.Id)|Window=$($game.MainWindowHandle)"
       $lastWindow = $game.MainWindowHandle
@@ -118,6 +119,7 @@ function restoreAoe2Window(focus = false, maximize = false): void {
   offscreenWindowProcess = undefined;
   if (!aoe2WindowIsOffscreen) return;
   aoe2WindowIsOffscreen = false;
+  const displayBounds = screen.getPrimaryDisplay().bounds;
   const script = String.raw`
 $interop = @'
 using System;
@@ -131,7 +133,7 @@ public static class AoeRestore {
 Add-Type -TypeDefinition $interop
 $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($game -and $game.MainWindowHandle -ne 0) {
-  $restored = [AoeRestore]::SetWindowPos($game.MainWindowHandle, [IntPtr]::Zero, 0, 0, 0, 0, 0x0015)
+  $restored = [AoeRestore]::SetWindowPos($game.MainWindowHandle, [IntPtr]::Zero, ${displayBounds.x}, ${displayBounds.y}, ${displayBounds.width}, ${displayBounds.height}, 0x0014)
   if (${focus ? "$true" : "$false"}) {
     [AoeRestore]::ShowWindow($game.MainWindowHandle, ${maximize ? 3 : 9}) | Out-Null
     [AoeRestore]::SetForegroundWindow($game.MainWindowHandle) | Out-Null
@@ -1021,6 +1023,12 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     return { focused: true };
   });
 
+  ipcMain.handle("game:show-lobby-debug", async () => {
+    restoreAoe2Window(false, false);
+    await delay(3000);
+    return { focused: false };
+  });
+
   ipcMain.handle("game:show-fullscreen-after-delay", async (event) => {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     await delay(5000);
@@ -1325,7 +1333,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     // navigate to the lobby before revealing its window for the LAN test.
     await delay(10000);
     if (showAoe2DuringLobbySetup) {
-      restoreAoe2Window(true, true);
+      restoreAoe2Window(false, false);
       await delay(3000);
     }
     return { opened: true };
