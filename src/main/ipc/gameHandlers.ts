@@ -637,6 +637,9 @@ public static class AoeForegroundMouseClick {
   [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hWnd, out Rect rect);
   [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hWnd, ref Point point);
   [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point point);
+  [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr window, uint flags);
   [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
   [DllImport("user32.dll")] private static extern bool GetClipCursor(out Rect rect);
   [DllImport("user32.dll", EntryPoint = "ClipCursor")] private static extern bool ClipCursorRect(ref Rect rect);
@@ -648,12 +651,19 @@ public static class AoeForegroundMouseClick {
 
   public static IntPtr Find(uint targetProcessId) {
     IntPtr found = IntPtr.Zero;
+    long largestArea = 0;
     EnumWindows((window, _) => {
       uint processId;
       GetWindowThreadProcessId(window, out processId);
       if (processId == targetProcessId && IsWindowVisible(window)) {
-        found = window;
-        return false;
+        Rect rect;
+        if (GetClientRect(window, out rect)) {
+          long area = (long)(rect.Right - rect.Left) * (rect.Bottom - rect.Top);
+          if (area > largestArea) {
+            largestArea = area;
+            found = window;
+          }
+        }
       }
       return true;
     }, IntPtr.Zero);
@@ -671,7 +681,21 @@ public static class AoeForegroundMouseClick {
       Y = (int)Math.Round(designY * height / 2160.0)
     };
     if (!ClientToScreen(window, ref point)) return "SCREEN_POINT_FAILED";
-    bool focused = SetForegroundWindow(window);
+    uint targetProcessId;
+    GetWindowThreadProcessId(window, out targetProcessId);
+    bool alreadyForeground = GetForegroundWindow() == window;
+    bool focused = alreadyForeground || SetForegroundWindow(window);
+    DateTime focusDeadline = DateTime.UtcNow.AddMilliseconds(1500);
+    while (GetForegroundWindow() != window && DateTime.UtcNow < focusDeadline) {
+      SetForegroundWindow(window);
+      Thread.Sleep(25);
+    }
+    bool foregroundVerified = GetForegroundWindow() == window;
+    if (!foregroundVerified) {
+      return String.Format("FOREGROUND_NOT_READY|Focused={0}|ExpectedWindow={1}|ActualWindow={2}",
+        focused, window, GetForegroundWindow());
+    }
+    if (!alreadyForeground) Thread.Sleep(300);
     Point original;
     if (!GetCursorPos(out original)) return "CURSOR_POSITION_FAILED";
     Rect originalClip;
@@ -686,9 +710,22 @@ public static class AoeForegroundMouseClick {
     bool blocked = BlockInput(true);
     bool moved = false;
     bool restored = false;
+    uint hitProcessId = 0;
+    bool hitVerified = false;
     try {
       moved = SetCursorPos(point.X, point.Y);
       Thread.Sleep(25);
+      DateTime hitDeadline = DateTime.UtcNow.AddMilliseconds(500);
+      do {
+        IntPtr hitWindow = GetAncestor(WindowFromPoint(point), 2);
+        GetWindowThreadProcessId(hitWindow, out hitProcessId);
+        hitVerified = hitProcessId == targetProcessId && GetForegroundWindow() == window;
+        if (!hitVerified) Thread.Sleep(25);
+      } while (!hitVerified && DateTime.UtcNow < hitDeadline);
+      if (!hitVerified) {
+        return String.Format("CLICK_TARGET_NOT_READY|ForegroundVerified={0}|TargetPid={1}|HitPid={2}|ExpectedWindow={3}|ActualForeground={4}",
+          GetForegroundWindow() == window, targetProcessId, hitProcessId, window, GetForegroundWindow());
+      }
       mouse_event(0x0002, 0, 0, 0, UIntPtr.Zero);
       Thread.Sleep(15);
       mouse_event(0x0004, 0, 0, 0, UIntPtr.Zero);
@@ -701,8 +738,9 @@ public static class AoeForegroundMouseClick {
       }
       restored = SetCursorPos(original.X, original.Y);
     }
-    return String.Format("SENT|Mode=ForegroundPhysicalRestore|Focused={0}|CursorClipped={1}|InputBlocked={2}|Moved={3}|Restored={4}|BorrowedMs=40|Client={5}x{6}|ScreenPoint={7},{8}|OriginalPoint={9},{10}",
-      focused, clipped, blocked, moved, restored, width, height, point.X, point.Y, original.X, original.Y);
+    return String.Format("SENT|Mode=ForegroundPhysicalRestore|Focused={0}|ForegroundVerified={1}|TargetPid={2}|HitPid={3}|CursorClipped={4}|InputBlocked={5}|Moved={6}|Restored={7}|Client={8}x{9}|ScreenPoint={10},{11}|OriginalPoint={12},{13}",
+      focused, foregroundVerified, targetProcessId, hitProcessId, clipped, blocked, moved, restored,
+      width, height, point.X, point.Y, original.X, original.Y);
   }
 
   public static string SendEnter(IntPtr window) {
