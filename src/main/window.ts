@@ -82,7 +82,7 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   }
   const area = screen.getPrimaryDisplay().bounds;
   mainCoverManuallyVisible = true;
-  window.setIgnoreMouseEvents(true);
+  window.setIgnoreMouseEvents(false);
   window.setOpacity(1);
   window.setBounds(area);
   window.setAlwaysOnTop(true, "screen-saver");
@@ -129,6 +129,12 @@ export function setMainWindowGameCoverOverAoe(active: boolean): void {
   } else {
     window.setAlwaysOnTop(false);
   }
+}
+
+export function setMainWindowGameCoverClickThrough(clickThrough: boolean): void {
+  const window = coveredMainWindow;
+  if (!window || window.isDestroyed()) return;
+  window.setIgnoreMouseEvents(clickThrough);
 }
 
 export function showMouseTestOverlay(): void {

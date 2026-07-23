@@ -9,6 +9,7 @@ import {
   closeTestOverlay,
   hideMouseTestOverlay,
   restoreMainWindowFromGameCover,
+  setMainWindowGameCoverClickThrough,
   setMainWindowGameCoverOverAoe,
   showMainWindowAsGameCover,
   showMouseTestOverlay
@@ -1367,6 +1368,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
     const encodedScript = Buffer.from(createLobbyCursorSequenceScript, "utf16le").toString("base64");
+    setMainWindowGameCoverClickThrough(true);
     const sequenceProcess = spawn("powershell.exe", [
       "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
     ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
@@ -1381,6 +1383,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     });
 
     const exitCode = await new Promise<number | null>((resolve) => sequenceProcess.once("close", resolve));
+    setMainWindowGameCoverClickThrough(false);
     const lobbyUri = sequenceOutput.match(/LOBBY_URI\|(aoe2de:\/\/0\/\d+)/)?.[1];
     return exitCode === 0 && lobbyUri
       ? { sent: true, message: "Cursor lobby creation completed.", lobbyUri }
@@ -1393,6 +1396,7 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     }
     const script = createLobbyCursorActionScript(target);
     const encodedScript = Buffer.from(script, "utf16le").toString("base64");
+    setMainWindowGameCoverClickThrough(true);
     try {
       const { stdout } = await execFileAsync("powershell.exe", [
         "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
@@ -1406,6 +1410,8 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     } catch (error) {
       console.error(`[AoE2 automation] Cursor action ${target} failed`, error);
       return { sent: false, message: `${target} cursor action failed.` };
+    } finally {
+      setMainWindowGameCoverClickThrough(false);
     }
   });
 
