@@ -14,19 +14,26 @@ import { useAppStore } from "./state/appStore";
 import { Loader2, LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
+import empireLeagueLogo from "./assets/el-2.png";
 
 export function App() {
   const [mouseTestActive, setMouseTestActive] = useState(false);
+  const [startupScreenVisible, setStartupScreenVisible] = useState(true);
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setStartupScreenVisible(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const { page, state, authStatus, authError, signInWithSteam } = useAppStore();
 
-  if (authStatus === "loading") {
+  if (startupScreenVisible || authStatus === "loading") {
     return (
       <>
         <WindowControls />
         <main className="auth-screen session-loading-screen" aria-label="Loading Empire League">
           <div className="session-loading-mark">
+            <img className="session-loading-logo" src={empireLeagueLogo} alt="Empire League" />
             <h1>Empire League</h1>
             <Loader2 className="spin" size={24} aria-hidden="true" />
           </div>
