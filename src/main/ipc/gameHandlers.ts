@@ -86,11 +86,13 @@ $attempt = 0
 while ($true) {
   $attempt++
   $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($game -and $game.MainWindowHandle -ne 0 -and $game.MainWindowHandle -ne $lastWindow) {
+  if ($game -and $game.MainWindowHandle -ne 0) {
     [AoeOffscreen]::ShowWindow($game.MainWindowHandle, 9) | Out-Null
     $moved = [AoeOffscreen]::SetWindowPos($game.MainWindowHandle, [IntPtr]::Zero, -32000, -32000, ${displayBounds.width}, ${displayBounds.height}, 0x0014)
-    Write-Output "OFFSCREEN|Moved=$moved|Attempt=$attempt|GamePid=$($game.Id)|Window=$($game.MainWindowHandle)"
-    $lastWindow = $game.MainWindowHandle
+    if ($game.MainWindowHandle -ne $lastWindow) {
+      Write-Output "OFFSCREEN|Moved=$moved|Attempt=$attempt|GamePid=$($game.Id)|Window=$($game.MainWindowHandle)"
+      $lastWindow = $game.MainWindowHandle
+    }
   }
   Start-Sleep -Milliseconds 250
 }
