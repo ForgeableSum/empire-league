@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchResult } from "../../shared/contracts/matches";
+import { aoe2RevealDelayAfterStartMs, showAoe2DuringLobbySetup } from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
@@ -461,6 +462,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
               }));
               await services.matchmaking.reportGameStarted(event.matchId);
+              void revealAoe2AfterGameStart();
               notify("Automated game start sent", "success");
             } catch (error) {
               log(`Automated host start failed: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -477,6 +479,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
           }));
           log("Host started the game");
+          void revealAoe2AfterGameStart();
         }
         if (event.type === "error") {
           if (event.code === "MATCH_DECLINED") {
@@ -583,10 +586,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         log(`Lobby created: ${discoveredLobby.platformLobbyId}`);
         await services.matchmaking.publishLobby(match.id, discoveredLobby);
         log("Lobby details published to opponent");
-        // Temporary LAN-debug behavior. Once game-start detection exists, this
-        // focus should move from lobby publication to the actual start event.
-        await window.electronApi.focusAoe2();
-        log("Showing the host lobby for LAN debugging");
+        if (showAoe2DuringLobbySetup) {
+          await window.electronApi.focusAoe2();
+          log("Showing the host lobby for LAN debugging");
+        }
         setState((previous) => ({
           ...previous,
           activeMatch: previous.activeMatch ? { ...previous.activeMatch, lobby: discoveredLobby } : null,
@@ -706,6 +709,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((previous) => ({ ...previous, mockConfig: { ...previous.mockConfig, ...patch } }));
   }
 
+  async function revealAoe2AfterGameStart(): Promise<void> {
+    if (showAoe2DuringLobbySetup || !window.electronApi) return;
+    await delayForLobbyInput(aoe2RevealDelayAfterStartMs);
+    await window.electronApi.focusAoe2();
+    log("Showing AoE2 after game start");
+  }
+
   function updateSettings(patch: Partial<UserSettings>): void {
     setState((previous) => {
       const settings = { ...previous.settings, ...patch };
@@ -750,6 +760,7 @@ async function sendAoe2TabsAndEnter(tabCount: number): Promise<void> {
     if (!tab.sent) throw new Error(tab.message);
     await delayForLobbyInput(200);
   }
+
   const enter = await window.electronApi.sendAoe2Key("ENTER");
   if (!enter.sent) throw new Error(enter.message);
   await delayForLobbyInput(250);

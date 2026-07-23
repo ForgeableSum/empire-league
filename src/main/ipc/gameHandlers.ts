@@ -4,6 +4,7 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
+import { showAoe2DuringLobbySetup } from "../../shared/runtimeConfig.js";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const execFileAsync = promisify(execFile);
@@ -1323,8 +1324,10 @@ if ($game) { Write-Output $game.CloseMainWindow() }
     // Steam hands the URI to AoE2 asynchronously. Give the game time to
     // navigate to the lobby before revealing its window for the LAN test.
     await delay(10000);
-    restoreAoe2Window(true, true);
-    await delay(3000);
+    if (showAoe2DuringLobbySetup) {
+      restoreAoe2Window(true, true);
+      await delay(3000);
+    }
     return { opened: true };
   });
 }
