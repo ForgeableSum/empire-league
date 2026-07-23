@@ -8,6 +8,7 @@ import type {
   GameInputTestResult,
   GameInstallationStatus,
   GameLaunchResult,
+  LobbyMouseTarget,
   GameProcessStatus,
   OpenLobbyResult
 } from "./gameIntegration.js";
@@ -22,6 +23,7 @@ export interface ElectronGameApi {
   startAoe2TabTest(): Promise<GameInputTestResult>;
   stopAoe2TabTest(): Promise<void>;
   sendAoe2Key(key: GameInputKey): Promise<GameInputResult>;
+  clickAoe2LobbyControl(target: LobbyMouseTarget): Promise<GameInputResult>;
   runAoe2CreateLobbySequence(): Promise<GameInputResult>;
   testAoe2HostGameMouseClick(): Promise<GameInputResult>;
   calibrateAoe2HostGameMouseClick(): Promise<GameInputResult>;
