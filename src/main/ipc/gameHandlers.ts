@@ -766,10 +766,12 @@ Write-Output 'SEQUENCE|Complete=True|Mode=Cursor'
 exit 0
 `);
 
-function createLobbyCursorActionScript(target: "ready" | "start"): string {
-  const action = target === "ready"
-    ? { label: "Ready", x: 1388, y: 1979 }
-    : { label: "Start Game", x: 1974, y: 1979 };
+function createLobbyCursorActionScript(target: "guest-ready" | "host-ready" | "start"): string {
+  const action = target === "guest-ready"
+    ? { label: "Guest Ready", x: 1413, y: 1875 }
+    : target === "host-ready"
+      ? { label: "Host Ready", x: 1388, y: 1979 }
+      : { label: "Start Game", x: 1974, y: 1979 };
   return foregroundPhysicalInputScriptTemplate.replace("__ACTION_SCRIPT__", String.raw`
 $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
@@ -1382,8 +1384,11 @@ if ($game) { Write-Output $game.CloseMainWindow() }
       : { sent: false, message: "The Create Lobby sequence stopped before completion." };
   });
 
-  ipcMain.handle("game:run-lobby-cursor-action", async (event, target: "ready" | "start") => {
-    if (process.platform !== "win32" || (target !== "ready" && target !== "start")) {
+  ipcMain.handle("game:run-lobby-cursor-action", async (
+    event,
+    target: "guest-ready" | "host-ready" | "start"
+  ) => {
+    if (process.platform !== "win32" || !["guest-ready", "host-ready", "start"].includes(target)) {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
     const script = createLobbyCursorActionScript(target);

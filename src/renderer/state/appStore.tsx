@@ -431,7 +431,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               log(result.opened ? "Opened the host lobby in AoE2" : "The host lobby URI was rejected");
               if (result.opened) {
                 log("Guest lobby opened; clicking Ready");
-                const ready = await window.electronApi!.runAoe2LobbyCursorAction("ready");
+                const ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
                 if (!ready.sent) throw new Error(ready.message);
                 log("Guest Ready click sent; waiting for the lobby state to settle");
                 await delayForLobbyInput(5000);
@@ -453,7 +453,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               log("Guest reported ready; waiting for the host lobby state to settle");
               await delayForLobbyInput(5000);
               log("Guest is ready; clicking Ready for the host");
-              const ready = await window.electronApi!.runAoe2LobbyCursorAction("ready");
+              const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
               if (!ready.sent) throw new Error(ready.message);
               log("Host Ready click sent; waiting for the Start button state to settle");
               await delayForLobbyInput(1000);
