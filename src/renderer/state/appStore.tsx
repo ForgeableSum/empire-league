@@ -39,6 +39,7 @@ interface AppContextValue {
   startupGamePrompt: "restart" | "force-close" | null;
   respondToStartupGamePrompt: (confirmed: boolean) => void;
   roomSetupFailed: boolean;
+  roomSetupFailureReason: "lobby_setup" | "game_not_running" | null;
   exitAfterRoomSetupFailure: (restart: boolean) => Promise<void>;
 }
 
@@ -126,6 +127,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const startupPromptResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [startupGamePrompt, setStartupGamePrompt] = useState<AppContextValue["startupGamePrompt"]>(null);
   const [roomSetupFailed, setRoomSetupFailed] = useState(false);
+  const [roomSetupFailureReason, setRoomSetupFailureReason] = useState<AppContextValue["roomSetupFailureReason"]>(null);
 
   const services = useMemo(
     () => ({
@@ -322,6 +324,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     clearRoomSetupWatchdog();
     roomSetupTimeoutRef.current = window.setTimeout(() => {
       roomSetupTimeoutRef.current = null;
+      setRoomSetupFailureReason("lobby_setup");
       setRoomSetupFailed(true);
     }, roomSetupTimeoutMs);
   }
@@ -370,6 +373,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (state.gameStatus === "loading" || !canStartQueue || queueJoinInFlightRef.current) return;
     queueJoinInFlightRef.current = true;
     try {
+      if (window.electronApi) {
+        const gameProcess = await window.electronApi.detectAoe2Process();
+        if (!gameProcess.running) {
+          setRoomSetupFailureReason("game_not_running");
+          setRoomSetupFailed(true);
+          return;
+        }
+      }
+
       if (ticketRef.current) {
         await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
         unsubscribeRef.current?.();
@@ -379,6 +391,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: state.currentUser, canHost: true });
       ticketRef.current = ticket.id;
       setRoomSetupFailed(false);
+      setRoomSetupFailureReason(null);
       setState((previous) => ({
         ...previous,
         selectedQueue: queue,
@@ -782,6 +795,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     startupGamePrompt,
     respondToStartupGamePrompt,
     roomSetupFailed,
+    roomSetupFailureReason,
     exitAfterRoomSetupFailure
   };
 
