@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { MatchResult } from "../../shared/contracts/matches";
-import { aoe2RevealDelayAfterStartMs } from "../../shared/runtimeConfig";
+import { lobbySetupTiming } from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
@@ -102,6 +102,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     queueStatus: "idle",
     selectedQueue: null,
     queueStartedAt: null,
+    roomSetupStartedAt: null,
+    roomSetupMilestone: null,
     activeMatch: null,
     recentMatches: [],
     connectionStatus: "online",
@@ -381,6 +383,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...previous,
         selectedQueue: queue,
         queueStartedAt: ticket.joinedAt,
+        roomSetupStartedAt: null,
+        roomSetupMilestone: null,
         queueStatus: "searching",
         activeMatch: null,
         error: null
@@ -402,6 +406,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setState((previous) => ({
             ...previous,
             queueStatus: event.match.role === "host" ? "creating_lobby" : "waiting_for_opponent",
+            roomSetupStartedAt: new Date().toISOString(),
+            roomSetupMilestone: event.match.role === "host"
+              ? "Setting up lobby room"
+              : "Waiting for the host to set up the lobby room",
             activeMatch: matchedSession
           }));
           log(`Match found: ${event.match.id}`);
@@ -417,12 +425,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ...previous,
             queueStatus: "ready",
             gameStatus: "in_lobby",
+            roomSetupMilestone: "Joining lobby room",
             activeMatch: previous.activeMatch
               ? { ...previous.activeMatch, lobby: event.lobby, status: "ready" }
               : null
           }));
           log(`Host published lobby: ${event.lobby.platformLobbyId ?? "pending"}`);
-          notify("The host created the AoE2 lobby", "success");
           if (event.lobby.platformLobbyId?.startsWith("aoe2de://0/") && window.electronApi) {
             void window.electronApi.openAoe2Lobby(event.lobby.platformLobbyId).then(async (result) => {
               log(result.opened ? "Opened the host lobby in AoE2" : "The host lobby URI was rejected");
@@ -433,7 +441,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 log("Guest Ready click sent; reporting readiness to the host");
                 await services.matchmaking.reportGuestLobbyReady(event.matchId);
                 log("Guest readied and notified the host");
-                notify("Joined and readied in the host lobby", "success");
+                setState((previous) => ({
+                  ...previous,
+                  roomSetupMilestone: "Ready — waiting for the host to start"
+                }));
               } else {
                 notify("The host lobby could not be opened", "danger");
               }
@@ -444,26 +455,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
         if (event.type === "guest_lobby_ready" && window.electronApi) {
+          setState((previous) => ({
+            ...previous,
+            roomSetupMilestone: "Opponent ready — starting game"
+          }));
           void (async () => {
             try {
               log("Guest reported ready; clicking Ready for the host");
               const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
               if (!ready.sent) throw new Error(ready.message);
               log("Host Ready click sent; waiting for the Start button state to settle");
-              await delayForLobbyInput(1000);
+              await delayForLobbyInput(lobbySetupTiming.hostReadyToStartMs);
               log("Host readied; clicking Start Game");
               const start = await window.electronApi!.runAoe2LobbyCursorAction("start");
               if (!start.sent) throw new Error(start.message);
               clearRoomSetupWatchdog();
               setState((previous) => ({
                 ...previous,
-                queueStatus: "in_game",
+                queueStatus: "ready",
                 gameStatus: "in_match",
-                activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
+                roomSetupMilestone: "Starting game",
+                activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "ready" } : null
               }));
               await services.matchmaking.reportGameStarted(event.matchId);
               void revealAoe2AfterGameStart();
-              notify("Automated game start sent", "success");
             } catch (error) {
               log(`Automated host start failed: ${error instanceof Error ? error.message : "Unknown error"}`);
               notify("The automated game start failed", "danger");
@@ -474,9 +489,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           clearRoomSetupWatchdog();
           setState((previous) => ({
             ...previous,
-            queueStatus: "in_game",
+            queueStatus: "ready",
             gameStatus: "in_match",
-            activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
+            roomSetupMilestone: "Starting game",
+            activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "ready" } : null
           }));
           log("Host started the game");
           void revealAoe2AfterGameStart();
@@ -514,7 +530,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     unsubscribeRef.current?.();
     ticketRef.current = null;
     queueJoinInFlightRef.current = false;
-    setState((previous) => ({ ...previous, queueStatus: "cancelled", selectedQueue: null, queueStartedAt: null }));
+    setState((previous) => ({
+      ...previous,
+      queueStatus: "cancelled",
+      selectedQueue: null,
+      queueStartedAt: null,
+      roomSetupStartedAt: null,
+      roomSetupMilestone: null
+    }));
     log("Queue cancelled");
   }
 
@@ -589,7 +612,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setState((previous) => ({
           ...previous,
           activeMatch: previous.activeMatch ? { ...previous.activeMatch, lobby: discoveredLobby } : null,
-          queueStatus: "waiting_for_opponent"
+          queueStatus: "waiting_for_opponent",
+          roomSetupMilestone: "Waiting for opponent to join"
         }));
         return;
       }
@@ -707,8 +731,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function revealAoe2AfterGameStart(): Promise<void> {
     if (!window.electronApi) return;
-    await delayForLobbyInput(aoe2RevealDelayAfterStartMs);
+    await delayForLobbyInput(lobbySetupTiming.revealAfterStartMs);
     await window.electronApi.focusAoe2();
+    setState((previous) => ({
+      ...previous,
+      queueStatus: "in_game",
+      roomSetupMilestone: null,
+      activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
+    }));
     log("Showing AoE2 after game start");
   }
 

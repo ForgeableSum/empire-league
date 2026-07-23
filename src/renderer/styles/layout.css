@@ -625,6 +625,30 @@
   color: var(--accent-2);
 }
 
+.lobby-countdown {
+  margin: 22px 0 18px;
+  color: var(--accent);
+  font-size: clamp(4rem, 10vw, 7rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.06em;
+  line-height: 0.9;
+}
+
+.lobby-milestone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.lobby-milestone svg {
+  flex: 0 0 auto;
+  color: var(--accent-2);
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }

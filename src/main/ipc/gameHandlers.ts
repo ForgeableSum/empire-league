@@ -4,7 +4,11 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
-import { cursorAutomationEnabled } from "../../shared/runtimeConfig.js";
+import {
+  cursorAutomationEnabled,
+  lobbySetupRetryTiming,
+  lobbySetupTiming
+} from "../../shared/runtimeConfig.js";
 import {
   closeTestOverlay,
   hideMainWindowGameCover,
@@ -776,26 +780,26 @@ function Click-Step([string]$name, [int]$x, [int]$y, [int]$exitCode) {
 }
 
 Click-Step 'Multiplayer' 734 1085 4
-Start-Sleep -Milliseconds 1000
+Start-Sleep -Milliseconds ${lobbySetupTiming.multiplayerMenuMs}
 Click-Step 'Host Game' 2774 1202 5
-Start-Sleep -Milliseconds 2000
+Start-Sleep -Milliseconds ${lobbySetupTiming.hostGameMenuMs}
 Click-Step 'Create Lobby' 1688 1614 6
-Start-Sleep -Milliseconds 8000
+Start-Sleep -Milliseconds ${lobbySetupTiming.lobbyCreationMs}
 Click-Step 'Reset Settings' 3101 1976 7
-Start-Sleep -Milliseconds 250
+Start-Sleep -Milliseconds ${lobbySetupTiming.resetFocusMs}
 $window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
 $confirmReset = [AoeForegroundMouseClick]::SendEnter($window)
 Write-Output "STEP|Confirm Reset|Key=ENTER|$confirmReset"
-Start-Sleep -Milliseconds 1000
+Start-Sleep -Milliseconds ${lobbySetupTiming.resetConfirmationMs}
 Set-Clipboard -Value 'EL_CURSOR_COPY_PENDING'
 Click-Step 'Copy Game ID' 3245 372 8
-Start-Sleep -Milliseconds 800
+Start-Sleep -Milliseconds ${lobbySetupTiming.clipboardReadMs}
 $clipboard = Get-Clipboard -Raw
 $lobbyUri = [regex]::Match([string]$clipboard, 'aoe2de://0/[0-9]+').Value
 if (-not $lobbyUri) {
-  Start-Sleep -Milliseconds 1000
+  Start-Sleep -Milliseconds ${lobbySetupRetryTiming.beforeClipboardRetryMs}
   Click-Step 'Copy Game ID Retry' 3245 372 9
-  Start-Sleep -Milliseconds 800
+  Start-Sleep -Milliseconds ${lobbySetupRetryTiming.clipboardReadMs}
   $clipboard = Get-Clipboard -Raw
   $lobbyUri = [regex]::Match([string]$clipboard, 'aoe2de://0/[0-9]+').Value
 }
@@ -1548,7 +1552,7 @@ exit 3
   });
 
   ipcMain.handle("game:create-ranked-1v1-lobby", async (_event, request: CreateLobbyRequest) => {
-    await delay(700);
+    await delay(lobbySetupTiming.lobbyMetadataMs);
     return {
       lobby: {
         platformLobbyId: `AOE-${Math.floor(100000 + Math.random() * 899999)}`,
@@ -1590,7 +1594,7 @@ exit 3
     await shell.openExternal(lobbyId);
     // Steam hands the URI to AoE2 asynchronously. Give the game time to
     // navigate to and finish joining the lobby before Ready automation.
-    await delay(10000);
+    await delay(lobbySetupTiming.guestJoinMs);
     return { opened: true };
   });
 }

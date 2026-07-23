@@ -1,40 +1,30 @@
-import { CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { lobbySetupCountdownMs } from "../../../shared/runtimeConfig";
 import { useAppStore } from "../../state/appStore";
 
-const steps = [
-  ["accepting", "Match accepted"],
-  ["creating_lobby", "AoE2 installation detected"],
-  ["creating_lobby", "AoE2 process found"],
-  ["creating_lobby", "Opening multiplayer menu"],
-  ["creating_lobby", "Creating private lobby"],
-  ["waiting_for_opponent", "Lobby ID discovered"],
-  ["waiting_for_opponent", "Opponent invited"],
-  ["verifying_lobby", "Opponent joined"],
-  ["verifying_lobby", "Lobby settings verified"],
-  ["ready", "Waiting for both players"]
-] as const;
-
-const order = ["accepting", "creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"];
+const setupCountdownSeconds = Math.ceil(lobbySetupCountdownMs / 1000);
 
 export function LobbyPreparation() {
   const { state, openAoe2, prepareLobby } = useAppStore();
-  const index = order.indexOf(state.queueStatus);
+  const [remaining, setRemaining] = useState(() => getRemaining(state.roomSetupStartedAt));
+
+  useEffect(() => {
+    const update = () => setRemaining(getRemaining(state.roomSetupStartedAt));
+    update();
+    const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [state.roomSetupStartedAt]);
+
   return (
     <section className="lobby-layout">
       <div className="panel">
         <span className="eyebrow">Lobby preparation</span>
-        <h2>{state.queueStatus === "ready" ? "Lobby Ready" : "Creating AoE2 Lobby"}</h2>
-        <div className="progress-list">
-          {steps.map(([status, label], stepIndex) => {
-            const complete = order.indexOf(status) < index || state.queueStatus === "ready";
-            const active = order.indexOf(status) === index && !complete;
-            return (
-              <div className={active ? "progress-row active" : "progress-row"} key={`${status}-${label}`}>
-                {complete ? <CheckCircle2 size={18} /> : active ? <Loader2 size={18} className="spin" /> : <Circle size={18} />}
-                <span>{label}</span>
-              </div>
-            );
-          })}
+        <h2>Game starts in</h2>
+        <div className="lobby-countdown" aria-live="polite">{remaining}</div>
+        <div className="lobby-milestone" aria-live="polite">
+          <Loader2 size={18} className="spin" aria-hidden="true" />
+          <span>{state.roomSetupMilestone ?? "Preparing game"}</span>
         </div>
         {state.error && (
           <div className="error-panel">
@@ -59,4 +49,10 @@ export function LobbyPreparation() {
       </div>
     </section>
   );
+}
+
+function getRemaining(startedAt: string | null): number {
+  if (!startedAt) return setupCountdownSeconds;
+  const elapsedSeconds = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+  return Math.max(0, setupCountdownSeconds - elapsedSeconds);
 }

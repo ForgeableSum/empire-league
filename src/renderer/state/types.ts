@@ -63,6 +63,8 @@ export interface AppState {
   queueStatus: QueueStatus;
   selectedQueue: QueueDefinition | null;
   queueStartedAt: string | null;
+  roomSetupStartedAt: string | null;
+  roomSetupMilestone: string | null;
   activeMatch: MatchSession | null;
   recentMatches: MatchSummary[];
   connectionStatus: "online" | "degraded" | "offline";
