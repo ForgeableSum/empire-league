@@ -433,8 +433,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 log("Guest lobby opened; clicking Ready");
                 const ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
                 if (!ready.sent) throw new Error(ready.message);
-                log("Guest Ready click sent; waiting for the lobby state to settle");
-                await delayForLobbyInput(5000);
+                log("Guest Ready click sent; reporting readiness to the host");
                 await services.matchmaking.reportGuestLobbyReady(event.matchId);
                 log("Guest readied and notified the host");
                 notify("Joined and readied in the host lobby", "success");
@@ -450,9 +449,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (event.type === "guest_lobby_ready" && window.electronApi) {
           void (async () => {
             try {
-              log("Guest reported ready; waiting for the host lobby state to settle");
-              await delayForLobbyInput(5000);
-              log("Guest is ready; clicking Ready for the host");
+              log("Guest reported ready; clicking Ready for the host");
               const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
               if (!ready.sent) throw new Error(ready.message);
               log("Host Ready click sent; waiting for the Start button state to settle");
