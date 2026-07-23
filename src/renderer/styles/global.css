@@ -120,7 +120,21 @@ label {
   justify-content: center;
   gap: 8px;
   padding: 0 16px;
+  border: 1px solid #a97838;
+  border-radius: var(--radius);
   font-weight: 800;
+  box-shadow:
+    inset 0 0 0 1px rgba(248, 221, 160, 0.1),
+    0 1px 0 rgba(0, 0, 0, 0.55);
+  transition: border-color 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+}
+
+.primary:hover,
+.secondary:hover {
+  border-color: #dfb45f;
+  box-shadow:
+    inset 0 0 0 1px rgba(248, 221, 160, 0.18),
+    0 2px 7px rgba(0, 0, 0, 0.42);
 }
 
 .primary {

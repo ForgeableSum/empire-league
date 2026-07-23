@@ -934,9 +934,9 @@
   gap: 12px;
   padding: 14px 14px 16px;
   overflow: hidden;
+  border: 1px solid #8c642e;
   border-radius: var(--radius);
-  background: rgba(40, 36, 31, 0.97);
-  border: 1px solid var(--line);
+  background-color: rgba(40, 36, 31, 0.97);
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.42);
   pointer-events: auto;
 }
