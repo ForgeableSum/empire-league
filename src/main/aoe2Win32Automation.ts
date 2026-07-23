@@ -181,19 +181,20 @@ export async function clickAoe2DesignPoint(
     MouseEvent!(0x0002, 0, 0, 0, 0);
     Sleep!(15);
     MouseEvent!(0x0004, 0, 0, 0, 0);
-    Sleep!(500);
   } finally {
     if (blocked) BlockInput!(false);
     ClipCursor!(hadOriginalClip ? originalClip : null);
     restored = Boolean(SetCursorPos!(original.x, original.y));
   }
 
+  await delay(500);
+
   return {
     sent: true,
     detail: [
       "SENT",
       "Mode=KoffiForegroundPhysicalRestore",
-      "PostClickSettleMs=500",
+      "PostClickCoverSettleMs=500",
       `Focused=${focused}`,
       `ForegroundVerified=${foregroundVerified}`,
       `TargetPid=${processId}`,
