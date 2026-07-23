@@ -1,4 +1,4 @@
-import koffi, { Union as KoffiUnion } from "koffi";
+import koffi from "koffi";
 
 const user32 = process.platform === "win32" ? koffi.load("user32.dll") : null;
 const kernel32 = process.platform === "win32" ? koffi.load("kernel32.dll") : null;
@@ -14,35 +14,6 @@ const RECT = koffi.struct("EL_RECT", {
 const POINT = koffi.struct("EL_POINT", {
   x: "int32_t",
   y: "int32_t"
-});
-const MOUSEINPUT = koffi.struct("EL_MOUSEINPUT", {
-  dx: "int32_t",
-  dy: "int32_t",
-  mouseData: "uint32_t",
-  dwFlags: "uint32_t",
-  time: "uint32_t",
-  dwExtraInfo: "uintptr_t"
-});
-const KEYBDINPUT = koffi.struct("EL_KEYBDINPUT", {
-  wVk: "uint16_t",
-  wScan: "uint16_t",
-  dwFlags: "uint32_t",
-  time: "uint32_t",
-  dwExtraInfo: "uintptr_t"
-});
-const HARDWAREINPUT = koffi.struct("EL_HARDWAREINPUT", {
-  uMsg: "uint32_t",
-  wParamL: "uint16_t",
-  wParamH: "uint16_t"
-});
-const INPUTUNION = koffi.union("EL_INPUTUNION", {
-  mi: MOUSEINPUT,
-  ki: KEYBDINPUT,
-  hi: HARDWAREINPUT
-});
-const INPUT = koffi.struct("EL_INPUT", {
-  type: "uint32_t",
-  data: [8, INPUTUNION]
 });
 const PROCESSENTRY32W = koffi.struct("EL_PROCESSENTRY32W", {
   dwSize: "uint32_t",
@@ -72,7 +43,7 @@ const GetClipCursor = user32?.func("bool __stdcall GetClipCursor(_Out_ EL_RECT *
 const ClipCursor = user32?.func("bool __stdcall ClipCursor(const EL_RECT *rect)");
 const SetCursorPos = user32?.func("bool __stdcall SetCursorPos(int x, int y)");
 const BlockInput = user32?.func("bool __stdcall BlockInput(bool block)");
-const SendInput = user32?.func("uint32_t __stdcall SendInput(uint32_t count, const EL_INPUT *inputs, int size)");
+const MouseEvent = user32?.func("void __stdcall mouse_event(uint32_t flags, uint32_t dx, uint32_t dy, uint32_t data, uintptr_t extraInfo)");
 const KeybdEvent = user32?.func("void __stdcall keybd_event(uint8_t virtualKey, uint8_t scanCode, uint32_t flags, uintptr_t extraInfo)");
 const IsHungAppWindow = user32?.func("bool __stdcall IsHungAppWindow(HWND hwnd)");
 const PostMessageW = user32?.func("bool __stdcall PostMessageW(HWND hwnd, uint32_t message, uintptr_t wParam, intptr_t lParam)");
@@ -207,23 +178,10 @@ export async function clickAoe2DesignPoint(
         detail: `CLICK_TARGET_NOT_READY|TargetPid=${processId}|HitPid=${hitProcessId}`
       };
     }
-    const downInput = new KoffiUnion(INPUTUNION);
-    downInput.mi = { dx: 0, dy: 0, mouseData: 0, dwFlags: 0x0002, time: 0, dwExtraInfo: 0 };
-    const upInput = new KoffiUnion(INPUTUNION);
-    upInput.mi = { dx: 0, dy: 0, mouseData: 0, dwFlags: 0x0004, time: 0, dwExtraInfo: 0 };
-    const sentCount = SendInput!(2, [
-      {
-        type: 0,
-        data: downInput
-      },
-      {
-        type: 0,
-        data: upInput
-      }
-    ], koffi.sizeof(INPUT));
-    if (sentCount !== 2) {
-      return { sent: false, detail: `SEND_INPUT_FAILED|SentCount=${sentCount}|InputSize=${koffi.sizeof(INPUT)}` };
-    }
+    MouseEvent!(0x0002, 0, 0, 0, 0);
+    Sleep!(15);
+    MouseEvent!(0x0004, 0, 0, 0, 0);
+    Sleep!(500);
   } finally {
     if (blocked) BlockInput!(false);
     ClipCursor!(hadOriginalClip ? originalClip : null);
@@ -234,7 +192,8 @@ export async function clickAoe2DesignPoint(
     sent: true,
     detail: [
       "SENT",
-      "Mode=KoffiSendInputPhysicalRestore",
+      "Mode=KoffiForegroundPhysicalRestore",
+      "PostClickSettleMs=500",
       `Focused=${focused}`,
       `ForegroundVerified=${foregroundVerified}`,
       `TargetPid=${processId}`,
