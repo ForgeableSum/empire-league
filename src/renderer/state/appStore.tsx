@@ -427,10 +427,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             void window.electronApi.openAoe2Lobby(event.lobby.platformLobbyId).then(async (result) => {
               log(result.opened ? "Opened the host lobby in AoE2" : "The host lobby URI was rejected");
               if (result.opened) {
-                log("Guest lobby opened; clicking I'm Ready");
-                const readyResult = await window.electronApi!.clickAoe2LobbyControl("ready");
-                if (!readyResult.sent) throw new Error(readyResult.message);
-                log("Guest Ready click sent; waiting for the lobby state to settle");
+                log("Guest lobby opened; sending 10 Tabs and Enter to ready");
+                await sendAoe2TabsAndEnter(10);
+                log("Guest ready input sent; waiting for the lobby state to settle");
                 await delayForLobbyInput(5000);
                 await services.matchmaking.reportGuestLobbyReady(event.matchId);
                 log("Guest readied and notified the host");
@@ -449,14 +448,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             try {
               log("Guest reported ready; waiting for the host lobby state to settle");
               await delayForLobbyInput(5000);
-              log("Guest is ready; clicking I'm Ready for the host");
-              const readyResult = await window.electronApi!.clickAoe2LobbyControl("ready");
-              if (!readyResult.sent) throw new Error(readyResult.message);
-              log("Host Ready click sent; waiting for the Start button state to settle");
+              log("Guest is ready; sending 20 Tabs and Enter to ready the host");
+              await sendAoe2TabsAndEnter(20);
+              log("Host ready input sent; waiting for the Start button state to settle");
               await delayForLobbyInput(1000);
-              log("Host readied; clicking Start Game");
-              const startResult = await window.electronApi!.clickAoe2LobbyControl("start");
-              if (!startResult.sent) throw new Error(startResult.message);
+              log("Host readied; sending Tab and Enter to start the game");
+              await sendAoe2TabsAndEnter(1);
               clearRoomSetupWatchdog();
               setState((previous) => ({
                 ...previous,

@@ -11,7 +11,6 @@ const electronApi: ElectronGameApi = {
   startAoe2TabTest: () => ipcRenderer.invoke("game:start-tab-test"),
   stopAoe2TabTest: () => ipcRenderer.invoke("game:stop-tab-test"),
   sendAoe2Key: (key) => ipcRenderer.invoke("game:send-background-key", key),
-  clickAoe2LobbyControl: (target) => ipcRenderer.invoke("game:click-lobby-control", target),
   runAoe2CreateLobbySequence: () => ipcRenderer.invoke("game:run-create-lobby-sequence"),
   testAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:test-host-game-mouse-click"),
   calibrateAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:calibrate-host-game-mouse-click"),

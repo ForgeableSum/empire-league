@@ -3,7 +3,7 @@ import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { CreateLobbyRequest, GameInputKey, LobbyMouseTarget } from "../../shared/contracts/gameIntegration.js";
+import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
 import { showAoe2DuringLobbySetup } from "../../shared/runtimeConfig.js";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -15,36 +15,6 @@ let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
 let offscreenWindowProcess: ChildProcess | undefined;
 let aoe2WindowIsOffscreen = false;
-let clickMarkerWindow: BrowserWindow | undefined;
-
-function showClickMarker(x: number, y: number, label: string): void {
-  clickMarkerWindow?.destroy();
-  const size = 84;
-  const marker = new BrowserWindow({
-    width: size,
-    height: size,
-    x: Math.round(x - size / 2),
-    y: Math.round(y - size / 2),
-    frame: false,
-    transparent: true,
-    resizable: false,
-    focusable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    show: false,
-    webPreferences: { sandbox: true }
-  });
-  clickMarkerWindow = marker;
-  marker.setIgnoreMouseEvents(true);
-  marker.setAlwaysOnTop(true, "screen-saver");
-  marker.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  const safeLabel = label.replace(/[^A-Za-z ]/g, "");
-  void marker.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><style>html,body{margin:0;background:transparent;overflow:hidden}div{box-sizing:border-box;width:84px;height:84px;border:4px solid #ff315c;border-radius:50%;position:relative;filter:drop-shadow(0 0 4px #000)}div:before,div:after{content:"";position:absolute;background:#ff315c}div:before{width:76px;height:2px;left:0;top:37px}div:after{width:2px;height:76px;left:37px;top:0}span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#111;color:#fff;font:700 11px Arial;padding:2px 5px;white-space:nowrap}</style><div><span>${safeLabel}</span></div>`)}`).then(() => marker.showInactive());
-  setTimeout(() => {
-    if (!marker.isDestroyed()) marker.destroy();
-    if (clickMarkerWindow === marker) clickMarkerWindow = undefined;
-  }, 1800);
-}
 
 async function detectAoe2Process(): Promise<{ running: boolean; pid?: number; windowReady?: boolean }> {
   if (process.platform !== "win32") return { running: false, windowReady: false };
@@ -572,80 +542,6 @@ if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
 $window = [AoeMouseClick]::Find([uint32]$game.Id)
 if ($window -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 3 }
 $result = [AoeMouseClick]::ClickDesignPoint($window, 1905, 1855)
-Write-Output $result
-if ($result.StartsWith('SENT')) { exit 0 }
-exit 4
-`;
-
-const lobbyControlMouseClickScript = String.raw`
-$ProgressPreference = 'SilentlyContinue'
-$interop = @'
-using System;
-using System.Runtime.InteropServices;
-public static class AoeLobbyClick {
-  private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-  [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
-  [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
-  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
-  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hWnd);
-  [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr hWnd, out Rect rect);
-  [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr hWnd, ref Point point);
-  [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
-
-  public static IntPtr Find(uint targetProcessId) {
-    IntPtr found = IntPtr.Zero;
-    EnumWindows((window, _) => {
-      uint processId;
-      GetWindowThreadProcessId(window, out processId);
-      if (processId == targetProcessId && IsWindowVisible(window)) {
-        found = window;
-        return false;
-      }
-      return true;
-    }, IntPtr.Zero);
-    return found;
-  }
-
-  public static string Resolve(IntPtr window, int designX, int designY) {
-    Rect rect;
-    if (!GetClientRect(window, out rect)) return "CLIENT_RECT_FAILED";
-    int width = rect.Right - rect.Left;
-    int height = rect.Bottom - rect.Top;
-    if (width <= 0 || height <= 0) return "INVALID_CLIENT_SIZE";
-    int x = (int)Math.Round(designX * width / 3840.0);
-    int y = (int)Math.Round(designY * height / 2160.0);
-    Point screen = new Point { X = x, Y = y };
-    if (!ClientToScreen(window, ref screen)) return "SCREEN_POINT_FAILED";
-    return String.Format("TARGET|Client={0}x{1}|Point={2},{3}|Screen={4},{5}", width, height, x, y, screen.X, screen.Y);
-  }
-
-  public static string Click(IntPtr window, int designX, int designY) {
-    Rect rect;
-    if (!GetClientRect(window, out rect)) return "CLIENT_RECT_FAILED";
-    int width = rect.Right - rect.Left;
-    int height = rect.Bottom - rect.Top;
-    int x = (int)Math.Round(designX * width / 3840.0);
-    int y = (int)Math.Round(designY * height / 2160.0);
-    IntPtr position = new IntPtr((y << 16) | (x & 0xffff));
-    bool moved = PostMessage(window, 0x0200, IntPtr.Zero, position);
-    bool down = PostMessage(window, 0x0201, new IntPtr(1), position);
-    bool up = PostMessage(window, 0x0202, IntPtr.Zero, position);
-    return String.Format("{0}|Client={1}x{2}|Point={3},{4}", moved && down && up ? "SENT" : "POST_FAILED", width, height, x, y);
-  }
-}
-'@
-Add-Type -TypeDefinition $interop
-$game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
-if (-not $game) { Write-Output 'PROCESS_NOT_FOUND'; exit 2 }
-$window = [AoeLobbyClick]::Find([uint32]$game.Id)
-if ($window -eq [IntPtr]::Zero) { Write-Output 'WINDOW_NOT_FOUND'; exit 3 }
-$designX = __DESIGN_X__
-$designY = __DESIGN_Y__
-Write-Output ([AoeLobbyClick]::Resolve($window, $designX, $designY))
-[Console]::Out.Flush()
-Start-Sleep -Milliseconds 1200
-$result = [AoeLobbyClick]::Click($window, $designX, $designY)
 Write-Output $result
 if ($result.StartsWith('SENT')) { exit 0 }
 exit 4
@@ -1334,49 +1230,6 @@ if ($game) { Write-Output $game.CloseMainWindow() }
       console.error("[AoE2 automation] Host Game mouse test failed", error);
       return { sent: false, message: "The Host Game mouse test failed." };
     }
-  });
-
-  ipcMain.handle("game:click-lobby-control", async (event, target: LobbyMouseTarget) => {
-    if (process.platform !== "win32") {
-      return { sent: false, message: "Lobby mouse automation is only supported on Windows." };
-    }
-    const controls: Record<LobbyMouseTarget, { x: number; y: number; label: string }> = {
-      ready: { x: 1390, y: 1735, label: "READY" },
-      start: { x: 1975, y: 1735, label: "START" }
-    };
-    const control = controls[target];
-    if (!control) return { sent: false, message: "Unknown lobby mouse target." };
-
-    const script = lobbyControlMouseClickScript
-      .replace("__DESIGN_X__", String(control.x))
-      .replace("__DESIGN_Y__", String(control.y));
-    const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-    const clickProcess = spawn("powershell.exe", [
-      "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-    ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
-    let output = "";
-    let markerShown = false;
-    clickProcess.stdout?.on("data", (chunk: Buffer) => {
-      output += chunk.toString();
-      if (!markerShown) {
-        const screenPoint = output.match(/SCREEN=(-?\d+),(-?\d+)/);
-        if (screenPoint) {
-          markerShown = true;
-          showClickMarker(Number(screenPoint[1]), Number(screenPoint[2]), control.label);
-        }
-      }
-    });
-    clickProcess.stderr?.on("data", (chunk: Buffer) => { output += chunk.toString(); });
-    const exitCode = await new Promise<number | null>((resolve) => clickProcess.once("close", resolve));
-    const sent = exitCode === 0 && /(^|\r?\n)SENT\|/.test(output);
-    const compactOutput = output.trim().replace(/\r?\n/g, "|");
-    const logMessage = `MOUSE|Target=${control.label}|DesignPoint=${control.x},${control.y}|${compactOutput}`;
-    console.info(`[AoE2 automation] ${logMessage}`);
-    if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", logMessage);
-    return {
-      sent,
-      message: sent ? `Clicked ${control.label}.` : `${control.label} could not be clicked.`
-    };
   });
 
   ipcMain.handle("game:calibrate-host-game-mouse-click", async (event) => {

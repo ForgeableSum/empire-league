@@ -36,7 +36,6 @@ export interface GameInputTestResult {
 }
 
 export type GameInputKey = "TAB" | "ENTER";
-export type LobbyMouseTarget = "ready" | "start";
 
 export interface GameInputResult {
   sent: boolean;
