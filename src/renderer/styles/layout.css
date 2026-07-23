@@ -203,13 +203,56 @@
 }
 
 .main-area {
+  position: relative;
   min-width: 0;
   padding: clamp(22px, calc(22px + (100vw - 1440px) * 0.035), 60px) 22px 22px;
   overflow: auto;
   scrollbar-color: #4a4239 #141312;
 }
 
+.main-area::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: clamp(320px, 34vw, 520px);
+  background-image: var(--page-art);
+  background-position: center 28%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0.2;
+  filter: saturate(0.58) contrast(0.82) brightness(0.68);
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.9) 32%, rgba(0, 0, 0, 0.38) 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.9) 32%, rgba(0, 0, 0, 0.38) 72%, transparent 100%);
+}
+
+.main-area.page-home {
+  --page-art: url("../assets/battles/profile.jpg");
+}
+
+.main-area.page-play {
+  --page-art: url("../assets/battles/play.jpg");
+}
+
+.main-area.page-match-history {
+  --page-art: url("../assets/battles/match-history.jpg");
+}
+
+.main-area.page-leaderboard {
+  --page-art: url("../assets/battles/leaderboard.jpg");
+}
+
+.main-area.page-profile {
+  --page-art: url("../assets/battles/home.jpg");
+}
+
+.main-area.page-settings {
+  --page-art: url("../assets/battles/settings.jpg");
+}
+
 .content-shell {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 1400px;
   min-height: 100%;

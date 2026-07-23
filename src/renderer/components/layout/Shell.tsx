@@ -57,7 +57,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </aside>
-      <main className="main-area">
+      <main className={`main-area page-${page}`}>
         <div className="content-shell">
           <header className="topbar">
             <div>
