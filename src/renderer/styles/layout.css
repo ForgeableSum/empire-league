@@ -205,7 +205,7 @@
 .main-area {
   position: relative;
   min-width: 0;
-  padding: 200px 22px 22px;
+  padding: 160px 22px 22px;
   overflow: auto;
   scrollbar-color: #4a4239 #141312;
 }
@@ -216,7 +216,7 @@
   inset: 0 0 auto;
   height: clamp(320px, 34vw, 520px);
   background-image: var(--page-art);
-  background-position: center 28%;
+  background-position: center calc(28% - 150px);
   background-size: cover;
   background-repeat: no-repeat;
   opacity: 0.3;
