@@ -1508,12 +1508,15 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
+    hideMainWindowGameCover();
     setMainWindowGameCoverClickThrough(true);
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
+      const focused = focusAoe2NativeWindow(process.pid);
+      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=True|Focused=${focused}|Foreground=${isAoe2NativeWindowForeground(process.pid)}`);
       const clickStep = async (
         name: string,
         x: number,
@@ -1579,12 +1582,17 @@ export function registerGameHandlers(): void {
     if (process.platform !== "win32" || !["guest-ready", "host-ready", "start"].includes(target)) {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
+    hideMainWindowGameCover();
     setMainWindowGameCoverClickThrough(true);
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
+      const focused = focusAoe2NativeWindow(process.pid);
+      const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=True|Focused=${focused}|Foreground=${isAoe2NativeWindowForeground(process.pid)}`;
+      console.info(`[AoE2 automation] ${visibilityMessage}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", visibilityMessage);
       const actionName = target === "guest-ready"
         ? "guestReady"
         : target === "host-ready"
@@ -1724,10 +1732,13 @@ export function registerGameHandlers(): void {
     if (!/^aoe2de:\/\/0\/\d+$/.test(lobbyId)) {
       return { opened: false };
     }
+    hideMainWindowGameCover();
     await shell.openExternal(lobbyId);
     // Steam hands the URI to AoE2 asynchronously. Give the game time to
     // navigate to and finish joining the lobby before Ready automation.
     await delay(lobbySetupTiming.guestJoinMs);
+    const process = await detectAoe2Process();
+    if (process.pid) focusAoe2NativeWindow(process.pid);
     return { opened: true };
   });
 }
