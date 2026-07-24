@@ -22,10 +22,10 @@ import {
 } from "../window.js";
 import {
   closeAoe2NativeWindow,
-  clickAoe2DesignPoint,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
   isAoe2NativeWindowForeground,
+  postAoe2DesignClick,
   sendAoe2Enter
 } from "../aoe2Win32Automation.js";
 
@@ -1511,7 +1511,7 @@ export function registerGameHandlers(): void {
         return { sent: false, message: "The AoE2 process was not found." };
       }
       const clickStep = async (name: string, x: number, y: number) => {
-        const result = await clickAoe2DesignPoint(process.pid as number, x, y);
+        const result = await postAoe2DesignClick(process.pid as number, x, y);
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
         if (!result.sent) throw new Error(`${name} could not be clicked.`);
       };
@@ -1569,7 +1569,7 @@ export function registerGameHandlers(): void {
         : target === "host-ready"
           ? { label: "Host Ready", x: 1388, y: 1979 }
           : { label: "Start Game", x: 1974, y: 1979 };
-      const result = await clickAoe2DesignPoint(process.pid, action.x, action.y);
+      const result = await postAoe2DesignClick(process.pid, action.x, action.y);
       const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.x},${action.y}|${result.detail}`;
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);

@@ -227,23 +227,54 @@ export async function clickAoe2DesignPoint(
   };
 }
 
+export async function postAoe2DesignClick(
+  processId: number,
+  designX: number,
+  designY: number
+): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+
+  const rect = {} as Rect;
+  if (!GetClientRect!(window, rect)) return { sent: false, detail: "CLIENT_RECT_FAILED" };
+  const width = rect.right - rect.left;
+  const height = rect.bottom - rect.top;
+  if (width <= 0 || height <= 0) return { sent: false, detail: "INVALID_CLIENT_SIZE" };
+
+  const x = Math.round(designX * width / 3840);
+  const y = Math.round(designY * height / 2160);
+  const position = (y << 16) | (x & 0xffff);
+  const moved = Boolean(PostMessageW!(window, 0x0200, 0, position));
+  const down = Boolean(PostMessageW!(window, 0x0201, 1, position));
+  await delay(40);
+  const up = Boolean(PostMessageW!(window, 0x0202, 0, position));
+
+  return {
+    sent: moved && down && up,
+    detail: [
+      moved && down && up ? "SENT" : "POST_FAILED",
+      "Mode=WindowMessage",
+      `Client=${width}x${height}`,
+      `ClientPoint=${x},${y}`,
+      `DesignPoint=${designX},${designY}`,
+      `Move=${moved}`,
+      `Down=${down}`,
+      `Up=${up}`
+    ].join("|")
+  };
+}
+
 export async function sendAoe2Enter(processId: number): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
-  const focused = Boolean(SetForegroundWindow!(window));
-  const blocked = Boolean(BlockInput!(true));
-  try {
-    Sleep!(25);
-    KeybdEvent!(0x0d, 0x1c, 0, 0);
-    Sleep!(15);
-    KeybdEvent!(0x0d, 0x1c, 0x0002, 0);
-  } finally {
-    if (blocked) BlockInput!(false);
-  }
+  const down = Boolean(PostMessageW!(window, 0x0100, 0x0d, 0x001c0001));
+  await delay(15);
+  const up = Boolean(PostMessageW!(window, 0x0101, 0x0d, -1071906815));
   return {
-    sent: true,
-    detail: `SENT|Mode=KoffiForegroundPhysicalKey|Key=ENTER|Focused=${focused}|InputBlocked=${blocked}`
+    sent: down && up,
+    detail: `${down && up ? "SENT" : "POST_FAILED"}|Mode=WindowMessage|Key=ENTER|Down=${down}|Up=${up}`
   };
 }
 
