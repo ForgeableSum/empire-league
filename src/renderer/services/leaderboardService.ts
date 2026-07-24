@@ -1,5 +1,11 @@
-import { mockLeaderboard } from "../mocks/mockLeaderboard";
+import type { PlayerProfile } from "../../shared/contracts/players";
+import { authorizationHeaders, matchmakerUrl } from "./authService";
 
 export const leaderboardService = {
-  list: () => Promise.resolve(mockLeaderboard)
+  async list(): Promise<PlayerProfile[]> {
+    const response = await fetch(`${matchmakerUrl}/leaderboard`, { headers: authorizationHeaders() });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error ?? `Leaderboard request failed (${response.status}).`);
+    return body.players;
+  }
 };

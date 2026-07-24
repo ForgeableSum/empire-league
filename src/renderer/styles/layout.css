@@ -511,7 +511,7 @@
 }
 
 .leader-row {
-  grid-template-columns: 70px 1.2fr 58px 78px 110px 62px 70px 80px 70px 100px;
+  grid-template-columns: 70px 1.2fr 68px 78px 110px 62px 70px 80px 70px;
 }
 
 .leader-row.current {
@@ -646,6 +646,15 @@
   line-height: 1.1;
   letter-spacing: 0.01em;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.85);
+}
+
+.leader-row.leader-header {
+  min-height: 30px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .map-check {

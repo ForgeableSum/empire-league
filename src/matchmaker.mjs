@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   database,
   checkDatabase,
+  getLeaderboard,
   getPlayerMatchHistory,
   linkPlayerAoeProfile,
   recordMatchResultConflict,
@@ -297,6 +298,10 @@ const server = createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/matches/history") {
       return send(response, 200, { matches: await getPlayerMatchHistory(authenticatedPlayer.id) });
+    }
+
+    if (request.method === "GET" && url.pathname === "/leaderboard") {
+      return send(response, 200, { players: await getLeaderboard() });
     }
 
     if (request.method === "POST" && url.pathname === "/queue") {

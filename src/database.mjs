@@ -251,3 +251,49 @@ export async function getPlayerMatchHistory(playerId) {
     queueType: row.queue_type
   }));
 }
+
+export async function getLeaderboard(limit = 500) {
+  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 500));
+  const [rows] = await database.query(
+    `SELECT id, aoe_profile_id, steam_id, display_name, avatar_url, country_code,
+            rating, peak_rating, wins, losses, streak,
+            RANK() OVER (ORDER BY rating DESC) AS ladder_rank
+     FROM players
+     ORDER BY rating DESC, wins DESC, display_name ASC
+     LIMIT ${safeLimit}`
+  );
+  return rows.map((row) => {
+    const wins = Number(row.wins);
+    const losses = Number(row.losses);
+    const games = wins + losses;
+    return {
+      id: row.id,
+      aoeProfileId: row.aoe_profile_id ? Number(row.aoe_profile_id) : 0,
+      steamId: row.steam_id ?? undefined,
+      displayName: row.display_name,
+      avatarUrl: row.avatar_url ?? undefined,
+      countryCode: row.country_code ?? undefined,
+      rating: Number(row.rating),
+      peakRating: Number(row.peak_rating),
+      rank: Number(row.ladder_rank),
+      division: divisionForRating(Number(row.rating)),
+      wins,
+      losses,
+      winRate: games ? Number(((wins / games) * 100).toFixed(1)) : 0,
+      streak: Number(row.streak),
+      preferredMaps: [],
+      favoriteCivilizations: [],
+      recentForm: []
+    };
+  });
+}
+
+function divisionForRating(rating) {
+  if (rating >= 2200) return "Grandmaster";
+  if (rating >= 1800) return "Master";
+  if (rating >= 1400) return "Diamond";
+  if (rating >= 1200) return "Platinum";
+  if (rating >= 1000) return "Gold";
+  if (rating >= 800) return "Silver";
+  return "Bronze";
+}
