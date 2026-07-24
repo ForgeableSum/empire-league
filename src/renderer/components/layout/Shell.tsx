@@ -39,7 +39,7 @@ export function Shell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="sidebar-meta">
-          <div><span>Season</span><strong>Summer Anvil</strong></div>
+          <div><span>Season</span><strong>1</strong></div>
           <div><span>Online</span><strong>8,314 players</strong></div>
           <div><span>Connection</span><strong className={`status-${state.connectionStatus}`}>{state.connectionStatus}</strong></div>
           <div><span>Version</span><strong>0.1.0</strong></div>
