@@ -29,7 +29,7 @@ export const aoe2UiManifest = {
     createLobby: {
       label: "Create Lobby",
       point: [1688, 1614],
-      activation: "clickEnter",
+      activation: "click",
       settleMs: 8_000
     },
     hostInvite: {

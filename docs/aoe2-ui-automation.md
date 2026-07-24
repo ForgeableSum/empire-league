@@ -9,7 +9,7 @@ The checked-in source of truth is `src/shared/aoe2UiManifest.ts`. Coordinates ar
 - `click`: post `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, and `WM_LBUTTONUP`.
 - `clickEnter`: post the click above, wait for AoE2 to select the widget, then post Enter.
 
-Legacy buttons such as Multiplayer, Host Game, Create Lobby, and Confirm Civilization require `clickEnter`. Lobby controls such as Ready and Start, browser tabs, civilization tiles, and Copy respond to `click`.
+Legacy buttons such as Multiplayer, Host Game, and Confirm Civilization require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, civilization tiles, and Copy respond to `click`.
 
 Click timing is action-specific. General navigation uses a 100 ms hover and
 120 ms press. Ready and Start use a 250 ms hover and 250 ms press because the
@@ -19,7 +19,7 @@ lobby message loop can be throttled while AoE2 is in the background.
 
 1. `multiplayer` (`clickEnter`)
 2. `hostGame` (`clickEnter`)
-3. `createLobby` (`clickEnter`)
+3. `createLobby` (`click`)
 4. Apply the standard lobby settings.
 5. Optionally select a civilization:
    1. `hostCivilization` (`click`)
