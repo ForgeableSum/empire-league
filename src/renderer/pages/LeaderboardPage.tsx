@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   formatDivisionForRating,
   formatDivisionRatingRange,
@@ -39,6 +39,11 @@ export function LeaderboardPage() {
       }),
     [division, players, query]
   );
+  const divisionOptions = [
+    { value: "all", label: "All" },
+    ...(["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster"] satisfies Division[])
+      .map((item) => ({ value: item, label: `${item} (${formatDivisionRatingRange(item)})` }))
+  ];
 
   return (
     <section className="stack">
@@ -47,15 +52,7 @@ export function LeaderboardPage() {
           Search
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Player name" />
         </label>
-        <label>
-          Division
-          <select value={division} onChange={(event) => setDivision(event.target.value)}>
-            <option value="all">All</option>
-            {(["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster"] satisfies Division[]).map((item) => (
-              <option value={item} key={item}>{item} ({formatDivisionRatingRange(item)})</option>
-            ))}
-          </select>
-        </label>
+        <DivisionDropdown options={divisionOptions} value={division} onChange={setDivision} />
       </div>
       <div className="panel">
         <div className="leaderboard-table">
@@ -89,5 +86,44 @@ export function LeaderboardPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+function DivisionDropdown({
+  options,
+  value,
+  onChange
+}: {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const dropdownRef = useRef<HTMLDetailsElement>(null);
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? "All";
+
+  return (
+    <div className="division-field">
+      <span>Division</span>
+      <details className="themed-select" ref={dropdownRef}>
+        <summary>{selectedLabel}</summary>
+        <div className="themed-select-options">
+          {options.map((option) => (
+            <button
+              aria-selected={option.value === value}
+              className={option.value === value ? "selected" : undefined}
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                dropdownRef.current?.removeAttribute("open");
+              }}
+              role="option"
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </details>
+    </div>
   );
 }

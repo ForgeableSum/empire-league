@@ -519,6 +519,76 @@
   color: var(--text);
 }
 
+.division-field {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 260px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.themed-select {
+  position: relative;
+}
+
+.themed-select summary {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  padding: 9px 36px 9px 13px;
+  border: 1px solid #8c642e;
+  background: #181715;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.themed-select summary::-webkit-details-marker {
+  display: none;
+}
+
+.themed-select summary::after {
+  content: "▾";
+  position: absolute;
+  right: 13px;
+  color: var(--accent-2);
+}
+
+.themed-select[open] summary {
+  border-color: var(--accent-2);
+}
+
+.themed-select-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  display: grid;
+  padding: 4px;
+  border: 1px solid #8c642e;
+  background: var(--bg-2);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.55);
+}
+
+.themed-select-options button {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.themed-select-options button:hover,
+.themed-select-options button:focus-visible,
+.themed-select-options button.selected {
+  outline: none;
+  background: var(--accent);
+  color: var(--bg);
+}
+
 .tag-list {
   display: flex;
   flex-wrap: wrap;
@@ -638,10 +708,10 @@
 .map-name {
   position: absolute;
   inset: auto 0 0;
-  padding: 28px 12px 11px;
+  padding: 18px 8px 7px;
   color: #fff;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.88));
-  font-size: clamp(18px, 1.35vw, 24px);
+  font-size: clamp(10px, 0.75vw, 13px);
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: 0.01em;
@@ -1317,6 +1387,16 @@
 .toggle-row input {
   width: 18px;
   min-height: 18px;
+}
+
+.settings-group input[type="checkbox"],
+.settings-group input[type="range"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.settings-group input[type="range"] {
+  width: 100%;
 }
 
 .profile-card {

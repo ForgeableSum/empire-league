@@ -105,6 +105,19 @@ select {
   cursor: pointer;
 }
 
+select option {
+  background-color: var(--bg-2);
+  color: var(--text);
+}
+
+select option:hover,
+select option:focus,
+select option:checked {
+  background-color: var(--accent);
+  background-image: linear-gradient(var(--accent), var(--accent));
+  color: var(--bg);
+}
+
 label {
   display: grid;
   gap: 6px;
