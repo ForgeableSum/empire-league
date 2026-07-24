@@ -33,6 +33,16 @@ export function MatchHistoryPage() {
       </div>
       <div className="panel">
         <div className="table history-table">
+          <div className="table-row table-header">
+            <strong>Result</strong>
+            <span>Opponent</span>
+            <span>Map</span>
+            <span>Civilizations</span>
+            <span>Rating</span>
+            <span>Duration</span>
+            <span>Date</span>
+            <span>Status</span>
+          </div>
           {matches.map((match) => (
             <button className="table-row clickable" type="button" key={match.id}>
               <strong className={match.outcome}>{match.outcome}</strong>

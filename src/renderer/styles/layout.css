@@ -718,13 +718,23 @@
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.85);
 }
 
-.leader-row.leader-header {
+.leader-row.leader-header,
+.table-row.table-header {
   min-height: 30px;
   background: transparent;
   color: var(--faint);
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.table-row.table-header {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.recent-matches-table .table-row {
+  grid-template-columns: 100px 1.2fr 1fr 1fr 76px 80px;
 }
 
 .map-check {

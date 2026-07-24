@@ -33,7 +33,15 @@ export function HomePage() {
           <h2>Recent Matches</h2>
           {recentForm.length > 0 && <FormPips form={recentForm} />}
         </div>
-        <div className="table">
+        <div className="table recent-matches-table">
+          <div className="table-row table-header">
+            <strong>Result</strong>
+            <span>Opponent</span>
+            <span>Map</span>
+            <span>Civilization</span>
+            <span>Rating</span>
+            <span>Duration</span>
+          </div>
           {state.recentMatches.slice(0, 7).map((match) => (
             <div className="table-row" key={match.id}>
               <strong className={match.outcome}>{match.outcome === "win" ? "Victory" : match.outcome === "loss" ? "Defeat" : "No Contest"}</strong>
