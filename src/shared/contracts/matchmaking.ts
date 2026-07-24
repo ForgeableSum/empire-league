@@ -84,6 +84,13 @@ export interface MapDefinition {
   thumbnailUrl: string;
 }
 
+export type CivilizationMode = "pick" | "random" | "mirror" | "full-random";
+
+export interface CivilizationPreference {
+  mode: CivilizationMode;
+  civilization?: string;
+}
+
 export interface QueueDefinition {
   id: string;
   name: string;
@@ -92,6 +99,7 @@ export interface QueueDefinition {
   ruleset: "Random Map" | "Empire Wars";
   mapPool: MapDefinition[];
   favoriteMapId?: string;
+  civilizationPreference?: CivilizationPreference;
   ranked: boolean;
   estimatedWaitSeconds: number;
   playersSearching: number;

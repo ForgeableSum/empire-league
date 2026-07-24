@@ -801,6 +801,13 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.play-config-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  gap: 16px;
+  align-items: start;
+}
+
 .queue-mode-picker {
   display: flex;
   justify-content: flex-start;
@@ -820,6 +827,172 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.play-preferences {
+  gap: 18px;
+}
+
+.preference-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.preference-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.preference-heading h3 {
+  margin: 4px 0 0;
+}
+
+.preference-heading label {
+  width: 210px;
+}
+
+.civilization-modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.civilization-mode {
+  min-height: 86px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  background: #1a1816;
+  color: var(--muted);
+  text-align: left;
+}
+
+.civilization-mode:hover,
+.civilization-mode.active {
+  border-color: var(--accent);
+  color: var(--accent-2);
+  background: rgba(197, 141, 69, 0.12);
+}
+
+.civilization-mode span,
+.civilization-mode small {
+  display: block;
+}
+
+.civilization-mode strong {
+  color: var(--text);
+}
+
+.civilization-mode small {
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.selection-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.map-preference-section .map-pool {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+
+.map-preference-section .map-thumbnail-wrap {
+  aspect-ratio: 2.25 / 1;
+}
+
+.map-preference-section .map-name {
+  padding: 15px 7px 6px;
+}
+
+.queue-action-panel {
+  position: sticky;
+  top: 0;
+  min-height: 390px;
+  padding: 24px;
+  gap: 18px;
+}
+
+.queue-action-panel h2 {
+  margin: -8px 0 0;
+}
+
+.queue-action-panel .queue-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.queue-action-panel .queue-stats span {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 14px 8px;
+  border: 1px solid var(--line-soft);
+  text-align: center;
+}
+
+.queue-action-panel .queue-stats strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.queue-summary {
+  display: grid;
+  border-block: 1px solid var(--line-soft);
+}
+
+.queue-summary div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.queue-summary div + div {
+  border-top: 1px solid var(--line-soft);
+}
+
+.queue-summary span,
+.queue-action-note {
+  color: var(--muted);
+}
+
+.queue-summary strong {
+  text-align: right;
+}
+
+.queue-search-button {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #f0c06c;
+  color: #17120c;
+  background: linear-gradient(#e6b65f, #bd7931);
+  font-size: 17px;
+  font-weight: 900;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.35), 0 8px 22px rgba(0, 0, 0, 0.3);
+}
+
+.queue-search-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.queue-action-note {
+  margin: -6px 0 0;
+  font-size: 12px;
+  text-align: center;
 }
 
 .primary-queue {
@@ -1656,6 +1829,18 @@
 @media (max-width: 999px) {
   .queue-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .play-config-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .queue-action-panel {
+    position: static;
+  }
+
+  .civilization-modes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .search-waiting-layout {
