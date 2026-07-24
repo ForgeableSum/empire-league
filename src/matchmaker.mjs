@@ -99,25 +99,28 @@ function validateReplayReport(match, actingTicket, replay) {
   return null;
 }
 
-function comparableReplayReport(replay) {
-  return JSON.stringify({
-    // File size is retained for auditing but deliberately excluded here:
-    // perspective-specific view records can make valid client files differ.
-    build: replay.build,
-    recordedAt: replay.recordedAt,
-    durationMs: replay.durationMs,
-    players: [...replay.players]
-      .map((player) => ({
-        profileId: player.profileId,
-        playerNumber: player.playerNumber,
-        civilizationId: player.civilizationId,
-        resigned: player.resigned
-      }))
-      .sort((left, right) => left.profileId - right.profileId),
-    winnerProfileId: replay.winnerProfileId,
-    loserProfileId: replay.loserProfileId,
-    reason: replay.reason
-  });
+function replayReportsAgree(left, right) {
+  // File size and recording timestamp are local replay artifacts. Duration can
+  // also vary slightly between clients depending on when each file is flushed.
+  const durationToleranceMs = 5_000;
+  if (Math.abs(left.durationMs - right.durationMs) > durationToleranceMs) return false;
+  if (left.build !== right.build
+    || left.winnerProfileId !== right.winnerProfileId
+    || left.loserProfileId !== right.loserProfileId
+    || left.reason !== right.reason) {
+    return false;
+  }
+
+  const normalizePlayers = (players) => [...players]
+    .map((player) => ({
+      profileId: player.profileId,
+      playerNumber: player.playerNumber,
+      civilizationId: player.civilizationId,
+      resigned: player.resigned
+    }))
+    .sort((a, b) => a.profileId - b.profileId);
+
+  return JSON.stringify(normalizePlayers(left.players)) === JSON.stringify(normalizePlayers(right.players));
 }
 
 function resultForTicket(match, ticket, replay, ratings) {
@@ -483,7 +486,7 @@ const server = createServer(async (request, response) => {
 
       const hostReplay = match.resultReports.get(match.host.id);
       const guestReplay = match.resultReports.get(match.guest.id);
-      if (comparableReplayReport(hostReplay) !== comparableReplayReport(guestReplay)) {
+      if (!replayReportsAgree(hostReplay, guestReplay)) {
         await resolveContestedResult(match, {
           reason: "client replay metadata did not agree",
           hostReport: hostReplay,
