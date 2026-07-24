@@ -4,6 +4,7 @@ import {
   database,
   checkDatabase,
   getPlayerMatchHistory,
+  linkPlayerAoeProfile,
   recordMatchResultConflict,
   recordVerifiedMatchResult,
   saveMatch,
@@ -46,7 +47,33 @@ function emit(ticket, event) {
   ticket.events.push({ sequence: ++eventSequence, event });
 }
 
-function validateReplayReport(match, replay) {
+async function reconcileReplayPlayerLinks(match, actingTicket, replay) {
+  if (!replay || !Array.isArray(replay.players)) return;
+  const reportedProfileIds = new Set(replay.players.map((player) => player.profileId));
+  if (!actingTicket.player.aoeProfileId
+    && Number.isSafeInteger(replay.reporterProfileId)
+    && reportedProfileIds.has(replay.reporterProfileId)) {
+    const linked = await linkPlayerAoeProfile(actingTicket.player.id, replay.reporterProfileId);
+    if (linked) {
+      actingTicket.player.aoeProfileId = replay.reporterProfileId;
+      console.log(`[matchmaker] Linked ${actingTicket.player.id} to AoE profile ${replay.reporterProfileId} from replay perspective`);
+    }
+  }
+
+  const matchTickets = [match.host, match.guest];
+  const missing = matchTickets.filter((ticket) => !ticket.player.aoeProfileId);
+  const known = new Set(matchTickets.map((ticket) => ticket.player.aoeProfileId).filter(Boolean));
+  const remaining = [...reportedProfileIds].filter((profileId) => !known.has(profileId));
+  if (missing.length === 1 && remaining.length === 1 && [...known].every((profileId) => reportedProfileIds.has(profileId))) {
+    const linked = await linkPlayerAoeProfile(missing[0].player.id, remaining[0]);
+    if (linked) {
+      missing[0].player.aoeProfileId = remaining[0];
+      console.log(`[matchmaker] Linked ${missing[0].player.id} to AoE profile ${remaining[0]} by replay elimination`);
+    }
+  }
+}
+
+function validateReplayReport(match, actingTicket, replay) {
   if (!replay || !Number.isInteger(replay.winnerProfileId) || !Number.isInteger(replay.loserProfileId)) {
     return "winner and loser profile IDs are required";
   }
@@ -55,6 +82,9 @@ function validateReplayReport(match, replay) {
   }
   if (!Number.isSafeInteger(replay.fileSizeBytes) || replay.fileSizeBytes <= 0) {
     return "replay file size is required";
+  }
+  if (replay.reporterProfileId !== actingTicket.player.aoeProfileId) {
+    return "replay perspective does not match the reporting player";
   }
   const expected = [match.host.player.aoeProfileId, match.guest.player.aoeProfileId].sort((a, b) => a - b);
   const reported = replay.players.map((player) => player.profileId).sort((a, b) => a - b);
@@ -422,7 +452,17 @@ const server = createServer(async (request, response) => {
         }, [body.ticketId], { [body.ticketId]: { error: body.error.trim().slice(0, 500) } });
         return send(response, 200, { accepted: true, resolved: true, contested: true });
       }
-      const invalid = validateReplayReport(match, body.replay);
+      try {
+        await reconcileReplayPlayerLinks(match, actingTicket, body.replay);
+      } catch (error) {
+        await resolveContestedResult(match, {
+          reason: error instanceof Error ? error.message : "replay identity linking failed",
+          reportingTicketId: body.ticketId,
+          report: body.replay
+        }, [body.ticketId], { [body.ticketId]: body.replay });
+        return send(response, 200, { accepted: true, resolved: true, contested: true });
+      }
+      const invalid = validateReplayReport(match, actingTicket, body.replay);
       if (invalid) {
         await resolveContestedResult(match, {
           reason: invalid,

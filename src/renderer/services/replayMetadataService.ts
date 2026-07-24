@@ -20,7 +20,8 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
   const losingPlayers = summary.teams.filter((team) => !team.winner).flatMap((team) => team.players);
   const winner = winningPlayers.find((player) => player.profile_id > 0);
   const loser = losingPlayers.find((player) => player.profile_id > 0);
-  if (players.length !== 2 || !winner || !loser) {
+  const reporter = players.find((player) => player.playerNumber === summary.header.replay.rec_player);
+  if (players.length !== 2 || !winner || !loser || !reporter) {
     throw new Error("The replay does not contain one identifiable winner and loser.");
   }
   return {
@@ -29,6 +30,7 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
     recordedAt: summary.header.timestamp,
     durationMs: summary.duration,
     players: players.sort((left, right) => left.profileId - right.profileId),
+    reporterProfileId: reporter.profileId,
     winnerProfileId: winner.profile_id,
     loserProfileId: loser.profile_id,
     reason: loser.resigned ? "resignation" : "defeat"

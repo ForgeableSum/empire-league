@@ -26,6 +26,7 @@ export interface ReplayMatchMetadata {
   recordedAt: number;
   durationMs: number;
   players: ReplayPlayerMetadata[];
+  reporterProfileId: number;
   winnerProfileId: number;
   loserProfileId: number;
   reason: "resignation" | "defeat" | "disconnect" | "unknown";

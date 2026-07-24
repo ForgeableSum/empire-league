@@ -88,6 +88,24 @@ export async function updateMatchStatus(matchId, status) {
   await database.execute("UPDATE matches SET status = ? WHERE id = ?", [status, matchId]);
 }
 
+export async function linkPlayerAoeProfile(playerId, profileId) {
+  const [existing] = await database.execute(
+    "SELECT id FROM players WHERE aoe_profile_id = ? AND id <> ?",
+    [profileId, playerId]
+  );
+  if (existing.length > 0) throw new Error("That AoE profile is already linked to another player.");
+  const [result] = await database.execute(
+    "UPDATE players SET aoe_profile_id = ? WHERE id = ? AND aoe_profile_id IS NULL",
+    [profileId, playerId]
+  );
+  if (result.affectedRows === 1) return true;
+  const [players] = await database.execute(
+    "SELECT aoe_profile_id FROM players WHERE id = ?",
+    [playerId]
+  );
+  return Number(players[0]?.aoe_profile_id) === profileId;
+}
+
 export async function recordVerifiedMatchResult(match, winnerProfileId) {
   const connection = await database.getConnection();
   try {
