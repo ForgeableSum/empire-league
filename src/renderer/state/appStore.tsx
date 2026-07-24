@@ -161,7 +161,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }).catch((error) => {
       if (cancelled) return;
-      setAuthError(error instanceof Error ? error.message : "Could not restore the Steam session.");
+      setAuthError(authErrorMessage(error, "Could not restore the Steam session."));
       setAuthStatus("unauthenticated");
     });
     return () => { cancelled = true; };
@@ -176,7 +176,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState((previous) => ({ ...previous, currentUser: player, recentMatches }));
       setAuthStatus("authenticated");
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Steam sign-in failed.");
+      setAuthError(authErrorMessage(error, "Steam sign-in failed."));
       setAuthStatus("unauthenticated");
     }
   }
@@ -806,6 +806,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+function authErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof TypeError && /failed to fetch|networkerror|network request failed/i.test(error.message)) {
+    return "Error: Matchmaking server is down.";
+  }
+  return error instanceof Error ? error.message : fallback;
 }
 
 async function waitForAoe2Window(timeoutMs: number): Promise<boolean> {
