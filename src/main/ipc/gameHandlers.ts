@@ -1368,16 +1368,29 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
-    setMainWindowGameCoverClickThrough(true);
+    setMainWindowGameCoverClickThrough(false);
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
       const clickStep = async (name: string, x: number, y: number) => {
-        const result = await clickAoe2DesignPoint(process.pid as number, x, y);
-        emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
-        if (!result.sent) throw new Error(`${name} could not be clicked.`);
+        setMainWindowGameCoverClickThrough(true);
+        try {
+          const result = await clickAoe2DesignPoint(process.pid as number, x, y);
+          emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
+          if (!result.sent) throw new Error(`${name} could not be clicked.`);
+        } finally {
+          setMainWindowGameCoverClickThrough(false);
+        }
+      };
+      const sendEnterStep = async () => {
+        setMainWindowGameCoverClickThrough(true);
+        try {
+          return await sendAoe2Enter(process.pid as number);
+        } finally {
+          setMainWindowGameCoverClickThrough(false);
+        }
       };
 
       await clickStep("Multiplayer", 734, 1085);
@@ -1388,7 +1401,7 @@ export function registerGameHandlers(): void {
       await delay(lobbySetupTiming.lobbyCreationMs);
       await clickStep("Reset Settings", 3101, 1976);
       await delay(lobbySetupTiming.resetFocusMs);
-      const reset = await sendAoe2Enter(process.pid);
+      const reset = await sendEnterStep();
       emitLog(`STEP|Confirm Reset|Key=ENTER|${reset.detail}`);
       if (!reset.sent) throw new Error("The reset confirmation could not be sent.");
       await delay(lobbySetupTiming.resetConfirmationMs);
@@ -1422,7 +1435,7 @@ export function registerGameHandlers(): void {
     if (process.platform !== "win32" || !["guest-ready", "host-ready", "start"].includes(target)) {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
-    setMainWindowGameCoverClickThrough(true);
+    setMainWindowGameCoverClickThrough(false);
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
@@ -1433,7 +1446,13 @@ export function registerGameHandlers(): void {
         : target === "host-ready"
           ? { label: "Host Ready", x: 1388, y: 1979 }
           : { label: "Start Game", x: 1974, y: 1979 };
-      const result = await clickAoe2DesignPoint(process.pid, action.x, action.y);
+      setMainWindowGameCoverClickThrough(true);
+      let result;
+      try {
+        result = await clickAoe2DesignPoint(process.pid, action.x, action.y);
+      } finally {
+        setMainWindowGameCoverClickThrough(false);
+      }
       const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.x},${action.y}|${result.detail}`;
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);

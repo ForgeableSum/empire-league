@@ -214,6 +214,9 @@ export function setMainWindowGameCoverClickThrough(clickThrough: boolean): void 
   if (clickThrough) {
     window.setAlwaysOnTop(true, "screen-saver");
     if (mainCoverManuallyVisible) window.showInactive();
+  } else if (mainCoverManuallyVisible) {
+    window.show();
+    window.focus();
   }
   window.setIgnoreMouseEvents(clickThrough);
 }
