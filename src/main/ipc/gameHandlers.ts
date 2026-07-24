@@ -25,7 +25,6 @@ import {
   showMainWindowAsGameCover
 } from "../window.js";
 import {
-  clickCurrentCursorForAoe2,
   closeAoe2NativeWindow,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
@@ -33,7 +32,8 @@ import {
   postAoe2DesignClick,
   readAoe2HostSetupState,
   readAoe2ReadyState,
-  sendAoe2Enter
+  sendAoe2Enter,
+  sendAoe2Tab
 } from "../aoe2Win32Automation.js";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -1528,10 +1528,6 @@ export function registerGameHandlers(): void {
       }
       emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=True|Focused=${focused}|Foreground=${foreground}`);
       if (!foreground) throw new Error("AoE2 did not become the foreground window.");
-      const activationClick = await clickCurrentCursorForAoe2(process.pid);
-      emitLog(`ACTIVATION_CLICK|${activationClick.detail}`);
-      if (!activationClick.sent) throw new Error("The AoE2 activation click could not be sent safely.");
-      await delay(250);
       const clickStep = async (
         name: string,
         x: number,
@@ -1551,11 +1547,23 @@ export function registerGameHandlers(): void {
         const action = aoe2UiManifest.actions[actionName];
         const expectedState = expectedHostState[actionName];
         const performAction = async (attempt: number) => {
+          if (actionName === "multiplayer") {
+            for (let index = 1; index <= 6; index += 1) {
+              const tab = await sendAoe2Tab(process.pid as number);
+              emitLog(`STEP|${action.label}|Attempt=${attempt}|Tab=${index}/6|${tab.detail}`);
+              if (!tab.sent) throw new Error(`${action.label} could not be selected with Tab.`);
+              await delay(100);
+            }
+            const enter = await sendAoe2Enter(process.pid as number);
+            emitLog(`STEP|${action.label}|Attempt=${attempt}|Key=ENTER|${enter.detail}`);
+            if (!enter.sent) throw new Error(`${action.label} could not be activated.`);
+            await delay(action.settleMs);
+            return;
+          }
           await clickStep(action.label, action.point[0], action.point[1], {
             hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
             holdMs: "holdMs" in action ? action.holdMs : undefined,
-            synchronous: action.activation === "click" || actionName === "multiplayer",
-            primeMove: actionName === "multiplayer"
+            synchronous: action.activation === "click"
           });
           if (action.activation === "clickEnter") {
             await delay(500);

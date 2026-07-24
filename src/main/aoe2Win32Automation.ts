@@ -134,53 +134,6 @@ export function isAoe2NativeWindowForeground(processId: number): boolean {
   return Boolean(window) && sameHandle(GetForegroundWindow!(), window);
 }
 
-export async function clickCurrentCursorForAoe2(processId: number): Promise<NativeInputResult> {
-  ensureWindowsBindings();
-  const window = findLargestProcessWindow(processId);
-  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
-  const foreground = GetForegroundWindow!() as NativeHandle;
-  if (!sameHandle(foreground, window)) {
-    return {
-      sent: false,
-      detail: `FOREGROUND_NOT_READY|Window=${String(window)}|Foreground=${String(foreground)}`
-    };
-  }
-
-  const point = {} as Point;
-  if (!GetCursorPos!(point)) return { sent: false, detail: "CURSOR_POSITION_FAILED" };
-  const pointedWindow = GetAncestor!(WindowFromPoint!(point), 2) as NativeHandle;
-  const pointedPid = processIdForWindow(pointedWindow);
-  if (pointedPid !== processId) {
-    return {
-      sent: false,
-      detail: [
-        "CURSOR_NOT_OVER_AOE2",
-        `CursorPoint=${point.x},${point.y}`,
-        `PointedWindow=${String(pointedWindow)}`,
-        `PointedPid=${pointedPid}`,
-        `TargetWindow=${String(window)}`,
-        `TargetPid=${processId}`
-      ].join("|")
-    };
-  }
-
-  MouseEvent!(0x0002, 0, 0, 0, 0);
-  await delay(25);
-  MouseEvent!(0x0004, 0, 0, 0, 0);
-  return {
-    sent: true,
-    detail: [
-      "SENT",
-      "Mode=SystemMouseClickNoMove",
-      `CursorPoint=${point.x},${point.y}`,
-      `PointedWindow=${String(pointedWindow)}`,
-      `PointedPid=${pointedPid}`,
-      `TargetWindow=${String(window)}`,
-      `Foreground=${String(foreground)}`
-    ].join("|")
-  };
-}
-
 export function closeAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
@@ -407,6 +360,35 @@ export async function sendAoe2Enter(processId: number): Promise<NativeInputResul
       `DownMs=${down.elapsedMs}`,
       `Up=${up.dispatched}`,
       `UpMs=${up.elapsedMs}`
+    ].join("|")
+  };
+}
+
+export async function sendAoe2Tab(processId: number): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+  const down = sendWindowMessage(window, 0x0100, 0x09, 0x000f0001);
+  await delay(15);
+  const up = sendWindowMessage(window, 0x0101, 0x09, -1072758783);
+  const sent = down.dispatched && up.dispatched;
+  return {
+    sent,
+    detail: [
+      sent ? "SENT" : "SEND_FAILED",
+      "Mode=WindowMessageSync",
+      "Key=TAB",
+      `Window=${String(window)}`,
+      `Down=${down.dispatched}`,
+      `DownMs=${down.elapsedMs}`,
+      `DownResult=${down.result}`,
+      `DownError=${down.error}`,
+      `DownForeground=${down.foreground}`,
+      `Up=${up.dispatched}`,
+      `UpMs=${up.elapsedMs}`,
+      `UpResult=${up.result}`,
+      `UpError=${up.error}`,
+      `UpForeground=${up.foreground}`
     ].join("|")
   };
 }
