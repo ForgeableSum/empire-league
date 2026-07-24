@@ -249,9 +249,9 @@ export async function postAoe2DesignClick(
   // AoE2 can throttle its message loop while it is in the background. Give
   // the UI a frame to establish the hovered widget before posting the press,
   // then hold the press long enough to cross another throttled frame.
-  await delay(100);
+  await delay(250);
   const down = Boolean(PostMessageW!(window, 0x0201, 1, position));
-  await delay(120);
+  await delay(250);
   const up = Boolean(PostMessageW!(window, 0x0202, 0, position));
 
   return {
