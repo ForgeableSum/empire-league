@@ -253,7 +253,7 @@ export async function postAoe2DesignClick(
   processId: number,
   designX: number,
   designY: number,
-  timing: { hoverMs?: number; holdMs?: number; synchronous?: boolean } = {}
+  timing: { hoverMs?: number; holdMs?: number; synchronous?: boolean; primeMove?: boolean } = {}
 ): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
@@ -271,6 +271,7 @@ export async function postAoe2DesignClick(
   const hoverMs = timing.hoverMs ?? 100;
   const holdMs = timing.holdMs ?? 120;
   const synchronous = timing.synchronous ?? false;
+  const primeMove = timing.primeMove ?? false;
   const windowRect = {} as Rect;
   const hasWindowRect = Boolean(GetWindowRect!(window, windowRect));
   const ownerPid: [number | null] = [null];
@@ -278,8 +279,10 @@ export async function postAoe2DesignClick(
   const foregroundAtStart = GetForegroundWindow!() as NativeHandle;
   const pixelBefore = readWindowRgb(window, x, y);
   const send = synchronous
-    ? (message: number, wParam: number) => sendMouseMessage(window, message, wParam, position)
-    : (message: number, wParam: number) => postMouseMessage(window, message, wParam, position);
+    ? (message: number, wParam: number, messagePosition = position) => sendMouseMessage(window, message, wParam, messagePosition)
+    : (message: number, wParam: number, messagePosition = position) => postMouseMessage(window, message, wParam, messagePosition);
+  const prime = primeMove ? send(0x0200, 0, (1 << 16) | 1) : null;
+  if (prime) await delay(50);
   const moved = send(0x0200, 0);
   await delay(hoverMs);
   const pixelAfterMove = readWindowRgb(window, x, y);
@@ -300,6 +303,7 @@ export async function postAoe2DesignClick(
       `DesignPoint=${designX},${designY}`,
       `HoverMs=${hoverMs}`,
       `HoldMs=${holdMs}`,
+      `PrimeMove=${primeMove}`,
       `Window=${String(window)}`,
       `TargetPid=${processId}`,
       `WindowPid=${ownerPid[0] ?? 0}`,
@@ -313,6 +317,11 @@ export async function postAoe2DesignClick(
       `ClientRect=${rect.left},${rect.top},${rect.right},${rect.bottom}`,
       `WindowRect=${hasWindowRect ? `${windowRect.left},${windowRect.top},${windowRect.right},${windowRect.bottom}` : "FAILED"}`,
       `TargetRGB=${formatRgb(pixelBefore)},${formatRgb(pixelAfterMove)},${formatRgb(pixelAfterDown)},${formatRgb(pixelAfterUp)}`,
+      `Prime=${prime?.dispatched ?? "skipped"}`,
+      `PrimeMs=${prime?.elapsedMs ?? 0}`,
+      `PrimeResult=${prime?.result ?? "skipped"}`,
+      `PrimeError=${prime?.error ?? 0}`,
+      `PrimeForeground=${prime?.foreground ?? "skipped"}`,
       `Move=${moved.dispatched}`,
       `MoveMs=${moved.elapsedMs}`,
       `MoveResult=${moved.result}`,

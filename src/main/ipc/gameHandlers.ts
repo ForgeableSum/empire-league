@@ -1531,7 +1531,7 @@ export function registerGameHandlers(): void {
         name: string,
         x: number,
         y: number,
-        timing?: { hoverMs?: number; holdMs?: number; synchronous?: boolean }
+        timing?: { hoverMs?: number; holdMs?: number; synchronous?: boolean; primeMove?: boolean }
       ) => {
         const result = await postAoe2DesignClick(process.pid as number, x, y, timing);
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
@@ -1549,7 +1549,8 @@ export function registerGameHandlers(): void {
           await clickStep(action.label, action.point[0], action.point[1], {
             hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
             holdMs: "holdMs" in action ? action.holdMs : undefined,
-            synchronous: action.activation === "click" || actionName === "multiplayer"
+            synchronous: action.activation === "click" || actionName === "multiplayer",
+            primeMove: actionName === "multiplayer"
           });
           if (action.activation === "clickEnter") {
             await delay(500);
