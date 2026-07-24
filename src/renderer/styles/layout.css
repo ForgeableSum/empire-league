@@ -819,7 +819,7 @@
 
 .shorts-player {
   position: relative;
-  min-height: 0;
+  min-height: 420px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -833,6 +833,127 @@
   display: block;
   border: 0;
   background: #090909;
+}
+
+.shorts-launch {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 420px;
+  padding: 28px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(140, 100, 46, 0.68);
+  border-radius: 0;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 50% 42%, rgba(197, 141, 69, 0.2), transparent 29%),
+    linear-gradient(135deg, rgba(226, 181, 109, 0.08), transparent 35% 65%, rgba(120, 76, 24, 0.14)),
+    #11100e;
+  box-shadow:
+    inset 0 0 55px rgba(0, 0, 0, 0.68),
+    inset 0 0 0 1px rgba(245, 211, 139, 0.08);
+}
+
+.shorts-launch::before,
+.shorts-launch::after {
+  position: absolute;
+  width: 92px;
+  height: 92px;
+  border-color: rgba(197, 141, 69, 0.35);
+  content: "";
+  transition: border-color 160ms ease;
+}
+
+.shorts-launch::before {
+  top: 18px;
+  left: 18px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+}
+
+.shorts-launch::after {
+  right: 18px;
+  bottom: 18px;
+  border-right: 1px solid;
+  border-bottom: 1px solid;
+}
+
+.shorts-launch-emblem {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 6px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #a97432;
+  color: #f1cf86;
+  background:
+    linear-gradient(145deg, rgba(245, 211, 139, 0.12), transparent),
+    #29231c;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 3px #17130f,
+    inset 0 0 0 4px rgba(226, 181, 109, 0.25);
+  transform: rotate(45deg);
+  transition: color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.shorts-launch-emblem svg {
+  margin-left: 3px;
+  transform: rotate(-45deg);
+}
+
+.shorts-launch strong {
+  color: #f1dbad;
+  font-family: "Domine", serif;
+  font-size: 19px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.shorts-launch small {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shorts-launch-rule {
+  width: 110px;
+  height: 1px;
+  margin-top: 6px;
+  background: linear-gradient(90deg, transparent, #b47c37, transparent);
+}
+
+.shorts-launch:hover:not(:disabled) {
+  border-color: #c58d45;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(197, 141, 69, 0.27), transparent 31%),
+    linear-gradient(135deg, rgba(226, 181, 109, 0.11), transparent 35% 65%, rgba(120, 76, 24, 0.18)),
+    #151310;
+}
+
+.shorts-launch:hover:not(:disabled)::before,
+.shorts-launch:hover:not(:disabled)::after {
+  border-color: rgba(240, 203, 125, 0.7);
+}
+
+.shorts-launch:hover:not(:disabled) .shorts-launch-emblem {
+  border-color: #f0cb7d;
+  color: #ffe0a0;
+  transform: rotate(45deg) scale(1.06);
+}
+
+.shorts-launch:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: -4px;
+}
+
+.shorts-launch:disabled {
+  cursor: wait;
 }
 
 .shorts-stage:fullscreen {

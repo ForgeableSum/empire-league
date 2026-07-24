@@ -62,6 +62,7 @@ export function YouTubeShorts() {
   const [duration, setDuration] = useState(0);
   const [playerReady, setPlayerReady] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
   const playerFrame = useRef<HTMLIFrameElement>(null);
   const playerContainer = useRef<HTMLDivElement>(null);
   const player = useRef<YouTubePlayer | null>(null);
@@ -101,7 +102,7 @@ export function YouTubeShorts() {
   }, [shorts.length]);
 
   useEffect(() => {
-    if (!current || !playerFrame.current) return;
+    if (!hasStarted || !current || !playerFrame.current) return;
     let disposed = false;
     setPlayerReady(false);
     setIsPlaying(false);
@@ -146,7 +147,7 @@ export function YouTubeShorts() {
       player.current?.destroy();
       player.current = null;
     };
-  }, [current?.id, showNext]);
+  }, [current?.id, hasStarted, showNext]);
 
   useEffect(() => {
     if (!playerReady) return;
@@ -194,6 +195,11 @@ export function YouTubeShorts() {
     showNext();
   };
 
+  const startShorts = () => {
+    autoplayNext.current = true;
+    setHasStarted(true);
+  };
+
   return (
     <aside className="shorts-panel" aria-label="Age of Empires II YouTube Shorts">
       <div className="shorts-heading">
@@ -202,7 +208,22 @@ export function YouTubeShorts() {
       </div>
       <div className="shorts-stage" ref={playerContainer}>
         <div className="shorts-player">
-          {current ? (
+          {!hasStarted ? (
+            <button
+              className="shorts-launch"
+              type="button"
+              onClick={startShorts}
+              disabled={!current}
+              aria-label="Load and play the first Age of Empires II short"
+            >
+              <span className="shorts-launch-emblem" aria-hidden="true">
+                <Play size={30} fill="currentColor" />
+              </span>
+              <strong>{current ? "Watch AoE2 Shorts" : "Gathering AoE2 Shorts…"}</strong>
+              <small>{current ? "Click to load the first short" : "Preparing the battlefield"}</small>
+              <span className="shorts-launch-rule" aria-hidden="true" />
+            </button>
+          ) : current ? (
             <iframe
               ref={playerFrame}
               key={current.id}
@@ -216,10 +237,10 @@ export function YouTubeShorts() {
           ) : (
             <div className="shorts-loading">Finding AoE2 shorts…</div>
           )}
-          <button className="shorts-fullscreen-arrow previous" type="button" onClick={playPrevious} disabled={shorts.length < 2} aria-label="Previous short">
+          <button className="shorts-fullscreen-arrow previous" type="button" onClick={playPrevious} disabled={!hasStarted || shorts.length < 2} aria-label="Previous short">
             <ChevronLeft size={34} />
           </button>
-          <button className="shorts-fullscreen-arrow next" type="button" onClick={playNext} disabled={shorts.length < 2} aria-label="Next short">
+          <button className="shorts-fullscreen-arrow next" type="button" onClick={playNext} disabled={!hasStarted || shorts.length < 2} aria-label="Next short">
             <ChevronRight size={34} />
           </button>
         </div>
@@ -243,20 +264,20 @@ export function YouTubeShorts() {
           <button type="button" onClick={toggleMute} disabled={!playerReady} aria-label={isMuted ? "Unmute short" : "Mute short"}>
             {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
           </button>
-          <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit fullscreen" : "View short fullscreen"}>
+          <button type="button" onClick={toggleFullscreen} disabled={!hasStarted} aria-label={isFullscreen ? "Exit fullscreen" : "View short fullscreen"}>
             {isFullscreen ? <Minimize size={18} /> : <Expand size={18} />}
           </button>
         </div>
       </div>
       <div className="shorts-footer">
-        <button type="button" onClick={playPrevious} disabled={shorts.length < 2} aria-label="Previous short">
+        <button type="button" onClick={playPrevious} disabled={!hasStarted || shorts.length < 2} aria-label="Previous short">
           <ChevronLeft size={22} />
         </button>
         <div>
           <strong>{current?.title ?? "Loading"}</strong>
           <span>{current?.channelTitle ?? "YouTube"}</span>
         </div>
-        <button type="button" onClick={playNext} disabled={shorts.length < 2} aria-label="Next short">
+        <button type="button" onClick={playNext} disabled={!hasStarted || shorts.length < 2} aria-label="Next short">
           <ChevronRight size={22} />
         </button>
       </div>
