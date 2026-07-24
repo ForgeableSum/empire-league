@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, ipcMain, screen, shell } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
@@ -12,6 +13,7 @@ import {
 import {
   closeTestOverlay,
   hideMainWindowGameCover,
+  focusMainWindow,
   restoreMainWindowFromGameCover,
   setMouseCoordinateOverlayEnabled,
   setMainWindowGameCoverClickThrough,
@@ -37,6 +39,122 @@ let tabTestProcess: ChildProcess | undefined;
 let offscreenWindowProcess: ChildProcess | undefined;
 let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
+let replayEndPoller: NodeJS.Timeout | undefined;
+let replayDetectionGeneration = 0;
+
+const replayPollIntervalMs = 1500;
+const replayStableForMs = 3_000;
+
+interface ReplaySnapshot {
+  path: string;
+  size: number;
+  modifiedMs: number;
+}
+
+async function findReplayFiles(configuredFolder?: string): Promise<ReplaySnapshot[]> {
+  const roots: string[] = [];
+  if (configuredFolder?.trim()) {
+    roots.push(configuredFolder.trim());
+  } else {
+    const profilesRoot = join(homedir(), "Games", "Age of Empires 2 DE");
+    try {
+      for (const entry of await readdir(profilesRoot, { withFileTypes: true })) {
+        if (entry.isDirectory()) roots.push(join(profilesRoot, entry.name, "savegame"));
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  const files: ReplaySnapshot[] = [];
+  for (const root of roots) {
+    try {
+      for (const entry of await readdir(root, { withFileTypes: true })) {
+        if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".aoe2record")) continue;
+        const path = join(root, entry.name);
+        const details = await stat(path);
+        files.push({ path, size: details.size, modifiedMs: details.mtimeMs });
+      }
+    } catch {
+      // A profile may not have a savegame directory yet.
+    }
+  }
+  return files;
+}
+
+function stopReplayEndDetection(): void {
+  replayDetectionGeneration += 1;
+  if (replayEndPoller) clearTimeout(replayEndPoller);
+  replayEndPoller = undefined;
+}
+
+async function startReplayEndDetection(
+  window: BrowserWindow,
+  configuredFolder?: string
+): Promise<{ started: boolean; message?: string }> {
+  stopReplayEndDetection();
+  const generation = replayDetectionGeneration;
+  const startedAt = Date.now();
+  let active: ReplaySnapshot | undefined;
+  let lastGrowthAt = startedAt;
+  let observedGrowth = false;
+
+  const initialFiles = await findReplayFiles(configuredFolder);
+  if (configuredFolder?.trim() && initialFiles.length === 0) {
+    try {
+      const details = await stat(configuredFolder.trim());
+      if (!details.isDirectory()) {
+        return { started: false, message: "The configured replay folder is not a directory." };
+      }
+    } catch {
+      return { started: false, message: "The configured replay folder could not be found." };
+    }
+  }
+
+  const poll = async (): Promise<void> => {
+    if (generation !== replayDetectionGeneration || window.isDestroyed()) return;
+    try {
+      const files = await findReplayFiles(configuredFolder);
+      if (!active) {
+        // Detection starts shortly after Start Game. Accept a recently-created file,
+        // but require a subsequent write before it can ever signal completion.
+        active = files
+          .filter((file) => file.modifiedMs >= startedAt - 60_000)
+          .sort((left, right) => right.modifiedMs - left.modifiedMs)[0];
+        if (active) lastGrowthAt = Date.now();
+      } else {
+        const newest = files
+          .filter((file) => file.modifiedMs >= startedAt - 60_000)
+          .sort((left, right) => right.modifiedMs - left.modifiedMs)[0];
+        if (!observedGrowth && newest && newest.path !== active.path && newest.modifiedMs > active.modifiedMs) {
+          active = newest;
+          lastGrowthAt = Date.now();
+        }
+        const current = files.find((file) => file.path === active?.path);
+        if (current && (current.size !== active.size || current.modifiedMs !== active.modifiedMs)) {
+          observedGrowth = true;
+          lastGrowthAt = Date.now();
+          active = current;
+        } else if (current && observedGrowth && Date.now() - lastGrowthAt >= replayStableForMs) {
+          stopReplayEndDetection();
+          focusMainWindow(window);
+          if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
+          console.info(`[AoE2 replay] END|File=${current.path}|StableMs=${replayStableForMs}`);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("[AoE2 replay] Poll failed", error);
+    }
+    if (generation === replayDetectionGeneration) {
+      replayEndPoller = setTimeout(() => void poll(), replayPollIntervalMs);
+    }
+  };
+
+  console.info(`[AoE2 replay] WATCH|Folder=${configuredFolder?.trim() || "auto"}|StartedAt=${new Date(startedAt).toISOString()}`);
+  void poll();
+  return { started: true };
+}
 
 async function detectAoe2Process(): Promise<{ running: boolean; pid?: number; windowReady?: boolean }> {
   if (process.platform !== "win32") return { running: false, windowReady: false };
@@ -1167,6 +1285,7 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 
 export function registerGameHandlers(): void {
   app.on("before-quit", (event) => {
+    stopReplayEndDetection();
     if ((!ownedAoe2Pid && !launchRequested) || quittingAfterGameCleanup) return;
     event.preventDefault();
     quittingAfterGameCleanup = true;
@@ -1264,6 +1383,16 @@ export function registerGameHandlers(): void {
     }
     restoreAoe2Window(true, true);
     return { focused: true };
+  });
+
+  ipcMain.handle("game:start-replay-end-detection", async (event, replayFolder?: string) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return { started: false, message: "The Empire League window was not found." };
+    return startReplayEndDetection(window, replayFolder);
+  });
+
+  ipcMain.handle("game:stop-replay-end-detection", async () => {
+    stopReplayEndDetection();
   });
 
   ipcMain.handle("game:start-mouse-test-mode", async () => {

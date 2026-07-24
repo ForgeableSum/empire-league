@@ -197,6 +197,23 @@ export function restoreMainWindowFromGameCover(): void {
   window.webContents.send("overlay:mouse-test-active", false);
 }
 
+export function focusMainWindow(window: BrowserWindow): void {
+  if (window.isDestroyed()) return;
+  if (coveredMainWindow === window && coveredMainWindowState) {
+    restoreMainWindowFromGameCover();
+    return;
+  }
+  taskbarMinimizedWindow = null;
+  if (window.isMinimized()) window.restore();
+  window.setKiosk(true);
+  window.setAlwaysOnTop(true, "screen-saver");
+  window.show();
+  window.focus();
+  setTimeout(() => {
+    if (!window.isDestroyed()) window.setAlwaysOnTop(false);
+  }, 750);
+}
+
 export function setMainWindowGameCoverOverAoe(active: boolean): void {
   const window = coveredMainWindow;
   if (!window || window.isDestroyed()) return;

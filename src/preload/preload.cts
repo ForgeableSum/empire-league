@@ -7,6 +7,13 @@ const electronApi: ElectronGameApi = {
   closeAoe2: (force) => ipcRenderer.invoke("game:close", force),
   launchAoe2: () => ipcRenderer.invoke("game:launch"),
   focusAoe2: () => ipcRenderer.invoke("game:focus"),
+  startReplayEndDetection: (replayFolder) => ipcRenderer.invoke("game:start-replay-end-detection", replayFolder),
+  stopReplayEndDetection: () => ipcRenderer.invoke("game:stop-replay-end-detection"),
+  onReplayEnded: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, filePath: string) => listener(filePath);
+    ipcRenderer.on("game:replay-ended", handler);
+    return () => ipcRenderer.removeListener("game:replay-ended", handler);
+  },
   showAoe2FullscreenAfterDelay: () => ipcRenderer.invoke("game:show-fullscreen-after-delay"),
   startAoe2TabTest: () => ipcRenderer.invoke("game:start-tab-test"),
   stopAoe2TabTest: () => ipcRenderer.invoke("game:stop-tab-test"),

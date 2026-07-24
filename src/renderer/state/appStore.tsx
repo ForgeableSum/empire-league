@@ -124,6 +124,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const configRef = useRef(state.mockConfig);
   configRef.current = state.mockConfig;
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const ticketRef = useRef<string | null>(null);
   const queueJoinInFlightRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -131,6 +133,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const matchedSessionRef = useRef<MatchSession | null>(null);
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const startupPromptResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
+  const replayResultInFlightRef = useRef(false);
   const [startupGamePrompt, setStartupGamePrompt] = useState<AppContextValue["startupGamePrompt"]>(null);
   const [roomSetupFailed, setRoomSetupFailed] = useState(false);
   const [roomSetupFailureReason, setRoomSetupFailureReason] = useState<AppContextValue["roomSetupFailureReason"]>(null);
@@ -167,6 +170,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!window.electronApi) return;
+    return window.electronApi.onReplayEnded((filePath) => {
+      const match = stateRef.current.activeMatch;
+      if (!match || replayResultInFlightRef.current) return;
+      replayResultInFlightRef.current = true;
+      setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
+      log(`Replay stopped updating: ${filePath}`);
+      void services.results.waitForVerifiedResult(match.id)
+        .then(completeResult)
+        .catch((error) => {
+          replayResultInFlightRef.current = false;
+          setError({
+            code: "RESULT_VERIFICATION_FAILED",
+            message: "The result service could not verify this match.",
+            technicalDetails: error instanceof Error ? error.message : undefined,
+            retryable: true
+          });
+        });
+    });
+  }, [services]);
 
   async function signInWithSteam(): Promise<void> {
     setAuthStatus("authenticating");
@@ -719,6 +744,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function openAoe2(): Promise<void> {
+    if (window.electronApi && state.settings.replayDetection) {
+      const detection = await window.electronApi.startReplayEndDetection(state.settings.replayFolder || undefined);
+      if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
+    }
     await services.game.focusGame();
     setState((previous) => ({ ...previous, queueStatus: "in_game", gameStatus: "in_match" }));
     log("Focused AoE2");
@@ -747,6 +776,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   function completeResult(result: MatchResult): void {
     queueJoinInFlightRef.current = false;
+    replayResultInFlightRef.current = false;
+    void window.electronApi?.stopReplayEndDetection();
     setState((previous) => {
       const activeMatch = previous.activeMatch ? { ...previous.activeMatch, result, status: "completed" as const } : null;
       const updatedUser = {
@@ -793,6 +824,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   async function revealAoe2AfterGameStart(): Promise<void> {
     if (!window.electronApi) return;
     await delayForLobbyInput(lobbySetupTiming.revealAfterStartMs);
+    if (stateRef.current.settings.replayDetection) {
+      const settings = stateRef.current.settings;
+      const detection = await window.electronApi.startReplayEndDetection(settings.replayFolder || undefined);
+      if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
+    }
     await window.electronApi.focusAoe2();
     setState((previous) => ({
       ...previous,
