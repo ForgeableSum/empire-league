@@ -40,6 +40,8 @@ export interface ElectronGameApi {
   loadAuthToken(): Promise<string | null>;
   storeAuthToken(token: string): Promise<void>;
   clearAuthToken(): Promise<void>;
+  alertMatchFound(opponentName: string): Promise<void>;
+  stopMatchFoundAlert(): Promise<void>;
   minimizeToTaskbar(): Promise<void>;
   quitApp(): Promise<void>;
   restartApp(): Promise<void>;

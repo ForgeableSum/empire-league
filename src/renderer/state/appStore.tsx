@@ -128,6 +128,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const queueJoinInFlightRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const lobbyAutomationRef = useRef<Promise<GameInputResult> | null>(null);
+  const matchedSessionRef = useRef<MatchSession | null>(null);
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const startupPromptResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const [startupGamePrompt, setStartupGamePrompt] = useState<AppContextValue["startupGamePrompt"]>(null);
@@ -415,31 +416,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setState((previous) => ({ ...previous, searchRange: { min: event.minRating, max: event.maxRating } }));
         }
         if (event.type === "match_found") {
-          startRoomSetupWatchdog();
           const matchedSession = {
             ...event.match,
             player: state.currentUser,
-            status: event.match.role === "host" ? "creating_lobby" as const : "waiting_for_opponent" as const
+            status: "match_found" as const
           };
+          matchedSessionRef.current = matchedSession;
           setState((previous) => ({
             ...previous,
-            queueStatus: event.match.role === "host" ? "creating_lobby" : "waiting_for_opponent",
-            roomSetupStartedAt: new Date().toISOString(),
-            roomSetupMilestone: event.match.role === "host"
-              ? "Setting up lobby room"
-              : "Waiting for the host to set up the lobby room",
+            queueStatus: "match_found",
+            roomSetupStartedAt: null,
+            roomSetupMilestone: null,
             activeMatch: matchedSession
           }));
           log(`Match found: ${event.match.id}`);
           notify("Match found", "warning");
-          if (event.match.role === "host" && window.electronApi) {
+          if (state.settings.matchNotifications) {
+            void window.electronApi?.alertMatchFound(event.match.opponent.displayName);
+          }
+        }
+        if (event.type === "opponent_accepted") {
+          const matchedSession = matchedSessionRef.current;
+          if (!matchedSession) return;
+          void window.electronApi?.stopMatchFoundAlert();
+          startRoomSetupWatchdog();
+          const acceptedSession = {
+            ...matchedSession,
+            acceptedByPlayer: true,
+            acceptedByOpponent: true,
+            status: event.role === "host" ? "creating_lobby" as const : "waiting_for_opponent" as const
+          };
+          matchedSessionRef.current = acceptedSession;
+          setState((previous) => ({
+            ...previous,
+            queueStatus: event.role === "host" ? "creating_lobby" : "waiting_for_opponent",
+            roomSetupStartedAt: new Date().toISOString(),
+            roomSetupMilestone: event.role === "host"
+              ? "Setting up lobby room"
+              : "Waiting for the host to set up the lobby room",
+            activeMatch: acceptedSession
+          }));
+          log("Both players accepted");
+          if (event.role === "host" && window.electronApi) {
             log("Assigned as host; waiting for AoE2 lobby automation to settle");
             lobbyAutomationRef.current = delayForLobbyInput(lobbySetupTiming.hostLobbyAutomationSettleMs)
               .then(() => {
                 log("Starting AoE2 lobby automation");
                 return window.electronApi!.runAoe2CreateLobbySequence();
               });
-            void prepareLobby(matchedSession);
+            void prepareLobby(acceptedSession);
           }
         }
         if (event.type === "lobby_ready") {
@@ -525,15 +550,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           void revealAoe2AfterGameStart();
         }
         if (event.type === "error") {
-          if (event.code === "MATCH_DECLINED") {
+          if (event.code === "MATCH_DECLINED" || event.code === "MATCH_EXPIRED") {
+            void window.electronApi?.stopMatchFoundAlert();
             clearRoomSetupWatchdog();
             queueJoinInFlightRef.current = false;
+            matchedSessionRef.current = null;
             if (ticketRef.current) {
               void services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
               ticketRef.current = null;
             }
             unsubscribeRef.current?.();
             unsubscribeRef.current = null;
+            setState((previous) => ({
+              ...previous,
+              queueStatus: "cancelled",
+              activeMatch: null
+            }));
           }
           setError({ code: event.code, message: event.message, retryable: true });
         }
@@ -570,6 +602,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function acceptMatch(): Promise<void> {
     if (!state.activeMatch) return;
+    void window.electronApi?.stopMatchFoundAlert();
     try {
       setState((previous) => ({
         ...previous,
@@ -591,6 +624,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function declineMatch(): Promise<void> {
+    void window.electronApi?.stopMatchFoundAlert();
     clearRoomSetupWatchdog();
     if (state.activeMatch) {
       await services.matchmaking.declineMatch(state.activeMatch.id);

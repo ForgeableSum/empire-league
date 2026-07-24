@@ -182,7 +182,7 @@ export class MockMatchmakingService implements MatchmakingService {
           opponent,
           acceptedByPlayer: false,
           acceptedByOpponent: false,
-          acceptDeadline: new Date(Date.now() + 20000).toISOString(),
+          acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
           selectedMap: selectedMaps[Math.floor(Math.random() * selectedMaps.length)],
           createdAt: new Date().toISOString()
         };

@@ -3,6 +3,7 @@ import { createMainWindow } from "./window.js";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers.js";
 
 registerIpcHandlers();
+app.setAppUserModelId("community.empireleague.aoe2");
 
 app.whenReady().then(() => {
   nativeTheme.themeSource = "dark";

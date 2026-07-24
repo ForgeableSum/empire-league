@@ -92,7 +92,18 @@ async function tryMatch(ticket) {
   await saveMatch(match);
   emit(host, { type: "match_found", match: sessionFor(match, host) });
   emit(guest, { type: "match_found", match: sessionFor(match, guest) });
+  match.expirationTimer = setTimeout(() => {
+    void expireMatch(match);
+  }, Math.max(0, new Date(match.acceptDeadline).getTime() - Date.now()));
   console.log(`[matchmaker] ${match.id}: host=${host.player.displayName}, guest=${guest.player.displayName}`);
+}
+
+async function expireMatch(match) {
+  if (match.accepted.size === 2 || !matches.has(match.id)) return;
+  matches.delete(match.id);
+  await updateMatchStatus(match.id, "cancelled");
+  emit(match.host, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
+  emit(match.guest, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
 }
 
 const server = createServer(async (request, response) => {
@@ -211,8 +222,13 @@ const server = createServer(async (request, response) => {
       if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id || ![match.host.id, match.guest.id].includes(body.ticketId)) {
         return send(response, 404, { error: "match or ticket not found" });
       }
+      if (Date.now() >= new Date(match.acceptDeadline).getTime()) {
+        await expireMatch(match);
+        return send(response, 410, { error: "match acceptance window expired" });
+      }
       match.accepted.add(body.ticketId);
       if (match.accepted.size === 2) {
+        clearTimeout(match.expirationTimer);
         await updateMatchStatus(match.id, "accepted");
         emit(match.host, { type: "opponent_accepted", matchId: match.id, role: "host" });
         emit(match.guest, { type: "opponent_accepted", matchId: match.id, role: "guest" });
@@ -228,6 +244,8 @@ const server = createServer(async (request, response) => {
       if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id || ![match.host.id, match.guest.id].includes(body.ticketId)) {
         return send(response, 404, { error: "match or ticket not found" });
       }
+      clearTimeout(match.expirationTimer);
+      matches.delete(match.id);
       await updateMatchStatus(match.id, "declined");
       emit(match.host, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
       emit(match.guest, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
