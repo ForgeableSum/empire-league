@@ -32,8 +32,11 @@ const EnumWindowsProc = koffi.proto("bool __stdcall EL_EnumWindowsProc(HWND hwnd
 
 const EnumWindows = user32?.func("bool __stdcall EnumWindows(EL_EnumWindowsProc *callback, intptr_t lParam)");
 const GetWindowThreadProcessId = user32?.func("uint32_t __stdcall GetWindowThreadProcessId(HWND hwnd, _Out_ uint32_t *pid)");
+const IsWindow = user32?.func("bool __stdcall IsWindow(HWND hwnd)");
 const IsWindowVisible = user32?.func("bool __stdcall IsWindowVisible(HWND hwnd)");
+const IsWindowEnabled = user32?.func("bool __stdcall IsWindowEnabled(HWND hwnd)");
 const GetClientRect = user32?.func("bool __stdcall GetClientRect(HWND hwnd, _Out_ EL_RECT *rect)");
+const GetWindowRect = user32?.func("bool __stdcall GetWindowRect(HWND hwnd, _Out_ EL_RECT *rect)");
 const ClientToScreen = user32?.func("bool __stdcall ClientToScreen(HWND hwnd, _Inout_ EL_POINT *point)");
 const ShowWindow = user32?.func("bool __stdcall ShowWindow(HWND hwnd, int32_t command)");
 const SetWindowPos = user32?.func("bool __stdcall SetWindowPos(HWND hwnd, HWND insertAfter, int32_t x, int32_t y, int32_t width, int32_t height, uint32_t flags)");
@@ -57,6 +60,8 @@ const SendMessageTimeoutW = user32?.func(
 );
 const GetPixel = gdi32?.func("uint32_t __stdcall GetPixel(HANDLE dc, int32_t x, int32_t y)");
 const Sleep = kernel32?.func("void __stdcall Sleep(uint32_t milliseconds)");
+const GetLastError = kernel32?.func("uint32_t __stdcall GetLastError()");
+const SetLastError = kernel32?.func("void __stdcall SetLastError(uint32_t errorCode)");
 const CreateToolhelp32Snapshot = kernel32?.func("HANDLE __stdcall CreateToolhelp32Snapshot(uint32_t flags, uint32_t processId)");
 const Process32FirstW = kernel32?.func("bool __stdcall Process32FirstW(HANDLE snapshot, _Inout_ EL_PROCESSENTRY32W *entry)");
 const Process32NextW = kernel32?.func("bool __stdcall Process32NextW(HANDLE snapshot, _Inout_ EL_PROCESSENTRY32W *entry)");
@@ -266,14 +271,23 @@ export async function postAoe2DesignClick(
   const hoverMs = timing.hoverMs ?? 100;
   const holdMs = timing.holdMs ?? 120;
   const synchronous = timing.synchronous ?? false;
+  const windowRect = {} as Rect;
+  const hasWindowRect = Boolean(GetWindowRect!(window, windowRect));
+  const ownerPid: [number | null] = [null];
+  const ownerThread = Number(GetWindowThreadProcessId!(window, ownerPid));
+  const foregroundAtStart = GetForegroundWindow!() as NativeHandle;
+  const pixelBefore = readWindowRgb(window, x, y);
   const send = synchronous
     ? (message: number, wParam: number) => sendMouseMessage(window, message, wParam, position)
     : (message: number, wParam: number) => postMouseMessage(window, message, wParam, position);
   const moved = send(0x0200, 0);
   await delay(hoverMs);
+  const pixelAfterMove = readWindowRgb(window, x, y);
   const down = send(0x0201, 1);
   await delay(holdMs);
+  const pixelAfterDown = readWindowRgb(window, x, y);
   const up = send(0x0202, 0);
+  const pixelAfterUp = readWindowRgb(window, x, y);
   const sent = moved.dispatched && down.dispatched && up.dispatched;
 
   return {
@@ -287,12 +301,33 @@ export async function postAoe2DesignClick(
       `HoverMs=${hoverMs}`,
       `HoldMs=${holdMs}`,
       `Window=${String(window)}`,
+      `TargetPid=${processId}`,
+      `WindowPid=${ownerPid[0] ?? 0}`,
+      `WindowThread=${ownerThread}`,
+      `IsWindow=${Boolean(IsWindow!(window))}`,
+      `Visible=${Boolean(IsWindowVisible!(window))}`,
+      `Enabled=${Boolean(IsWindowEnabled!(window))}`,
+      `Hung=${Boolean(IsHungAppWindow!(window))}`,
+      `ForegroundStart=${String(foregroundAtStart)}`,
+      `TargetForegroundStart=${sameHandle(foregroundAtStart, window)}`,
+      `ClientRect=${rect.left},${rect.top},${rect.right},${rect.bottom}`,
+      `WindowRect=${hasWindowRect ? `${windowRect.left},${windowRect.top},${windowRect.right},${windowRect.bottom}` : "FAILED"}`,
+      `TargetRGB=${formatRgb(pixelBefore)},${formatRgb(pixelAfterMove)},${formatRgb(pixelAfterDown)},${formatRgb(pixelAfterUp)}`,
       `Move=${moved.dispatched}`,
       `MoveMs=${moved.elapsedMs}`,
+      `MoveResult=${moved.result}`,
+      `MoveError=${moved.error}`,
+      `MoveForeground=${moved.foreground}`,
       `Down=${down.dispatched}`,
       `DownMs=${down.elapsedMs}`,
+      `DownResult=${down.result}`,
+      `DownError=${down.error}`,
+      `DownForeground=${down.foreground}`,
       `Up=${up.dispatched}`,
-      `UpMs=${up.elapsedMs}`
+      `UpMs=${up.elapsedMs}`,
+      `UpResult=${up.result}`,
+      `UpError=${up.error}`,
+      `UpForeground=${up.foreground}`
     ].join("|")
   };
 }
@@ -420,6 +455,20 @@ function readRgb(dc: NativeHandle, x: number, y: number): [number, number, numbe
   return [color & 0xff, (color >> 8) & 0xff, (color >> 16) & 0xff];
 }
 
+function readWindowRgb(window: NativeHandle, x: number, y: number): [number, number, number] | null {
+  const dc = GetDC!(window) as NativeHandle;
+  if (!dc) return null;
+  try {
+    return readRgb(dc, x, y);
+  } finally {
+    ReleaseDC!(window, dc);
+  }
+}
+
+function formatRgb(rgb: [number, number, number] | null): string {
+  return rgb ? rgb.join(".") : "FAILED";
+}
+
 function findLargestProcessWindow(processId: number): NativeHandle {
   let found: NativeHandle = null;
   let largestArea = 0;
@@ -453,12 +502,17 @@ function postMouseMessage(
   message: number,
   wParam: number,
   lParam: number
-): { dispatched: boolean; elapsedMs: number } {
+): MessageDispatchResult {
   const started = performance.now();
+  SetLastError!(0);
   const dispatched = Boolean(PostMessageW!(window, message, wParam, lParam));
+  const error = Number(GetLastError!());
   return {
     dispatched,
-    elapsedMs: Math.round((performance.now() - started) * 10) / 10
+    elapsedMs: Math.round((performance.now() - started) * 10) / 10,
+    result: "queued",
+    error,
+    foreground: sameHandle(GetForegroundWindow!(), window)
   };
 }
 
@@ -467,7 +521,7 @@ function sendMouseMessage(
   message: number,
   wParam: number,
   lParam: number
-): { dispatched: boolean; elapsedMs: number } {
+): MessageDispatchResult {
   return sendWindowMessage(window, message, wParam, lParam);
 }
 
@@ -476,9 +530,10 @@ function sendWindowMessage(
   message: number,
   wParam: number,
   lParam: number
-): { dispatched: boolean; elapsedMs: number } {
+): MessageDispatchResult {
   const result: [number | null] = [null];
   const started = performance.now();
+  SetLastError!(0);
   const dispatched = Boolean(SendMessageTimeoutW!(
     window,
     message,
@@ -488,10 +543,22 @@ function sendWindowMessage(
     1000,
     result
   ));
+  const error = Number(GetLastError!());
   return {
     dispatched,
-    elapsedMs: Math.round((performance.now() - started) * 10) / 10
+    elapsedMs: Math.round((performance.now() - started) * 10) / 10,
+    result: String(result[0] ?? 0),
+    error,
+    foreground: sameHandle(GetForegroundWindow!(), window)
   };
+}
+
+interface MessageDispatchResult {
+  dispatched: boolean;
+  elapsedMs: number;
+  result: string;
+  error: number;
+  foreground: boolean;
 }
 
 function ensureWindowsBindings(): void {
