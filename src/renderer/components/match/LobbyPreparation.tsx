@@ -7,7 +7,7 @@ import { YouTubeShorts } from "./YouTubeShorts";
 const setupCountdownSeconds = Math.ceil(lobbySetupCountdownMs / 1000);
 
 export function LobbyPreparation() {
-  const { state, openAoe2, prepareLobby } = useAppStore();
+  const { state, prepareLobby } = useAppStore();
   const [remaining, setRemaining] = useState(() => getRemaining(state.roomSetupStartedAt));
 
   useEffect(() => {
@@ -20,24 +20,23 @@ export function LobbyPreparation() {
   return (
     <section className="search-waiting-layout">
       <div className="search-state">
-        <span className="eyebrow">Lobby preparation</span>
+        <span className="eyebrow">Preparing game</span>
         <h2>{remaining > 0 ? "Game starts in" : "Starting game…"}</h2>
         {remaining > 0 && (
           <div className="lobby-countdown" aria-live="polite">{remaining}</div>
         )}
-        <div className="lobby-milestone" aria-live="polite">
-          <Loader2 size={18} className="spin" aria-hidden="true" />
-          <span>{remaining > 0 ? (state.roomSetupMilestone ?? "Preparing game") : "Starting game…"}</span>
-        </div>
+        {remaining > 0 && (
+          <div className="lobby-milestone" aria-live="polite">
+            <Loader2 size={18} className="spin" aria-hidden="true" />
+            <span>{state.roomSetupMilestone ?? "Preparing game"}</span>
+          </div>
+        )}
         {state.error && (
           <div className="error-panel">
             <strong>{state.error.message}</strong>
             <span>{state.error.technicalDetails}</span>
             <button type="button" onClick={() => void prepareLobby()}>Try Again</button>
           </div>
-        )}
-        {state.queueStatus === "ready" && (
-          <button className="primary wide" type="button" onClick={() => void openAoe2()}>Open AoE2</button>
         )}
       </div>
       <YouTubeShorts />
