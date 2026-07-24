@@ -6,6 +6,10 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
 import {
+  aoe2UiManifest,
+  type Aoe2ActionName
+} from "../../shared/aoe2UiManifest.js";
+import {
   cursorAutomationEnabled,
   lobbySetupRetryTiming,
   lobbySetupTiming
@@ -1515,13 +1519,21 @@ export function registerGameHandlers(): void {
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
         if (!result.sent) throw new Error(`${name} could not be clicked.`);
       };
+      const actionStep = async (actionName: Aoe2ActionName) => {
+        const action = aoe2UiManifest.actions[actionName];
+        await clickStep(action.label, action.point[0], action.point[1]);
+        if (action.activation === "clickEnter") {
+          await delay(500);
+          const enter = await sendAoe2Enter(process.pid as number);
+          emitLog(`STEP|${action.label}|Key=ENTER|${enter.detail}`);
+          if (!enter.sent) throw new Error(`${action.label} could not be activated.`);
+        }
+        await delay(action.settleMs);
+      };
 
-      await clickStep("Multiplayer", 734, 1085);
-      await delay(lobbySetupTiming.multiplayerMenuMs);
-      await clickStep("Host Game", 2774, 1202);
-      await delay(lobbySetupTiming.hostGameMenuMs);
-      await clickStep("Create Lobby", 1688, 1614);
-      await delay(lobbySetupTiming.lobbyCreationMs);
+      await actionStep("multiplayer");
+      await actionStep("hostGame");
+      await actionStep("createLobby");
       await clickStep("Reset Settings", 3101, 1976);
       await delay(lobbySetupTiming.resetFocusMs);
       const reset = await sendAoe2Enter(process.pid);
@@ -1530,12 +1542,12 @@ export function registerGameHandlers(): void {
       await delay(lobbySetupTiming.resetConfirmationMs);
 
       clipboard.writeText("EL_CURSOR_COPY_PENDING");
-      await clickStep("Copy Game ID", 3245, 372);
+      await actionStep("copyLobbyUri");
       await delay(lobbySetupTiming.clipboardReadMs);
       let lobbyUri = clipboard.readText().match(/aoe2de:\/\/0\/\d+/)?.[0];
       if (!lobbyUri) {
         await delay(lobbySetupRetryTiming.beforeClipboardRetryMs);
-        await clickStep("Copy Game ID Retry", 3245, 372);
+        await actionStep("copyLobbyUri");
         await delay(lobbySetupRetryTiming.clipboardReadMs);
         lobbyUri = clipboard.readText().match(/aoe2de:\/\/0\/\d+/)?.[0];
       }
@@ -1564,13 +1576,15 @@ export function registerGameHandlers(): void {
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
-      const action = target === "guest-ready"
-        ? { label: "Guest Ready", x: 1413, y: 1875 }
+      const actionName = target === "guest-ready"
+        ? "guestReady"
         : target === "host-ready"
-          ? { label: "Host Ready", x: 1388, y: 1979 }
-          : { label: "Start Game", x: 1974, y: 1979 };
-      const result = await postAoe2DesignClick(process.pid, action.x, action.y);
-      const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.x},${action.y}|${result.detail}`;
+          ? "hostReady"
+          : "startGame";
+      const action = aoe2UiManifest.actions[actionName];
+      const result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1]);
+      await delay(action.settleMs);
+      const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.point[0]},${action.point[1]}|${result.detail}`;
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
       return { sent: result.sent, message: result.sent ? `${target} clicked.` : `${target} could not be clicked.` };

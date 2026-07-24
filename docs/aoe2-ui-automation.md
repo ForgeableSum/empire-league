@@ -1,0 +1,64 @@
+# AoE2 UI automation
+
+Empire League automates AoE2 with window-local messages. It does not move, clip, or block the user's physical cursor.
+
+The checked-in source of truth is `src/shared/aoe2UiManifest.ts`. Coordinates are stored in AoE2's 3840×2160 design space and scaled to the live client rectangle immediately before each action.
+
+## Activation modes
+
+- `click`: post `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, and `WM_LBUTTONUP`.
+- `clickEnter`: post the click above, wait for AoE2 to select the widget, then post Enter.
+
+Legacy buttons such as Multiplayer, Host Game, Create Lobby, and Confirm Civilization require `clickEnter`. Lobby controls such as Ready and Start, browser tabs, civilization tiles, and Copy respond to `click`.
+
+## Host flow
+
+1. `multiplayer` (`clickEnter`)
+2. `hostGame` (`clickEnter`)
+3. `createLobby` (`clickEnter`)
+4. Apply the standard lobby settings.
+5. Optionally select a civilization:
+   1. `hostCivilization` (`click`)
+   2. Resolve the civilization name through `civilizationDesignPoint`.
+   3. Click the resulting grid point.
+   4. `confirmCivilization` (`clickEnter`)
+6. `copyLobbyUri` (`click`)
+7. Verify the clipboard matches `aoe2de://0/<digits>`.
+8. Publish that URI to the guest. This URI is the normal automated invitation path.
+9. If an explicit in-game invite is needed, use `hostInvite`.
+10. Wait for the guest-ready report.
+11. `hostReady` (`click`)
+12. `startGame` (`click`)
+
+## Guest flow
+
+1. Receive the published `aoe2de://0/<digits>` URI.
+2. Open the URI through Steam/AoE2.
+3. Wait for the lobby screen to settle.
+4. Optionally select a civilization using the client lobby's civilization button, the shared grid, and `confirmCivilization`.
+5. `guestReady` (`click`). The guest and host lobby layouts intentionally use different ready points.
+6. Report guest readiness to the matchmaker.
+7. Wait for the host to start the match.
+
+## Civilization grid
+
+The manifest contains every currently visible Age of Empires II civilization in game build `101.103.48987.0`. Entries map names to grid column/row positions; grid centers are stored once. This avoids maintaining fifty independent pixel coordinates.
+
+The first four cells are selector modes (Random, Full Random, Mirror, and Custom), not civilizations. The first civilization row therefore begins at column four.
+
+## Updating after an AoE2 patch
+
+1. Compare the installed executable version with `sourceGameVersion`.
+2. Run development probes against the installed `widgetui` JSON and capture diagnostic screenshots.
+3. Update manifest geometry or activation modes.
+4. Validate host creation/copy, guest join/ready, host ready/start, and at least one civilization from every grid row.
+5. Commit the new manifest version. Production matchmaking should never parse the installed UI files.
+
+## Verification
+
+Message delivery only proves Windows queued the input. Each destructive transition needs an outcome:
+
+- Create/copy: clipboard contains a new lobby URI.
+- Join: AoE2 accepted the URI and reached the lobby after the configured settle delay.
+- Ready/start: matchmaker acknowledgements and replay/game-state detection.
+- Civilization: development screenshot verification; production state verification can be added when a machine-readable lobby-state source is available.
