@@ -25,6 +25,7 @@ import {
   showMainWindowAsGameCover
 } from "../window.js";
 import {
+  clickCurrentCursorForAoe2,
   closeAoe2NativeWindow,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
@@ -1527,6 +1528,10 @@ export function registerGameHandlers(): void {
       }
       emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=True|Focused=${focused}|Foreground=${foreground}`);
       if (!foreground) throw new Error("AoE2 did not become the foreground window.");
+      const activationClick = await clickCurrentCursorForAoe2(process.pid);
+      emitLog(`ACTIVATION_CLICK|${activationClick.detail}`);
+      if (!activationClick.sent) throw new Error("The AoE2 activation click could not be sent safely.");
+      await delay(250);
       const clickStep = async (
         name: string,
         x: number,
