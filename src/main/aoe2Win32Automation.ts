@@ -287,12 +287,22 @@ export async function sendAoe2Enter(processId: number): Promise<NativeInputResul
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
-  const down = Boolean(PostMessageW!(window, 0x0100, 0x0d, 0x001c0001));
+  const down = sendWindowMessage(window, 0x0100, 0x0d, 0x001c0001);
   await delay(15);
-  const up = Boolean(PostMessageW!(window, 0x0101, 0x0d, -1071906815));
+  const up = sendWindowMessage(window, 0x0101, 0x0d, -1071906815);
+  const sent = down.dispatched && up.dispatched;
   return {
-    sent: down && up,
-    detail: `${down && up ? "SENT" : "POST_FAILED"}|Mode=WindowMessage|Key=ENTER|Down=${down}|Up=${up}`
+    sent,
+    detail: [
+      sent ? "SENT" : "SEND_FAILED",
+      "Mode=WindowMessageSync",
+      "Key=ENTER",
+      `Window=${String(window)}`,
+      `Down=${down.dispatched}`,
+      `DownMs=${down.elapsedMs}`,
+      `Up=${up.dispatched}`,
+      `UpMs=${up.elapsedMs}`
+    ].join("|")
   };
 }
 
@@ -339,6 +349,15 @@ function postMouseMessage(
 }
 
 function sendMouseMessage(
+  window: NativeHandle,
+  message: number,
+  wParam: number,
+  lParam: number
+): { dispatched: boolean; elapsedMs: number } {
+  return sendWindowMessage(window, message, wParam, lParam);
+}
+
+function sendWindowMessage(
   window: NativeHandle,
   message: number,
   wParam: number,

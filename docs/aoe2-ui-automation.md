@@ -6,8 +6,8 @@ The checked-in source of truth is `src/shared/aoe2UiManifest.ts`. Coordinates ar
 
 ## Activation modes
 
-- `click`: post `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, and `WM_LBUTTONUP`.
-- `clickEnter`: post the click above, wait for AoE2 to select the widget, then post Enter.
+- `click`: send `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, and `WM_LBUTTONUP` using the action's configured delivery mode.
+- `clickEnter`: post the click above, wait for AoE2 to select the widget, then synchronously dispatch Enter with a bounded timeout.
 
 Legacy buttons such as Multiplayer, Host Game, and Confirm Civilization require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, civilization tiles, and Copy respond to `click`.
 
