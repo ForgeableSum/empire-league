@@ -12,7 +12,7 @@ export function registerSystemHandlers(): void {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (window) minimizeMainWindowToTaskbar(window);
   });
-  ipcMain.handle("system:alert-match-found", async (event, opponentName: string) => {
+  ipcMain.handle("system:alert-match-found", async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return;
     if (window.isMinimized()) window.restore();
@@ -24,7 +24,7 @@ export function registerSystemHandlers(): void {
     if (Notification.isSupported()) {
       const notification = new Notification({
         title: "Match found",
-        body: `Matched with ${opponentName}. The match auto-accepts in 10 seconds unless you decline.`,
+        body: "Your match auto-accepts in 10 seconds unless you decline.",
         silent: false,
         timeoutType: "never"
       });

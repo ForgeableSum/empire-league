@@ -432,7 +432,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           log(`Match found: ${event.match.id}`);
           notify("Match found", "warning");
           if (state.settings.matchNotifications) {
-            void window.electronApi?.alertMatchFound(event.match.opponent.displayName);
+            void window.electronApi?.alertMatchFound();
           }
         }
         if (event.type === "opponent_accepted") {

@@ -44,10 +44,10 @@ export function MatchFoundOverlay() {
         <span className="eyebrow">Auto-accepting in {remaining} seconds</span>
         <h2 id="match-found-title">Match Found</h2>
         <div className="opponent-card">
-          <div className="avatar large-avatar">{opponent.displayName.slice(0, 2).toUpperCase()}</div>
+          <div className="avatar large-avatar">?</div>
           <div>
-            <strong>{opponent.displayName}</strong>
-            <span>{opponent.rating} Elo · Rank #{opponent.rank}</span>
+            <strong>Opponent found</strong>
+            <span>Rank #{opponent.rank}</span>
             <span>{formatDivisionForRating(opponent.rating)} · {opponent.countryCode}</span>
           </div>
         </div>
