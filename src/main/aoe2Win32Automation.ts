@@ -2,6 +2,7 @@ import koffi from "koffi";
 
 const user32 = process.platform === "win32" ? koffi.load("user32.dll") : null;
 const kernel32 = process.platform === "win32" ? koffi.load("kernel32.dll") : null;
+const gdi32 = process.platform === "win32" ? koffi.load("gdi32.dll") : null;
 
 const HANDLE = koffi.pointer("HANDLE", koffi.opaque());
 const HWND = koffi.alias("HWND", HANDLE);
@@ -49,9 +50,12 @@ const MouseEvent = user32?.func("void __stdcall mouse_event(uint32_t flags, uint
 const KeybdEvent = user32?.func("void __stdcall keybd_event(uint8_t virtualKey, uint8_t scanCode, uint32_t flags, uintptr_t extraInfo)");
 const IsHungAppWindow = user32?.func("bool __stdcall IsHungAppWindow(HWND hwnd)");
 const PostMessageW = user32?.func("bool __stdcall PostMessageW(HWND hwnd, uint32_t message, uintptr_t wParam, intptr_t lParam)");
+const GetDC = user32?.func("HANDLE __stdcall GetDC(HWND hwnd)");
+const ReleaseDC = user32?.func("int32_t __stdcall ReleaseDC(HWND hwnd, HANDLE dc)");
 const SendMessageTimeoutW = user32?.func(
   "intptr_t __stdcall SendMessageTimeoutW(HWND hwnd, uint32_t message, uintptr_t wParam, intptr_t lParam, uint32_t flags, uint32_t timeoutMs, _Out_ uintptr_t *result)"
 );
+const GetPixel = gdi32?.func("uint32_t __stdcall GetPixel(HANDLE dc, int32_t x, int32_t y)");
 const Sleep = kernel32?.func("void __stdcall Sleep(uint32_t milliseconds)");
 const CreateToolhelp32Snapshot = kernel32?.func("HANDLE __stdcall CreateToolhelp32Snapshot(uint32_t flags, uint32_t processId)");
 const Process32FirstW = kernel32?.func("bool __stdcall Process32FirstW(HANDLE snapshot, _Inout_ EL_PROCESSENTRY32W *entry)");
@@ -71,6 +75,11 @@ export interface NativeProcessStatus {
   running: boolean;
   pid?: number;
   windowReady: boolean;
+}
+
+export interface NativeReadyStateResult {
+  state: "ready" | "not-ready" | "unknown";
+  detail: string;
 }
 
 export function detectAoe2NativeProcess(): NativeProcessStatus {
@@ -306,6 +315,45 @@ export async function sendAoe2Enter(processId: number): Promise<NativeInputResul
   };
 }
 
+export function readAoe2ReadyState(processId: number, designY: number): NativeReadyStateResult {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { state: "unknown", detail: "WINDOW_NOT_FOUND" };
+
+  const rect = {} as Rect;
+  if (!GetClientRect!(window, rect)) return { state: "unknown", detail: "CLIENT_RECT_FAILED" };
+  const width = rect.right - rect.left;
+  const height = rect.bottom - rect.top;
+  if (width <= 0 || height <= 0) return { state: "unknown", detail: "INVALID_CLIENT_SIZE" };
+
+  // Sample a text-free area inside the Ready button. The button is green when
+  // selected and red when unselected in both host and guest lobby layouts.
+  const x = Math.round(1500 * width / 3840);
+  const y = Math.round(designY * height / 2160);
+  const dc = GetDC!(window) as NativeHandle;
+  if (!dc) return { state: "unknown", detail: "WINDOW_DC_FAILED" };
+  let color: number;
+  try {
+    color = Number(GetPixel!(dc, x, y));
+  } finally {
+    ReleaseDC!(window, dc);
+  }
+  if (color === 0xffffffff) return { state: "unknown", detail: "PIXEL_READ_FAILED" };
+
+  const red = color & 0xff;
+  const green = (color >> 8) & 0xff;
+  const blue = (color >> 16) & 0xff;
+  const state = green > red * 2
+    ? "ready"
+    : red > green * 2
+      ? "not-ready"
+      : "unknown";
+  return {
+    state,
+    detail: `State=${state}|Window=${String(window)}|ClientPoint=${x},${y}|RGB=${red},${green},${blue}`
+  };
+}
+
 function findLargestProcessWindow(processId: number): NativeHandle {
   let found: NativeHandle = null;
   let largestArea = 0;
@@ -381,7 +429,7 @@ function sendWindowMessage(
 }
 
 function ensureWindowsBindings(): void {
-  if (!user32 || !kernel32) throw new Error("Native AoE2 automation is only supported on Windows.");
+  if (!user32 || !kernel32 || !gdi32) throw new Error("Native AoE2 automation is only supported on Windows.");
 }
 
 function delay(milliseconds: number): Promise<void> {

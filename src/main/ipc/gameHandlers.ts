@@ -30,6 +30,7 @@ import {
   focusAoe2NativeWindow,
   isAoe2NativeWindowForeground,
   postAoe2DesignClick,
+  readAoe2ReadyState,
   sendAoe2Enter
 } from "../aoe2Win32Automation.js";
 
@@ -1599,16 +1600,50 @@ export function registerGameHandlers(): void {
           ? "hostReady"
           : "startGame";
       const action = aoe2UiManifest.actions[actionName];
-      const result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
-        hoverMs: action.hoverMs,
-        holdMs: action.holdMs,
-        synchronous: true
-      });
-      await delay(action.settleMs);
+      const emitVerification = (attempt: string, detail: string) => {
+        const verificationMessage = `READY_VERIFY|Target=${target}|Attempt=${attempt}|${detail}`;
+        console.info(`[AoE2 automation] ${verificationMessage}`);
+        if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", verificationMessage);
+      };
+      const verifiesReady = target === "guest-ready" || target === "host-ready";
+      let readyState = verifiesReady ? readAoe2ReadyState(process.pid, action.point[1]) : null;
+      if (readyState) emitVerification("before", readyState.detail);
+
+      let result = readyState?.state === "ready"
+        ? { sent: true, detail: "SKIPPED_ALREADY_READY" }
+        : readyState?.state === "unknown"
+          ? { sent: false, detail: "READY_STATE_UNKNOWN_BEFORE_INPUT" }
+          : await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
+              hoverMs: action.hoverMs,
+              holdMs: action.holdMs,
+              synchronous: true
+            });
+
+      if (result.detail !== "SKIPPED_ALREADY_READY") await delay(action.settleMs);
+      if (verifiesReady) {
+        readyState = readAoe2ReadyState(process.pid, action.point[1]);
+        emitVerification("1", readyState.detail);
+        if (readyState.state === "not-ready") {
+          result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
+            hoverMs: action.hoverMs,
+            holdMs: action.holdMs,
+            synchronous: true
+          });
+          await delay(action.settleMs);
+          readyState = readAoe2ReadyState(process.pid, action.point[1]);
+          emitVerification("2", readyState.detail);
+        }
+      }
       const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.point[0]},${action.point[1]}|${result.detail}`;
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
-      return { sent: result.sent, message: result.sent ? `${target} clicked.` : `${target} could not be clicked.` };
+      const sent = result.sent && (!verifiesReady || readyState?.state === "ready");
+      return {
+        sent,
+        message: sent
+          ? `${target} ready state verified.`
+          : `${target} ready state could not be verified.`
+      };
     } catch (error) {
       console.error(`[AoE2 automation] Cursor action ${target} failed`, error);
       return { sent: false, message: `${target} cursor action failed.` };

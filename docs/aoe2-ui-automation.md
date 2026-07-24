@@ -64,5 +64,8 @@ Message delivery only proves Windows queued the input. Each destructive transiti
 
 - Create/copy: clipboard contains a new lobby URI.
 - Join: AoE2 accepted the URI and reached the lobby after the configured settle delay.
-- Ready/start: matchmaker acknowledgements and replay/game-state detection.
+- Ready: sample a text-free point on AoE2's rendered Ready button before and
+  after input. Green is already Ready; red permits one conditional retry;
+  an ambiguous state fails safely without notifying the host.
+- Start: matchmaker acknowledgements and replay/game-state detection.
 - Civilization: development screenshot verification; production state verification can be added when a machine-readable lobby-state source is available.
