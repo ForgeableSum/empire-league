@@ -49,6 +49,9 @@ const MouseEvent = user32?.func("void __stdcall mouse_event(uint32_t flags, uint
 const KeybdEvent = user32?.func("void __stdcall keybd_event(uint8_t virtualKey, uint8_t scanCode, uint32_t flags, uintptr_t extraInfo)");
 const IsHungAppWindow = user32?.func("bool __stdcall IsHungAppWindow(HWND hwnd)");
 const PostMessageW = user32?.func("bool __stdcall PostMessageW(HWND hwnd, uint32_t message, uintptr_t wParam, intptr_t lParam)");
+const SendMessageTimeoutW = user32?.func(
+  "intptr_t __stdcall SendMessageTimeoutW(HWND hwnd, uint32_t message, uintptr_t wParam, intptr_t lParam, uint32_t flags, uint32_t timeoutMs, _Out_ uintptr_t *result)"
+);
 const Sleep = kernel32?.func("void __stdcall Sleep(uint32_t milliseconds)");
 const CreateToolhelp32Snapshot = kernel32?.func("HANDLE __stdcall CreateToolhelp32Snapshot(uint32_t flags, uint32_t processId)");
 const Process32FirstW = kernel32?.func("bool __stdcall Process32FirstW(HANDLE snapshot, _Inout_ EL_PROCESSENTRY32W *entry)");
@@ -248,28 +251,33 @@ export async function postAoe2DesignClick(
   const position = (y << 16) | (x & 0xffff);
   const hoverMs = timing.hoverMs ?? 100;
   const holdMs = timing.holdMs ?? 120;
-  const moved = Boolean(PostMessageW!(window, 0x0200, 0, position));
-  // AoE2 can throttle its message loop while it is in the background. Give
-  // the UI a frame to establish the hovered widget before posting the press,
-  // then hold the press long enough to cross another throttled frame.
+  const moved = sendMouseMessage(window, 0x0200, 0, position);
+  // Dispatch each transition before advancing to the next one. PostMessageW
+  // only proves that Windows accepted the message into AoE2's queue; it does
+  // not prove that the game processed it before the caller reports success.
   await delay(hoverMs);
-  const down = Boolean(PostMessageW!(window, 0x0201, 1, position));
+  const down = sendMouseMessage(window, 0x0201, 1, position);
   await delay(holdMs);
-  const up = Boolean(PostMessageW!(window, 0x0202, 0, position));
+  const up = sendMouseMessage(window, 0x0202, 0, position);
+  const sent = moved.dispatched && down.dispatched && up.dispatched;
 
   return {
-    sent: moved && down && up,
+    sent,
     detail: [
-      moved && down && up ? "SENT" : "POST_FAILED",
-      "Mode=WindowMessage",
+      sent ? "SENT" : "SEND_FAILED",
+      "Mode=WindowMessageSync",
       `Client=${width}x${height}`,
       `ClientPoint=${x},${y}`,
       `DesignPoint=${designX},${designY}`,
       `HoverMs=${hoverMs}`,
       `HoldMs=${holdMs}`,
-      `Move=${moved}`,
-      `Down=${down}`,
-      `Up=${up}`
+      `Window=${String(window)}`,
+      `Move=${moved.dispatched}`,
+      `MoveMs=${moved.elapsedMs}`,
+      `Down=${down.dispatched}`,
+      `DownMs=${down.elapsedMs}`,
+      `Up=${up.dispatched}`,
+      `UpMs=${up.elapsedMs}`
     ].join("|")
   };
 }
@@ -313,6 +321,29 @@ function processIdForWindow(window: NativeHandle): number {
 
 function sameHandle(first: NativeHandle, second: NativeHandle): boolean {
   return first === second || String(first) === String(second);
+}
+
+function sendMouseMessage(
+  window: NativeHandle,
+  message: number,
+  wParam: number,
+  lParam: number
+): { dispatched: boolean; elapsedMs: number } {
+  const result: [number | null] = [null];
+  const started = performance.now();
+  const dispatched = Boolean(SendMessageTimeoutW!(
+    window,
+    message,
+    wParam,
+    lParam,
+    0x0002,
+    1000,
+    result
+  ));
+  return {
+    dispatched,
+    elapsedMs: Math.round((performance.now() - started) * 10) / 10
+  };
 }
 
 function ensureWindowsBindings(): void {
