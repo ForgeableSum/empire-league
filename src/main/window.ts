@@ -49,10 +49,8 @@ function restoreFromTaskbar(window: BrowserWindow): void {
   }
   taskbarMinimizedWindow = null;
   window.setKiosk(true);
-  window.setAlwaysOnTop(true, "screen-saver");
   window.show();
   window.focus();
-  window.moveTop();
 }
 
 export function minimizeMainWindowToTaskbar(window: BrowserWindow): void {
@@ -84,7 +82,6 @@ export function createMainWindow(): BrowserWindow {
     resizable: false,
     minimizable: true,
     maximizable: false,
-    alwaysOnTop: true,
     autoHideMenuBar: true,
     backgroundColor: "#141312",
     webPreferences: {
@@ -117,20 +114,16 @@ export function createMainWindow(): BrowserWindow {
   mainWindow.once("ready-to-show", () => {
     if (mainWindow.isDestroyed()) return;
     mainWindow.setKiosk(true);
-    mainWindow.setAlwaysOnTop(true, "screen-saver");
     fitKioskToDisplay();
     mainWindow.show();
     mainWindow.focus();
-    mainWindow.moveTop();
   });
   mainWindow.on("leave-full-screen", () => {
     if (mainWindow.isDestroyed() || taskbarMinimizedWindow === mainWindow) return;
     setImmediate(() => {
       if (mainWindow.isDestroyed() || taskbarMinimizedWindow === mainWindow) return;
       mainWindow.setKiosk(true);
-      mainWindow.setAlwaysOnTop(true, "screen-saver");
       fitKioskToDisplay();
-      mainWindow.moveTop();
     });
   });
   mainWindow.on("restore", () => {

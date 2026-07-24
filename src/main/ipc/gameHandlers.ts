@@ -23,7 +23,6 @@ import {
   clickAoe2DesignPoint,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
-  hideAoe2NativeWindowFromTaskbar,
   isAoe2NativeWindowForeground,
   sendAoe2Enter
 } from "../aoe2Win32Automation.js";
@@ -36,7 +35,6 @@ let ownedAoe2Pid: number | undefined;
 let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
 let offscreenWindowProcess: ChildProcess | undefined;
-let taskbarHiderProcess: ChildProcess | undefined;
 let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
 
@@ -73,69 +71,8 @@ Write-Output "CURSOR|Released=$released"
   child.stdout?.on("data", (chunk: Buffer) => console.info(`[AoE2 automation] ${chunk.toString().trim()}`));
 }
 
-function startAoe2TaskbarHider(): void {
-  if (process.platform !== "win32" || taskbarHiderProcess) return;
-  const script = String.raw`
-$source = @'
-using System;
-using System.Runtime.InteropServices;
-
-namespace EmpireLeague {
-  [ComImport]
-  [Guid("56FDF342-FD6D-11d0-958A-006097C9A090")]
-  [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-  interface ITaskbarList {
-    void HrInit();
-    void AddTab(IntPtr window);
-    void DeleteTab(IntPtr window);
-    void ActivateTab(IntPtr window);
-    void SetActiveAlt(IntPtr window);
-  }
-
-  [ComImport]
-  [Guid("56FDF344-FD6D-11d0-958A-006097C9A090")]
-  class TaskbarList {}
-
-  public static class TaskbarControl {
-    public static void DeleteTab(IntPtr window) {
-      ITaskbarList taskbar = (ITaskbarList)new TaskbarList();
-      taskbar.HrInit();
-      taskbar.DeleteTab(window);
-      Marshal.FinalReleaseComObject(taskbar);
-    }
-  }
-}
-'@
-Add-Type -TypeDefinition $source
-$sawGame = $false
-while ($true) {
-  $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
-  if (-not $game) {
-    if ($sawGame) { break }
-    Start-Sleep -Milliseconds 250
-    continue
-  }
-  $sawGame = $true
-  $game.Refresh()
-  if ($game.MainWindowHandle -ne 0) {
-    [EmpireLeague.TaskbarControl]::DeleteTab($game.MainWindowHandle)
-  }
-  Start-Sleep -Milliseconds 250
-}
-`;
-  const encodedScript = Buffer.from(script, "utf16le").toString("base64");
-  taskbarHiderProcess = spawn("powershell.exe", [
-    "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-  ], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
-  taskbarHiderProcess.stderr?.on("data", (chunk: Buffer) => {
-    console.error(`[AoE2 taskbar] ${chunk.toString().trim()}`);
-  });
-  taskbarHiderProcess.once("exit", () => { taskbarHiderProcess = undefined; });
-}
-
 function moveAoe2WindowOffscreen(): void {
   if (process.platform !== "win32") return;
-  startAoe2TaskbarHider();
   offscreenWindowProcess?.kill();
   if (aoe2WindowMonitor) clearInterval(aoe2WindowMonitor);
   aoe2WindowMonitor = undefined;
@@ -147,9 +84,9 @@ function moveAoe2WindowOffscreen(): void {
       const game = detectAoe2NativeProcess();
       if (game.running && game.pid && game.windowReady) {
         sawGame = true;
-        const hiddenFromTaskbar = hideAoe2NativeWindowFromTaskbar(game.pid);
         if (game.pid !== lastPid) {
-          console.info(`[AoE2 automation] MOUSE_TEST|Visible=True|TaskbarHidden=${hiddenFromTaskbar}|Pid=${game.pid}|Mode=Koffi`);
+          focusAoe2NativeWindow(game.pid);
+          console.info(`[AoE2 automation] MOUSE_TEST|Visible=True|DefaultWindowState=True|Pid=${game.pid}|Mode=Koffi`);
           lastPid = game.pid;
         }
         const foreground = isAoe2NativeWindowForeground(game.pid);
@@ -1230,8 +1167,6 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 
 export function registerGameHandlers(): void {
   app.on("before-quit", (event) => {
-    taskbarHiderProcess?.kill();
-    taskbarHiderProcess = undefined;
     if ((!ownedAoe2Pid && !launchRequested) || quittingAfterGameCleanup) return;
     event.preventDefault();
     quittingAfterGameCleanup = true;
