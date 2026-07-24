@@ -1552,12 +1552,6 @@ export function registerGameHandlers(): void {
           await delay(action.settleMs);
         };
 
-        if (expectedState) {
-          const before = readAoe2HostSetupState(process.pid as number);
-          emitLog(`STEP_VERIFY|${action.label}|Attempt=before|Expected=${expectedState}|${before.detail}`);
-          if (before.state === expectedState) return;
-        }
-
         await performAction(1);
         if (!expectedState) return;
         let verification = readAoe2HostSetupState(process.pid as number);
