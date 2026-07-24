@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "aoe2rec-js": "^0.1.22",
+    "flag-icons": "^7.5.0",
     "koffi": "^3.1.2",
     "lucide-react": "^0.468.0",
     "mysql2": "^3.23.1",

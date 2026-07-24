@@ -71,7 +71,7 @@ export function LeaderboardPage() {
             <div className={player.id === state.currentUser.id ? "leader-row current" : "leader-row"} key={player.id}>
               <strong>#{player.rank}</strong>
               <span>{player.displayName}</span>
-              <span>{player.countryCode ?? "—"}</span>
+              <span>{countryFlag(player.countryCode)}</span>
               <span>{player.rating}</span>
               <span>{formatDivisionForRating(player.rating)}</span>
               <span>{player.wins}</span>
@@ -86,6 +86,21 @@ export function LeaderboardPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+function countryFlag(countryCode?: string) {
+  const code = countryCode?.trim().toUpperCase();
+  if (!code) return "—";
+  if (!/^[A-Z]{2}$/.test(code)) return code;
+
+  return (
+    <span
+      className={`country-flag fi fi-${code.toLowerCase()}`}
+      role="img"
+      aria-label={`${code} flag`}
+      title={code}
+    />
   );
 }
 

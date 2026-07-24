@@ -519,6 +519,10 @@
   color: var(--text);
 }
 
+.country-flag {
+  width: 22px;
+}
+
 .division-field {
   position: relative;
   display: grid;

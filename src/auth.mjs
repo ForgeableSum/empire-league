@@ -133,9 +133,10 @@ export async function authenticate(request, refreshSteamProfile = false) {
     if (steamProfile) {
       row.display_name = steamProfile.personaName ?? row.display_name;
       row.avatar_url = steamProfile.avatarUrl ?? row.avatar_url;
+      row.country_code = row.country_code ?? steamProfile.countryCode;
       await database.execute(
-        "UPDATE players SET display_name = ?, avatar_url = ? WHERE id = ?",
-        [row.display_name, row.avatar_url, row.id]
+        "UPDATE players SET display_name = ?, avatar_url = ?, country_code = ? WHERE id = ?",
+        [row.display_name, row.avatar_url, row.country_code, row.id]
       );
     }
   }
@@ -192,7 +193,8 @@ async function fetchSteamProfile(steamId) {
         if (profile) {
           return {
             personaName: typeof profile.personaname === "string" ? profile.personaname.trim().slice(0, 100) : null,
-            avatarUrl: normalizeSteamAvatarUrl(profile.avatarfull)
+            avatarUrl: normalizeSteamAvatarUrl(profile.avatarfull),
+            countryCode: normalizeCountryCode(profile.loccountrycode)
           };
         }
       }
@@ -205,10 +207,12 @@ async function fetchSteamProfile(steamId) {
     const xml = await response.text();
     const name = xml.match(/<steamID><!\[CDATA\[([\s\S]*?)\]\]><\/steamID>/)?.[1];
     const avatarUrl = xml.match(/<avatarFull><!\[CDATA\[([\s\S]*?)\]\]><\/avatarFull>/)?.[1];
-    if (!name && !avatarUrl) return null;
+    const countryCode = xml.match(/<countryCode>([^<]+)<\/countryCode>/)?.[1];
+    if (!name && !avatarUrl && !countryCode) return null;
     return {
       personaName: name?.trim().slice(0, 100) || null,
-      avatarUrl: normalizeSteamAvatarUrl(avatarUrl)
+      avatarUrl: normalizeSteamAvatarUrl(avatarUrl),
+      countryCode: normalizeCountryCode(countryCode)
     };
   } catch (error) {
     console.warn(`[auth] Could not load Steam persona for ${steamId}:`, error instanceof Error ? error.message : error);
@@ -220,4 +224,10 @@ function normalizeSteamAvatarUrl(value) {
   if (typeof value !== "string" || !value.trim()) return null;
   const url = value.trim();
   return /fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb/i.test(url) ? null : url;
+}
+
+function normalizeCountryCode(value) {
+  if (typeof value !== "string") return null;
+  const code = value.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(code) ? code : null;
 }

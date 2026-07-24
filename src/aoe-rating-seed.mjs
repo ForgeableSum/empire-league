@@ -8,7 +8,9 @@ export async function attemptAoeRatingSeed(database, playerId, steamId) {
      WHERE id = ? AND aoe_rating_seed_attempted = FALSE`,
     [playerId]
   );
-  if (claim.affectedRows !== 1) return { attempted: false, seeded: false };
+  if (claim.affectedRows !== 1) {
+    return backfillAoeCountry(database, playerId, steamId);
+  }
 
   try {
     const seed = await fetchAoeRatingSeed(steamId);
@@ -23,9 +25,10 @@ export async function attemptAoeRatingSeed(database, playerId, steamId) {
            rating = ?,
            peak_rating = ?,
            aoe_initial_rating = ?,
+           country_code = COALESCE(?, country_code),
            aoe_rating_seeded_at = NOW(3)
        WHERE id = ?`,
-      [seed.profileId, seed.rating, seed.peakRating, seed.rating, playerId]
+      [seed.profileId, seed.rating, seed.peakRating, seed.rating, seed.countryCode, playerId]
     );
     console.info(`[aoe-rating-seed] Seeded ${playerId} at ${seed.rating} from ranked 1v1 RM.`);
     return { attempted: true, seeded: true, ...seed };
@@ -35,6 +38,31 @@ export async function attemptAoeRatingSeed(database, playerId, steamId) {
       error instanceof Error ? error.message : error
     );
     return { attempted: true, seeded: false };
+  }
+}
+
+async function backfillAoeCountry(database, playerId, steamId) {
+  const [players] = await database.execute(
+    "SELECT country_code FROM players WHERE id = ?",
+    [playerId]
+  );
+  if (!players.length || players[0].country_code) return { attempted: false, seeded: false };
+
+  try {
+    const seed = await fetchAoeRatingSeed(steamId);
+    if (!seed?.countryCode) return { attempted: false, seeded: false };
+    await database.execute(
+      "UPDATE players SET country_code = ? WHERE id = ? AND country_code IS NULL",
+      [seed.countryCode, playerId]
+    );
+    console.info(`[aoe-rating-seed] Backfilled country ${seed.countryCode} for ${playerId}.`);
+    return { attempted: false, seeded: false, countryCode: seed.countryCode };
+  } catch (error) {
+    console.warn(
+      `[aoe-rating-seed] Country backfill failed for Steam ${steamId}:`,
+      error instanceof Error ? error.message : error
+    );
+    return { attempted: false, seeded: false };
   }
 }
 
@@ -67,12 +95,22 @@ export function parseAoeRatingSeed(payload) {
   const profileId = Number(statGroup?.members?.[0]?.profile_id);
   if (!Number.isSafeInteger(profileId) || profileId <= 0) return null;
 
+  const member = statGroup?.members?.[0];
   const reportedPeak = Number(stat?.highestrating);
   return {
     profileId,
     rating,
     peakRating: Number.isInteger(reportedPeak) && reportedPeak >= rating && reportedPeak <= 5000
       ? reportedPeak
-      : rating
+      : rating,
+    countryCode: normalizeCountryCode(
+      member?.countryCode ?? member?.country_code ?? member?.country ?? stat?.country
+    )
   };
+}
+
+function normalizeCountryCode(value) {
+  if (typeof value !== "string") return null;
+  const code = value.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(code) ? code : null;
 }
