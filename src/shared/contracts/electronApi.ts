@@ -22,6 +22,7 @@ export interface ElectronGameApi {
   startReplayEndDetection(replayFolder?: string): Promise<{ started: boolean; message?: string }>;
   stopReplayEndDetection(): Promise<void>;
   onReplayEnded(listener: (filePath: string) => void): () => void;
+  readReplayFile(filePath: string): Promise<Uint8Array>;
   showAoe2FullscreenAfterDelay(): Promise<GameFocusResult>;
   startAoe2TabTest(): Promise<GameInputTestResult>;
   stopAoe2TabTest(): Promise<void>;

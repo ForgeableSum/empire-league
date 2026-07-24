@@ -1,5 +1,6 @@
 import type {
   JoinQueueRequest,
+  MatchResultReport,
   MatchSession,
   QueueEventListener,
   QueueTicket,
@@ -19,6 +20,7 @@ export interface MatchmakingService {
   publishLobby(matchId: string, lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void>;
   reportGuestLobbyReady(matchId: string): Promise<void>;
   reportGameStarted(matchId: string): Promise<void>;
+  reportMatchResult(report: MatchResultReport): Promise<void>;
 }
 
 const localMatchmakerUrl = matchmakerUrl;
@@ -103,6 +105,15 @@ export class LocalMatchmakingService implements MatchmakingService {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authorizationHeaders() },
       body: JSON.stringify({ ticketId: this.activeTicketId })
+    }));
+  }
+
+  async reportMatchResult(report: MatchResultReport): Promise<void> {
+    if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
+    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(report.matchId)}/result`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
+      body: JSON.stringify({ ticketId: this.activeTicketId, replay: report.replay, error: report.error })
     }));
   }
 
@@ -221,6 +232,10 @@ export class MockMatchmakingService implements MatchmakingService {
   }
 
   async reportGameStarted(_matchId: string): Promise<void> {
+    await delay(100);
+  }
+
+  async reportMatchResult(_report: MatchResultReport): Promise<void> {
     await delay(100);
   }
 

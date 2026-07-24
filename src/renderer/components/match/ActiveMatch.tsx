@@ -9,6 +9,9 @@ export function ActiveMatch() {
     <section className="match-focus">
       <span className="eyebrow">{state.queueStatus === "verifying_result" ? "Result verification" : "Match in progress"}</span>
       <h2>{match.player.displayName} vs {match.opponent.displayName}</h2>
+      {state.queueStatus === "verifying_result" && (
+        <p>Replay metadata submitted. Waiting for both clients to agree on the result.</p>
+      )}
       <div className="metrics-grid compact">
         <div><span>Map</span><strong>{match.selectedMap?.name}</strong></div>
         <div><span>Server</span><strong>{match.lobby?.serverRegion}</strong></div>

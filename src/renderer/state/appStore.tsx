@@ -12,6 +12,7 @@ import { MockMatchResultService } from "../services/matchResultService";
 import { nowLog } from "../services/timing";
 import { authService } from "../services/authService";
 import { matchHistoryService } from "../services/matchHistoryService";
+import { parseReplayMetadata } from "../services/replayMetadataService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
 
 type AppPage = "home" | "play" | "match-history" | "leaderboard" | "profile" | "settings";
@@ -28,6 +29,7 @@ interface AppContextValue {
   prepareLobby: (matchOverride?: MatchSession) => Promise<void>;
   openAoe2: () => Promise<void>;
   simulateMatchEnd: () => Promise<void>;
+  returnToMatchmaking: () => Promise<void>;
   updateMockConfig: (patch: Partial<MockServiceConfig>) => void;
   updateSettings: (patch: Partial<UserSettings>) => void;
   notify: (
@@ -179,17 +181,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       replayResultInFlightRef.current = true;
       setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
       log(`Replay stopped updating: ${filePath}`);
-      void services.results.waitForVerifiedResult(match.id)
-        .then(completeResult)
-        .catch((error) => {
+      void (async () => {
+        try {
+          const replay = await parseReplayMetadata(filePath);
+          await services.matchmaking.reportMatchResult({ matchId: match.id, replay });
+          log("Replay result reported; waiting for opponent report");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Replay parsing failed.";
+          try {
+            await services.matchmaking.reportMatchResult({ matchId: match.id, error: message });
+            log("Replay could not be parsed; result reported as contested");
+            return;
+          } catch {
+            // Fall through to the local connection error below.
+          }
           replayResultInFlightRef.current = false;
           setError({
             code: "RESULT_VERIFICATION_FAILED",
-            message: "The result service could not verify this match.",
-            technicalDetails: error instanceof Error ? error.message : undefined,
+            message: "The replay result could not be reported.",
+            technicalDetails: message,
             retryable: true
           });
-        });
+        }
+      })();
     });
   }, [services]);
 
@@ -574,6 +588,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           log("Host started the game");
           void revealAoe2AfterGameStart();
         }
+        if (event.type === "result_verified" || event.type === "result_contested") {
+          if (event.matchId !== stateRef.current.activeMatch?.id) return;
+          completeResult(event.result);
+        }
         if (event.type === "error") {
           if (event.code === "MATCH_DECLINED" || event.code === "MATCH_EXPIRED") {
             void window.electronApi?.stopMatchFoundAlert();
@@ -780,15 +798,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     void window.electronApi?.stopReplayEndDetection();
     setState((previous) => {
       const activeMatch = previous.activeMatch ? { ...previous.activeMatch, result, status: "completed" as const } : null;
+      const wins = result.outcome === "win" ? previous.currentUser.wins + 1 : previous.currentUser.wins;
+      const losses = result.outcome === "loss" ? previous.currentUser.losses + 1 : previous.currentUser.losses;
       const updatedUser = {
         ...previous.currentUser,
-        rating: result.newRating,
-        division: getDivisionForRating(result.newRating),
-        wins: result.outcome === "win" ? previous.currentUser.wins + 1 : previous.currentUser.wins,
-        losses: result.outcome === "loss" ? previous.currentUser.losses + 1 : previous.currentUser.losses,
-        streak: result.outcome === "win" ? Math.max(1, previous.currentUser.streak + 1) : -1
+        rating: result.verified ? result.newRating : previous.currentUser.rating,
+        peakRating: result.verified
+          ? Math.max(previous.currentUser.peakRating, result.newRating)
+          : previous.currentUser.peakRating,
+        division: result.verified ? getDivisionForRating(result.newRating) : previous.currentUser.division,
+        wins,
+        losses,
+        winRate: wins + losses > 0 ? Number(((wins / (wins + losses)) * 100).toFixed(1)) : 0,
+        streak: result.outcome === "win"
+          ? Math.max(1, previous.currentUser.streak + 1)
+          : result.outcome === "loss"
+            ? Math.min(-1, previous.currentUser.streak - 1)
+            : previous.currentUser.streak
       };
-      const summary = activeMatch
+      const summary = activeMatch && result.verified
         ? {
             id: activeMatch.id,
             opponent: activeMatch.opponent.displayName,
@@ -813,8 +841,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         recentMatches: summary ? [summary, ...previous.recentMatches] : previous.recentMatches
       };
     });
-    log("Match result verified");
-    notify("Match result verified", "success");
+    if (result.verificationStatus === "contested") {
+      log("Replay reports conflicted; result discarded");
+      notify("Result contested — no rating change", "warning");
+    } else {
+      log("Match result verified");
+      notify("Match result verified", "success");
+    }
+  }
+
+  async function returnToMatchmaking(): Promise<void> {
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    if (ticketRef.current) {
+      await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+      ticketRef.current = null;
+    }
+    matchedSessionRef.current = null;
+    setState((previous) => ({
+      ...previous,
+      queueStatus: "idle",
+      selectedQueue: null,
+      queueStartedAt: null,
+      activeMatch: null,
+      error: null
+    }));
+    setPage("play");
   }
 
   function updateMockConfig(patch: Partial<MockServiceConfig>): void {
@@ -859,6 +911,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     prepareLobby,
     openAoe2,
     simulateMatchEnd,
+    returnToMatchmaking,
     updateMockConfig,
     updateSettings,
     notify,

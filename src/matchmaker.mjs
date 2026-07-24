@@ -1,6 +1,16 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
-import { database, checkDatabase, getPlayerMatchHistory, saveMatch, saveQueueTicket, updateMatchStatus, updateTicketStatus } from "./database.mjs";
+import {
+  database,
+  checkDatabase,
+  getPlayerMatchHistory,
+  recordMatchResultConflict,
+  recordVerifiedMatchResult,
+  saveMatch,
+  saveQueueTicket,
+  updateMatchStatus,
+  updateTicketStatus
+} from "./database.mjs";
 import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
@@ -34,6 +44,101 @@ async function readJson(request) {
 
 function emit(ticket, event) {
   ticket.events.push({ sequence: ++eventSequence, event });
+}
+
+function validateReplayReport(match, replay) {
+  if (!replay || !Number.isInteger(replay.winnerProfileId) || !Number.isInteger(replay.loserProfileId)) {
+    return "winner and loser profile IDs are required";
+  }
+  if (!Number.isFinite(replay.durationMs) || replay.durationMs <= 0 || !Array.isArray(replay.players)) {
+    return "duration and player metadata are required";
+  }
+  if (!Number.isSafeInteger(replay.fileSizeBytes) || replay.fileSizeBytes <= 0) {
+    return "replay file size is required";
+  }
+  const expected = [match.host.player.aoeProfileId, match.guest.player.aoeProfileId].sort((a, b) => a - b);
+  const reported = replay.players.map((player) => player.profileId).sort((a, b) => a - b);
+  if (reported.length !== 2 || expected.some((profileId, index) => profileId !== reported[index])) {
+    return "replay players do not match the matched players";
+  }
+  if (!expected.includes(replay.winnerProfileId) || !expected.includes(replay.loserProfileId)
+    || replay.winnerProfileId === replay.loserProfileId) {
+    return "replay winner and loser do not match the match";
+  }
+  return null;
+}
+
+function comparableReplayReport(replay) {
+  return JSON.stringify({
+    // File size is retained for auditing but deliberately excluded here:
+    // perspective-specific view records can make valid client files differ.
+    build: replay.build,
+    recordedAt: replay.recordedAt,
+    durationMs: replay.durationMs,
+    players: [...replay.players]
+      .map((player) => ({
+        profileId: player.profileId,
+        playerNumber: player.playerNumber,
+        civilizationId: player.civilizationId,
+        resigned: player.resigned
+      }))
+      .sort((left, right) => left.profileId - right.profileId),
+    winnerProfileId: replay.winnerProfileId,
+    loserProfileId: replay.loserProfileId,
+    reason: replay.reason
+  });
+}
+
+function resultForTicket(match, ticket, replay, ratings) {
+  const playerRatings = ratings[ticket.player.id];
+  const won = ticket.player.aoeProfileId === replay.winnerProfileId;
+  return {
+    winnerProfileId: replay.winnerProfileId,
+    loserProfileId: replay.loserProfileId,
+    outcome: won ? "win" : "loss",
+    reason: replay.reason,
+    oldRating: playerRatings.oldRating,
+    newRating: playerRatings.newRating,
+    ratingChange: playerRatings.ratingChange,
+    verified: true,
+    verificationSource: "replay",
+    verificationStatus: "verified"
+  };
+}
+
+function contestedResultForTicket(ticket) {
+  return {
+    winnerProfileId: 0,
+    loserProfileId: 0,
+    outcome: "no_contest",
+    reason: "unknown",
+    oldRating: ticket.player.rating,
+    newRating: ticket.player.rating,
+    ratingChange: 0,
+    verified: false,
+    verificationSource: "replay",
+    verificationStatus: "contested"
+  };
+}
+
+async function resolveContestedResult(match, detail, implicatedTicketIds, reports) {
+  console.warn(`[matchmaker] CONTESTED_RESULT ${JSON.stringify({ matchId: match.id, ...detail })}`);
+  await recordMatchResultConflict(match, {
+    reason: detail.reason,
+    implicatedTicketIds,
+    reports
+  });
+  match.resultResolved = true;
+  emit(match.host, {
+    type: "result_contested",
+    matchId: match.id,
+    result: contestedResultForTicket(match.host)
+  });
+  emit(match.guest, {
+    type: "result_contested",
+    matchId: match.id,
+    result: contestedResultForTicket(match.guest)
+  });
 }
 
 function sharedMapPool(firstQueue, secondQueue) {
@@ -84,7 +189,9 @@ async function tryMatch(ticket) {
     createdAt: new Date().toISOString(),
     acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
     lobby: null,
-    guestLobbyReady: false
+    guestLobbyReady: false,
+    resultReports: new Map(),
+    resultResolved: false
   };
   host.matchId = match.id;
   guest.matchId = match.id;
@@ -167,6 +274,11 @@ const server = createServer(async (request, response) => {
       if (!body.queue?.id) return send(response, 400, { error: "queue is required" });
       if (!Array.isArray(body.queue.mapPool) || body.queue.mapPool.length === 0) {
         return send(response, 400, { error: "at least one selected map is required" });
+      }
+      for (const [ticketId, ticket] of tickets) {
+        if (ticket.player.id === authenticatedPlayer.id && ticket.matchId && matches.get(ticket.matchId)?.resultResolved) {
+          tickets.delete(ticketId);
+        }
       }
       const alreadyActive = [...tickets.values()].some((ticket) => ticket.player.id === authenticatedPlayer.id);
       if (alreadyActive || playersJoiningQueue.has(authenticatedPlayer.id)) {
@@ -290,6 +402,68 @@ const server = createServer(async (request, response) => {
       await updateMatchStatus(match.id, "in_game");
       emit(match.guest, { type: "game_started", matchId: match.id });
       return send(response, 200, { started: true });
+    }
+
+    const resultMatch = url.pathname.match(/^\/matches\/([^/]+)\/result$/);
+    if (request.method === "POST" && resultMatch) {
+      const match = matches.get(decodeURIComponent(resultMatch[1]));
+      const body = await readJson(request);
+      const actingTicket = tickets.get(body.ticketId);
+      if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id
+        || ![match.host.id, match.guest.id].includes(body.ticketId)) {
+        return send(response, 404, { error: "match or ticket not found" });
+      }
+      if (match.resultResolved) return send(response, 200, { accepted: true, resolved: true });
+      if (typeof body.error === "string" && body.error.trim()) {
+        await resolveContestedResult(match, {
+          reason: "a client could not parse its replay",
+          reportingTicketId: body.ticketId,
+          error: body.error.trim().slice(0, 500)
+        }, [body.ticketId], { [body.ticketId]: { error: body.error.trim().slice(0, 500) } });
+        return send(response, 200, { accepted: true, resolved: true, contested: true });
+      }
+      const invalid = validateReplayReport(match, body.replay);
+      if (invalid) {
+        await resolveContestedResult(match, {
+          reason: invalid,
+          reportingTicketId: body.ticketId,
+          report: body.replay
+        }, [body.ticketId], { [body.ticketId]: body.replay });
+        return send(response, 200, { accepted: true, resolved: true, contested: true });
+      }
+      match.resultReports.set(body.ticketId, body.replay);
+      if (match.resultReports.size < 2) {
+        return send(response, 202, { accepted: true, resolved: false });
+      }
+
+      const hostReplay = match.resultReports.get(match.host.id);
+      const guestReplay = match.resultReports.get(match.guest.id);
+      if (comparableReplayReport(hostReplay) !== comparableReplayReport(guestReplay)) {
+        await resolveContestedResult(match, {
+          reason: "client replay metadata did not agree",
+          hostReport: hostReplay,
+          guestReport: guestReplay
+        }, [match.host.id, match.guest.id], {
+          [match.host.id]: hostReplay,
+          [match.guest.id]: guestReplay
+        });
+        return send(response, 200, { accepted: true, resolved: true, contested: true });
+      }
+
+      const ratings = await recordVerifiedMatchResult(match, hostReplay.winnerProfileId);
+      match.resultResolved = true;
+      emit(match.host, {
+        type: "result_verified",
+        matchId: match.id,
+        result: resultForTicket(match, match.host, hostReplay, ratings)
+      });
+      emit(match.guest, {
+        type: "result_verified",
+        matchId: match.id,
+        result: resultForTicket(match, match.guest, hostReplay, ratings)
+      });
+      console.log(`[matchmaker] ${match.id}: verified winner=${hostReplay.winnerProfileId}`);
+      return send(response, 200, { accepted: true, resolved: true, contested: false });
     }
 
     return send(response, 404, { error: "not found" });

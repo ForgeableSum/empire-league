@@ -16,6 +16,7 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "aoe2rec-js": "^0.1.22",
     "koffi": "^3.1.2",
     "lucide-react": "^0.468.0",
     "mysql2": "^3.23.1",
@@ -29,7 +30,9 @@
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "typescript": "^5.7.2",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0"
   },
   "build": {
     "appId": "community.empireleague.aoe2",

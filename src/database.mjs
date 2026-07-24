@@ -88,6 +88,115 @@ export async function updateMatchStatus(matchId, status) {
   await database.execute("UPDATE matches SET status = ? WHERE id = ?", [status, matchId]);
 }
 
+export async function recordVerifiedMatchResult(match, winnerProfileId) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [players] = await connection.execute(
+      `SELECT id, aoe_profile_id, rating
+       FROM players
+       WHERE id IN (?, ?)
+       FOR UPDATE`,
+      [match.host.player.id, match.guest.player.id]
+    );
+    if (players.length !== 2) throw new Error("Both matched players must exist before recording a result.");
+    const winner = players.find((player) => Number(player.aoe_profile_id) === winnerProfileId);
+    const loser = players.find((player) => Number(player.aoe_profile_id) !== winnerProfileId);
+    if (!winner || !loser) throw new Error("The reported winner is not a player in this match.");
+
+    const expectedWinner = 1 / (1 + 10 ** ((Number(loser.rating) - Number(winner.rating)) / 400));
+    const winnerChange = Math.round(32 * (1 - expectedWinner));
+    const loserChange = -winnerChange;
+    const winnerAfter = Number(winner.rating) + winnerChange;
+    const loserAfter = Number(loser.rating) + loserChange;
+    const result = winner.id === match.host.player.id ? "host_win" : "guest_win";
+    const completedAt = new Date();
+
+    await connection.execute(
+      `INSERT INTO match_results
+        (match_id, winner_player_id, result, verification_status, verified_at)
+       VALUES (?, ?, ?, 'verified', ?)`,
+      [match.id, winner.id, result, completedAt]
+    );
+    await connection.execute(
+      "UPDATE matches SET status = 'completed', completed_at = ? WHERE id = ?",
+      [completedAt, match.id]
+    );
+    await connection.execute(
+      `UPDATE players
+       SET rating = ?, peak_rating = GREATEST(peak_rating, ?), wins = wins + 1,
+           streak = IF(streak >= 0, streak + 1, 1)
+       WHERE id = ?`,
+      [winnerAfter, winnerAfter, winner.id]
+    );
+    await connection.execute(
+      `UPDATE players
+       SET rating = ?, losses = losses + 1, streak = IF(streak <= 0, streak - 1, -1)
+       WHERE id = ?`,
+      [loserAfter, loser.id]
+    );
+    await connection.execute(
+      `INSERT INTO rating_history
+        (player_id, match_id, rating_before, rating_after, rating_change)
+       VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)`,
+      [
+        winner.id, match.id, Number(winner.rating), winnerAfter, winnerChange,
+        loser.id, match.id, Number(loser.rating), loserAfter, loserChange
+      ]
+    );
+    await connection.commit();
+    return {
+      [winner.id]: { oldRating: Number(winner.rating), newRating: winnerAfter, ratingChange: winnerChange },
+      [loser.id]: { oldRating: Number(loser.rating), newRating: loserAfter, ratingChange: loserChange }
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function recordMatchResultConflict(match, { reason, implicatedTicketIds, reports }) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    for (const ticketId of implicatedTicketIds) {
+      const ticket = ticketId === match.host.id ? match.host : ticketId === match.guest.id ? match.guest : null;
+      if (!ticket) continue;
+      const opponent = ticket.id === match.host.id ? match.guest : match.host;
+      const [insert] = await connection.execute(
+        `INSERT IGNORE INTO match_result_conflicts
+          (match_id, player_id, opponent_player_id, reason, replay_metadata)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          match.id,
+          ticket.player.id,
+          opponent.player.id,
+          String(reason).slice(0, 500),
+          reports?.[ticket.id] === undefined ? null : JSON.stringify(reports[ticket.id])
+        ]
+      );
+      if (insert.affectedRows > 0) {
+        await connection.execute(
+          "UPDATE players SET result_conflict_count = result_conflict_count + 1 WHERE id = ?",
+          [ticket.player.id]
+        );
+      }
+    }
+    await connection.execute(
+      "UPDATE matches SET status = 'cancelled' WHERE id = ?",
+      [match.id]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function getPlayerMatchHistory(playerId) {
   const [rows] = await database.execute(
     `SELECT m.id, opponent.display_name AS opponent, opponent.rating AS opponent_rating,

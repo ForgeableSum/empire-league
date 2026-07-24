@@ -1,5 +1,5 @@
 import type { PlayerProfile } from "./players.js";
-import type { MatchResult } from "./matches.js";
+import type { MatchResult, ReplayMatchMetadata } from "./matches.js";
 
 export type Division =
   | "Bronze"
@@ -169,7 +169,15 @@ export type QueueEvent =
   | { type: "lobby_ready"; matchId: string; lobby: LobbySession }
   | { type: "guest_lobby_ready"; matchId: string }
   | { type: "game_started"; matchId: string }
+  | { type: "result_verified"; matchId: string; result: MatchResult }
+  | { type: "result_contested"; matchId: string; result: MatchResult }
   | { type: "error"; code: string; message: string };
+
+export interface MatchResultReport {
+  matchId: string;
+  replay?: ReplayMatchMetadata;
+  error?: string;
+}
 
 export type QueueEventListener = (event: QueueEvent) => void;
 export type UnsubscribeFunction = () => void;

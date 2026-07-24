@@ -10,6 +10,25 @@ export interface MatchResult {
   ratingChange: number;
   verified: boolean;
   verificationSource: "mock" | "worlds_edge" | "replay" | "manual_review";
+  verificationStatus?: "verified" | "contested";
+}
+
+export interface ReplayPlayerMetadata {
+  profileId: number;
+  playerNumber: number;
+  civilizationId: number;
+  resigned: boolean;
+}
+
+export interface ReplayMatchMetadata {
+  fileSizeBytes: number;
+  build: number;
+  recordedAt: number;
+  durationMs: number;
+  players: ReplayPlayerMetadata[];
+  winnerProfileId: number;
+  loserProfileId: number;
+  reason: "resignation" | "defeat" | "disconnect" | "unknown";
 }
 
 export interface MatchSummary {
