@@ -204,6 +204,8 @@ export async function clickAoe2DesignPoint(
     restored = Boolean(SetCursorPos!(original.x, original.y));
   }
 
+  await delay(500);
+
   return {
     sent: true,
     detail: [
