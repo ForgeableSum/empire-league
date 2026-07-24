@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { lobbySetupCountdownMs } from "../../../shared/runtimeConfig";
 import { useAppStore } from "../../state/appStore";
+import { YouTubeShorts } from "./YouTubeShorts";
 
 const setupCountdownSeconds = Math.ceil(lobbySetupCountdownMs / 1000);
 
@@ -17,14 +18,16 @@ export function LobbyPreparation() {
   }, [state.roomSetupStartedAt]);
 
   return (
-    <section className="lobby-layout">
-      <div className="panel">
+    <section className="search-waiting-layout">
+      <div className="search-state">
         <span className="eyebrow">Lobby preparation</span>
-        <h2>Game starts in</h2>
-        <div className="lobby-countdown" aria-live="polite">{remaining}</div>
+        <h2>{remaining > 0 ? "Game starts in" : "Starting game…"}</h2>
+        {remaining > 0 && (
+          <div className="lobby-countdown" aria-live="polite">{remaining}</div>
+        )}
         <div className="lobby-milestone" aria-live="polite">
           <Loader2 size={18} className="spin" aria-hidden="true" />
-          <span>{state.roomSetupMilestone ?? "Preparing game"}</span>
+          <span>{remaining > 0 ? (state.roomSetupMilestone ?? "Preparing game") : "Starting game…"}</span>
         </div>
         {state.error && (
           <div className="error-panel">
@@ -33,20 +36,11 @@ export function LobbyPreparation() {
             <button type="button" onClick={() => void prepareLobby()}>Try Again</button>
           </div>
         )}
-      </div>
-      <div className="panel">
-        <h2>Lobby Configuration</h2>
-        <div className="status-list">
-          <div><span>Map</span><strong>{state.activeMatch?.selectedMap?.name ?? "Pending"}</strong></div>
-          <div><span>Server</span><strong>{state.activeMatch?.lobby?.serverRegion ?? state.settings.serverRegion}</strong></div>
-          <div><span>Population</span><strong>200</strong></div>
-          <div><span>Victory</span><strong>Conquest</strong></div>
-          <div><span>Recording</span><strong>Enabled</strong></div>
-        </div>
         {state.queueStatus === "ready" && (
           <button className="primary wide" type="button" onClick={() => void openAoe2()}>Open AoE2</button>
         )}
       </div>
+      <YouTubeShorts />
     </section>
   );
 }
