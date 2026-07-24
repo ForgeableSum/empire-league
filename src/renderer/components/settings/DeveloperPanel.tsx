@@ -1,5 +1,6 @@
 import { useAppStore } from "../../state/appStore";
 import type { MockServiceConfig } from "../../state/types";
+import { ThemedSelect } from "../common/ThemedSelect";
 
 export function DeveloperPanel() {
   const { state, updateMockConfig, simulateMatchEnd } = useAppStore();
@@ -30,7 +31,19 @@ export function DeveloperPanel() {
           />
         </label>
       ))}
-      <label>Forced result<select value={config.forcedResult ?? ""} onChange={(event) => updateMockConfig({ forcedResult: event.target.value === "" ? undefined : event.target.value as "win" | "loss" | "no_contest" })}><option value="">Random</option><option value="win">Player wins</option><option value="loss">Opponent wins</option><option value="no_contest">No contest</option></select></label>
+      <ThemedSelect
+        label="Forced result"
+        options={[
+          { value: "", label: "Random" },
+          { value: "win", label: "Player wins" },
+          { value: "loss", label: "Opponent wins" },
+          { value: "no_contest", label: "No contest" }
+        ]}
+        value={config.forcedResult ?? ""}
+        onChange={(forcedResult) => updateMockConfig({
+          forcedResult: forcedResult === "" ? undefined : forcedResult as "win" | "loss" | "no_contest"
+        })}
+      />
       <button className="secondary wide" type="button" onClick={() => void simulateMatchEnd()}>Simulate Match End</button>
       <h2>Event Log</h2>
       <div className="event-log">{state.eventLog.map((entry) => <code key={entry}>{entry}</code>)}</div>

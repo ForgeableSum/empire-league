@@ -1,5 +1,6 @@
 import { Clock, Search, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { ThemedSelect } from "../components/common/ThemedSelect";
 import { LobbyPreparation } from "../components/match/LobbyPreparation";
 import { ActiveMatch } from "../components/match/ActiveMatch";
 import { ResultScreen } from "../components/match/ResultScreen";
@@ -102,16 +103,15 @@ export function QueuePage() {
       ) : selectedQueue ? (
         <>
           <div className="queue-mode-picker">
-            <label>
-              Match type
-              <select value={selectedQueue.id} onChange={(event) => setSelectedQueueId(event.target.value)}>
-                {queues.map((queue) => (
-                  <option value={queue.id} key={queue.id}>
-                    {queue.id === "team-games" ? "Team vs Team" : "1v1"}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ThemedSelect
+              label="Match type"
+              options={queues.map((queue) => ({
+                value: queue.id,
+                label: queue.id === "team-games" ? "Team vs Team" : "1v1"
+              }))}
+              value={selectedQueue.id}
+              onChange={setSelectedQueueId}
+            />
           </div>
           <div className="queue-grid">
             <article className="queue-card" key={selectedQueue.id}>

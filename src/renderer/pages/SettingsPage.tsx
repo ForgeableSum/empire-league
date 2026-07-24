@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { GameInputKey } from "../../shared/contracts/gameIntegration";
+import { ThemedSelect } from "../components/common/ThemedSelect";
 import { useAppStore } from "../state/appStore";
 
 type DetectionFeedback = { tone: "success" | "error"; message: string };
@@ -159,7 +160,12 @@ export function SettingsPage() {
         <Toggle label="Auto-detect installation" checked={settings.autoDetect} onChange={(autoDetect) => updateSettings({ autoDetect })} />
         <Toggle label="Launch game automatically" checked={settings.autoLaunch} onChange={(autoLaunch) => updateSettings({ autoLaunch })} />
         <Toggle label="Focus game when lobby is ready" checked={settings.focusWhenReady} onChange={(focusWhenReady) => updateSettings({ focusWhenReady })} />
-        <label>Preferred display mode<select value={settings.displayMode} onChange={(event) => updateSettings({ displayMode: event.target.value as typeof settings.displayMode })}><option>Borderless</option><option>Fullscreen</option><option>Windowed</option></select></label>
+        <ThemedSelect
+          label="Preferred display mode"
+          options={["Borderless", "Fullscreen", "Windowed"].map((mode) => ({ value: mode, label: mode }))}
+          value={settings.displayMode}
+          onChange={(displayMode) => updateSettings({ displayMode: displayMode as typeof settings.displayMode })}
+        />
         <Toggle label="Enable replay detection" checked={settings.replayDetection} onChange={(replayDetection) => updateSettings({ replayDetection })} />
         <label>Recorded-game folder<input value={settings.replayFolder} onChange={(event) => updateSettings({ replayFolder: event.target.value })} placeholder="Not configured" /></label>
         <button type="button" className="secondary" disabled={detecting} onClick={() => void testGameDetection()}>

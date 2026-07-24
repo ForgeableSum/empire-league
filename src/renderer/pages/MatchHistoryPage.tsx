@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ThemedSelect } from "../components/common/ThemedSelect";
 import { useAppStore } from "../state/appStore";
 
 export function MatchHistoryPage() {
@@ -22,14 +23,16 @@ export function MatchHistoryPage() {
           Search
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Opponent, map, civilization" />
         </label>
-        <label>
-          Result
-          <select value={filter} onChange={(event) => setFilter(event.target.value)}>
-            <option value="all">All</option>
-            <option value="win">Wins</option>
-            <option value="loss">Losses</option>
-          </select>
-        </label>
+        <ThemedSelect
+          label="Result"
+          options={[
+            { value: "all", label: "All" },
+            { value: "win", label: "Wins" },
+            { value: "loss", label: "Losses" }
+          ]}
+          value={filter}
+          onChange={setFilter}
+        />
       </div>
       <div className="panel">
         <div className="table history-table">
