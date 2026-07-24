@@ -1517,8 +1517,16 @@ export function registerGameHandlers(): void {
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
-      const focused = focusAoe2NativeWindow(process.pid);
-      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=True|Focused=${focused}|Foreground=${isAoe2NativeWindowForeground(process.pid)}`);
+      const focusDeadline = Date.now() + 1_500;
+      let focused = focusAoe2NativeWindow(process.pid);
+      let foreground = isAoe2NativeWindowForeground(process.pid);
+      while (!foreground && Date.now() < focusDeadline) {
+        await delay(25);
+        focused = focusAoe2NativeWindow(process.pid) || focused;
+        foreground = isAoe2NativeWindowForeground(process.pid);
+      }
+      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=True|Focused=${focused}|Foreground=${foreground}`);
+      if (!foreground) throw new Error("AoE2 did not become the foreground window.");
       const clickStep = async (
         name: string,
         x: number,
@@ -1541,7 +1549,7 @@ export function registerGameHandlers(): void {
           await clickStep(action.label, action.point[0], action.point[1], {
             hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
             holdMs: "holdMs" in action ? action.holdMs : undefined,
-            synchronous: action.activation === "click"
+            synchronous: action.activation === "click" || actionName === "multiplayer"
           });
           if (action.activation === "clickEnter") {
             await delay(500);
