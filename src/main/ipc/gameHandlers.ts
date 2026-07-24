@@ -1518,7 +1518,7 @@ export function registerGameHandlers(): void {
         name: string,
         x: number,
         y: number,
-        timing?: { hoverMs?: number; holdMs?: number }
+        timing?: { hoverMs?: number; holdMs?: number; synchronous?: boolean }
       ) => {
         const result = await postAoe2DesignClick(process.pid as number, x, y, timing);
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
@@ -1528,7 +1528,8 @@ export function registerGameHandlers(): void {
         const action = aoe2UiManifest.actions[actionName];
         await clickStep(action.label, action.point[0], action.point[1], {
           hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
-          holdMs: "holdMs" in action ? action.holdMs : undefined
+          holdMs: "holdMs" in action ? action.holdMs : undefined,
+          synchronous: action.activation === "click"
         });
         if (action.activation === "clickEnter") {
           await delay(500);
@@ -1592,7 +1593,8 @@ export function registerGameHandlers(): void {
       const action = aoe2UiManifest.actions[actionName];
       const result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
         hoverMs: action.hoverMs,
-        holdMs: action.holdMs
+        holdMs: action.holdMs,
+        synchronous: true
       });
       await delay(action.settleMs);
       const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.point[0]},${action.point[1]}|${result.detail}`;

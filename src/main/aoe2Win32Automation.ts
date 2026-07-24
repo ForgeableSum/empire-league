@@ -234,7 +234,7 @@ export async function postAoe2DesignClick(
   processId: number,
   designX: number,
   designY: number,
-  timing: { hoverMs?: number; holdMs?: number } = {}
+  timing: { hoverMs?: number; holdMs?: number; synchronous?: boolean } = {}
 ): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
@@ -251,21 +251,22 @@ export async function postAoe2DesignClick(
   const position = (y << 16) | (x & 0xffff);
   const hoverMs = timing.hoverMs ?? 100;
   const holdMs = timing.holdMs ?? 120;
-  const moved = sendMouseMessage(window, 0x0200, 0, position);
-  // Dispatch each transition before advancing to the next one. PostMessageW
-  // only proves that Windows accepted the message into AoE2's queue; it does
-  // not prove that the game processed it before the caller reports success.
+  const synchronous = timing.synchronous ?? false;
+  const send = synchronous
+    ? (message: number, wParam: number) => sendMouseMessage(window, message, wParam, position)
+    : (message: number, wParam: number) => postMouseMessage(window, message, wParam, position);
+  const moved = send(0x0200, 0);
   await delay(hoverMs);
-  const down = sendMouseMessage(window, 0x0201, 1, position);
+  const down = send(0x0201, 1);
   await delay(holdMs);
-  const up = sendMouseMessage(window, 0x0202, 0, position);
+  const up = send(0x0202, 0);
   const sent = moved.dispatched && down.dispatched && up.dispatched;
 
   return {
     sent,
     detail: [
       sent ? "SENT" : "SEND_FAILED",
-      "Mode=WindowMessageSync",
+      `Mode=${synchronous ? "WindowMessageSync" : "WindowMessage"}`,
       `Client=${width}x${height}`,
       `ClientPoint=${x},${y}`,
       `DesignPoint=${designX},${designY}`,
@@ -321,6 +322,20 @@ function processIdForWindow(window: NativeHandle): number {
 
 function sameHandle(first: NativeHandle, second: NativeHandle): boolean {
   return first === second || String(first) === String(second);
+}
+
+function postMouseMessage(
+  window: NativeHandle,
+  message: number,
+  wParam: number,
+  lParam: number
+): { dispatched: boolean; elapsedMs: number } {
+  const started = performance.now();
+  const dispatched = Boolean(PostMessageW!(window, message, wParam, lParam));
+  return {
+    dispatched,
+    elapsedMs: Math.round((performance.now() - started) * 10) / 10
+  };
 }
 
 function sendMouseMessage(
