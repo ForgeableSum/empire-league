@@ -34,6 +34,11 @@ lobby message loop can be throttled while AoE2 is in the background.
 11. `hostReady` (`click`)
 12. `startGame` (`click`)
 
+The first three transitions are verified from stable points on AoE2's rendered
+window surface. If the expected next screen is not present, that step is
+retried once; the sequence stops rather than sending later coordinates to the
+wrong screen.
+
 ## Guest flow
 
 1. Receive the published `aoe2de://0/<digits>` URI.

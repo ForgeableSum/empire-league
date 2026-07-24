@@ -30,6 +30,7 @@ import {
   focusAoe2NativeWindow,
   isAoe2NativeWindowForeground,
   postAoe2DesignClick,
+  readAoe2HostSetupState,
   readAoe2ReadyState,
   sendAoe2Enter
 } from "../aoe2Win32Automation.js";
@@ -1528,20 +1529,47 @@ export function registerGameHandlers(): void {
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
         if (!result.sent) throw new Error(`${name} could not be clicked.`);
       };
+      const expectedHostState: Partial<Record<Aoe2ActionName, ReturnType<typeof readAoe2HostSetupState>["state"]>> = {
+        multiplayer: "multiplayer-menu",
+        hostGame: "create-lobby-dialog",
+        createLobby: "lobby-room"
+      };
       const actionStep = async (actionName: Aoe2ActionName) => {
         const action = aoe2UiManifest.actions[actionName];
-        await clickStep(action.label, action.point[0], action.point[1], {
-          hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
-          holdMs: "holdMs" in action ? action.holdMs : undefined,
-          synchronous: action.activation === "click"
-        });
-        if (action.activation === "clickEnter") {
-          await delay(500);
-          const enter = await sendAoe2Enter(process.pid as number);
-          emitLog(`STEP|${action.label}|Key=ENTER|${enter.detail}`);
-          if (!enter.sent) throw new Error(`${action.label} could not be activated.`);
+        const expectedState = expectedHostState[actionName];
+        const performAction = async (attempt: number) => {
+          await clickStep(action.label, action.point[0], action.point[1], {
+            hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
+            holdMs: "holdMs" in action ? action.holdMs : undefined,
+            synchronous: action.activation === "click"
+          });
+          if (action.activation === "clickEnter") {
+            await delay(500);
+            const enter = await sendAoe2Enter(process.pid as number);
+            emitLog(`STEP|${action.label}|Attempt=${attempt}|Key=ENTER|${enter.detail}`);
+            if (!enter.sent) throw new Error(`${action.label} could not be activated.`);
+          }
+          await delay(action.settleMs);
+        };
+
+        if (expectedState) {
+          const before = readAoe2HostSetupState(process.pid as number);
+          emitLog(`STEP_VERIFY|${action.label}|Attempt=before|Expected=${expectedState}|${before.detail}`);
+          if (before.state === expectedState) return;
         }
-        await delay(action.settleMs);
+
+        await performAction(1);
+        if (!expectedState) return;
+        let verification = readAoe2HostSetupState(process.pid as number);
+        emitLog(`STEP_VERIFY|${action.label}|Attempt=1|Expected=${expectedState}|${verification.detail}`);
+        if (verification.state !== expectedState) {
+          await performAction(2);
+          verification = readAoe2HostSetupState(process.pid as number);
+          emitLog(`STEP_VERIFY|${action.label}|Attempt=2|Expected=${expectedState}|${verification.detail}`);
+        }
+        if (verification.state !== expectedState) {
+          throw new Error(`${action.label} did not reach ${expectedState}.`);
+        }
       };
 
       await actionStep("multiplayer");

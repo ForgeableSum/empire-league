@@ -82,6 +82,11 @@ export interface NativeReadyStateResult {
   detail: string;
 }
 
+export interface NativeHostSetupStateResult {
+  state: "main-menu" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "unknown";
+  detail: string;
+}
+
 export function detectAoe2NativeProcess(): NativeProcessStatus {
   ensureWindowsBindings();
   const snapshot = CreateToolhelp32Snapshot!(0x00000002, 0) as NativeHandle;
@@ -352,6 +357,67 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
     state,
     detail: `State=${state}|Window=${String(window)}|ClientPoint=${x},${y}|RGB=${red},${green},${blue}`
   };
+}
+
+export function readAoe2HostSetupState(processId: number): NativeHostSetupStateResult {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { state: "unknown", detail: "WINDOW_NOT_FOUND" };
+
+  const rect = {} as Rect;
+  if (!GetClientRect!(window, rect)) return { state: "unknown", detail: "CLIENT_RECT_FAILED" };
+  const width = rect.right - rect.left;
+  const height = rect.bottom - rect.top;
+  if (width <= 0 || height <= 0) return { state: "unknown", detail: "INVALID_CLIENT_SIZE" };
+
+  const dc = GetDC!(window) as NativeHandle;
+  if (!dc) return { state: "unknown", detail: "WINDOW_DC_FAILED" };
+  let upperLeft: [number, number, number] | null;
+  let upperCenter: [number, number, number] | null;
+  let lowerButton: [number, number, number] | null;
+  try {
+    upperLeft = readRgb(dc, Math.round(825 * width / 3840), Math.round(383 * height / 2160));
+    upperCenter = readRgb(dc, Math.round(1920 * width / 3840), Math.round(495 * height / 2160));
+    lowerButton = readRgb(dc, Math.round(1500 * width / 3840), Math.round(1979 * height / 2160));
+  } finally {
+    ReleaseDC!(window, dc);
+  }
+  if (!upperLeft || !upperCenter || !lowerButton) {
+    return { state: "unknown", detail: "PIXEL_READ_FAILED" };
+  }
+
+  const [leftRed, leftGreen, leftBlue] = upperLeft;
+  const [centerRed, centerGreen, centerBlue] = upperCenter;
+  const [buttonRed, buttonGreen] = lowerButton;
+  const hasReadyButton = (buttonRed > buttonGreen * 2 && buttonRed > 80)
+    || (buttonGreen > buttonRed * 2 && buttonGreen > 80);
+  const state = hasReadyButton
+    ? "lobby-room"
+    : centerRed < 50 && centerGreen < 50 && centerBlue < 50
+      && leftRed > 100 && leftGreen > 50 && leftBlue < 30
+      ? "multiplayer-menu"
+      : centerRed > 120 && centerGreen > 100 && centerBlue > 70
+        && leftRed < 100 && leftGreen < 80 && leftBlue < 70
+        ? "create-lobby-dialog"
+        : centerRed > 150 && centerGreen > 150 && centerBlue > 140
+          ? "main-menu"
+          : "unknown";
+  return {
+    state,
+    detail: [
+      `State=${state}`,
+      `Window=${String(window)}`,
+      `UpperLeftRGB=${upperLeft.join(",")}`,
+      `UpperCenterRGB=${upperCenter.join(",")}`,
+      `LowerButtonRGB=${lowerButton.join(",")}`
+    ].join("|")
+  };
+}
+
+function readRgb(dc: NativeHandle, x: number, y: number): [number, number, number] | null {
+  const color = Number(GetPixel!(dc, x, y));
+  if (color === 0xffffffff) return null;
+  return [color & 0xff, (color >> 8) & 0xff, (color >> 16) & 0xff];
 }
 
 function findLargestProcessWindow(processId: number): NativeHandle {
