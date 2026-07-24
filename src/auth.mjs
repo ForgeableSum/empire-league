@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { database } from "./database.mjs";
+import { attemptAoeRatingSeed } from "./aoe-rating-seed.mjs";
 
 const steamOpenIdUrl = "https://steamcommunity.com/openid/login";
 const sessionLifetimeMs = 30 * 24 * 60 * 60 * 1000;
@@ -104,6 +105,7 @@ export async function pollSteamLogin(attemptId, pollToken) {
     );
     await connection.execute("UPDATE auth_login_attempts SET status = 'consumed', consumed_at = NOW(3) WHERE id = ?", [attemptId]);
     await connection.commit();
+    await attemptAoeRatingSeed(database, players[0].id, steamId);
     return { status: "authenticated", token: sessionToken, expiresAt: expiresAt.toISOString() };
   } catch (error) {
     await connection.rollback();
