@@ -5,6 +5,8 @@ export interface Aoe2UiAction {
   point: readonly [x: number, y: number];
   activation: Aoe2Activation;
   settleMs: number;
+  hoverMs?: number;
+  holdMs?: number;
 }
 
 export const aoe2UiManifest = {
@@ -46,19 +48,25 @@ export const aoe2UiManifest = {
       label: "Guest Ready",
       point: [1413, 1875],
       activation: "click",
-      settleMs: 1_000
+      settleMs: 1_000,
+      hoverMs: 250,
+      holdMs: 250
     },
     hostReady: {
       label: "Host Ready",
       point: [1388, 1979],
       activation: "click",
-      settleMs: 1_000
+      settleMs: 1_000,
+      hoverMs: 250,
+      holdMs: 250
     },
     startGame: {
       label: "Start Game",
       point: [1974, 1979],
       activation: "click",
-      settleMs: 2_000
+      settleMs: 2_000,
+      hoverMs: 250,
+      holdMs: 250
     },
     hostCivilization: {
       label: "Host Civilization",

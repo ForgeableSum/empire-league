@@ -1514,14 +1514,22 @@ export function registerGameHandlers(): void {
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
-      const clickStep = async (name: string, x: number, y: number) => {
-        const result = await postAoe2DesignClick(process.pid as number, x, y);
+      const clickStep = async (
+        name: string,
+        x: number,
+        y: number,
+        timing?: { hoverMs?: number; holdMs?: number }
+      ) => {
+        const result = await postAoe2DesignClick(process.pid as number, x, y, timing);
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
         if (!result.sent) throw new Error(`${name} could not be clicked.`);
       };
       const actionStep = async (actionName: Aoe2ActionName) => {
         const action = aoe2UiManifest.actions[actionName];
-        await clickStep(action.label, action.point[0], action.point[1]);
+        await clickStep(action.label, action.point[0], action.point[1], {
+          hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
+          holdMs: "holdMs" in action ? action.holdMs : undefined
+        });
         if (action.activation === "clickEnter") {
           await delay(500);
           const enter = await sendAoe2Enter(process.pid as number);
@@ -1553,7 +1561,7 @@ export function registerGameHandlers(): void {
       }
       if (!lobbyUri) throw new Error("Lobby URI was not copied.");
       emitLog(`LOBBY_URI|${lobbyUri}`);
-      emitLog("SEQUENCE|Complete=True|Mode=KoffiCursor");
+      emitLog("SEQUENCE|Complete=True|Mode=WindowMessage");
       return { sent: true, message: "Cursor lobby creation completed.", lobbyUri };
     } catch (error) {
       emitLog(`ERROR|${error instanceof Error ? error.message : "Native lobby automation failed."}`);
@@ -1582,7 +1590,10 @@ export function registerGameHandlers(): void {
           ? "hostReady"
           : "startGame";
       const action = aoe2UiManifest.actions[actionName];
-      const result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1]);
+      const result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
+        hoverMs: action.hoverMs,
+        holdMs: action.holdMs
+      });
       await delay(action.settleMs);
       const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.point[0]},${action.point[1]}|${result.detail}`;
       console.info(`[AoE2 automation] ${message}`);

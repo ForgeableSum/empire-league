@@ -230,7 +230,8 @@ export async function clickAoe2DesignPoint(
 export async function postAoe2DesignClick(
   processId: number,
   designX: number,
-  designY: number
+  designY: number,
+  timing: { hoverMs?: number; holdMs?: number } = {}
 ): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
@@ -245,13 +246,15 @@ export async function postAoe2DesignClick(
   const x = Math.round(designX * width / 3840);
   const y = Math.round(designY * height / 2160);
   const position = (y << 16) | (x & 0xffff);
+  const hoverMs = timing.hoverMs ?? 100;
+  const holdMs = timing.holdMs ?? 120;
   const moved = Boolean(PostMessageW!(window, 0x0200, 0, position));
   // AoE2 can throttle its message loop while it is in the background. Give
   // the UI a frame to establish the hovered widget before posting the press,
   // then hold the press long enough to cross another throttled frame.
-  await delay(250);
+  await delay(hoverMs);
   const down = Boolean(PostMessageW!(window, 0x0201, 1, position));
-  await delay(250);
+  await delay(holdMs);
   const up = Boolean(PostMessageW!(window, 0x0202, 0, position));
 
   return {
@@ -262,6 +265,8 @@ export async function postAoe2DesignClick(
       `Client=${width}x${height}`,
       `ClientPoint=${x},${y}`,
       `DesignPoint=${designX},${designY}`,
+      `HoverMs=${hoverMs}`,
+      `HoldMs=${holdMs}`,
       `Move=${moved}`,
       `Down=${down}`,
       `Up=${up}`
