@@ -36,6 +36,8 @@ const GetClientRect = user32?.func("bool __stdcall GetClientRect(HWND hwnd, _Out
 const ClientToScreen = user32?.func("bool __stdcall ClientToScreen(HWND hwnd, _Inout_ EL_POINT *point)");
 const ShowWindow = user32?.func("bool __stdcall ShowWindow(HWND hwnd, int32_t command)");
 const SetWindowPos = user32?.func("bool __stdcall SetWindowPos(HWND hwnd, HWND insertAfter, int32_t x, int32_t y, int32_t width, int32_t height, uint32_t flags)");
+const GetWindowLongW = user32?.func("int32_t __stdcall GetWindowLongW(HWND hwnd, int32_t index)");
+const SetWindowLongW = user32?.func("int32_t __stdcall SetWindowLongW(HWND hwnd, int32_t index, int32_t value)");
 const SetForegroundWindow = user32?.func("bool __stdcall SetForegroundWindow(HWND hwnd)");
 const GetForegroundWindow = user32?.func("HWND __stdcall GetForegroundWindow()");
 const WindowFromPoint = user32?.func("HWND __stdcall WindowFromPoint(EL_POINT point)");
@@ -122,6 +124,20 @@ export function minimizeAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   return Boolean(window) && Boolean(ShowWindow!(window, 6));
+}
+
+export function hideAoe2NativeWindowFromTaskbar(processId: number): boolean {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return false;
+  const extendedStyle = Number(GetWindowLongW!(window, -20));
+  const toolWindowStyle = (extendedStyle | 0x00000080) & ~0x00040000;
+  if (extendedStyle === toolWindowStyle) return true;
+  ShowWindow!(window, 0);
+  SetWindowLongW!(window, -20, toolWindowStyle);
+  SetWindowPos!(window, null, 0, 0, 0, 0, 0x0037);
+  ShowWindow!(window, 8);
+  return Number(GetWindowLongW!(window, -20)) === toolWindowStyle;
 }
 
 export function restoreAoe2NativeWindowBehind(processId: number): boolean {
