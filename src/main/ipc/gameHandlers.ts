@@ -1581,7 +1581,10 @@ export function registerGameHandlers(): void {
         timing?: { hoverMs?: number; holdMs?: number; synchronous?: boolean; primeMove?: boolean }
       ) => {
         await focusOffscreenAoe2(process.pid as number, name);
-        const result = await postAoe2DesignClick(process.pid as number, x, y, timing);
+        const result = await postAoe2DesignClick(process.pid as number, x, y, {
+          ...timing,
+          synchronous: true
+        });
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
         if (!result.sent) throw new Error(`${name} could not be clicked.`);
       };
