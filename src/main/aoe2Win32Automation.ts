@@ -393,6 +393,11 @@ export async function sendAoe2Tab(processId: number): Promise<NativeInputResult>
   };
 }
 
+export interface NativeCivilizationTileStateResult {
+  state: "selected" | "not-selected" | "unknown";
+  detail: string;
+}
+
 export async function sendAoe2Text(processId: number, text: string): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
@@ -456,6 +461,40 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
   return {
     state,
     detail: `State=${state}|Window=${String(window)}|ClientPoint=${x},${y}|RGB=${red},${green},${blue}`
+  };
+}
+
+export function readAoe2CivilizationTileState(
+  processId: number,
+  tileDesignX: number,
+  tileDesignY: number
+): NativeCivilizationTileStateResult {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { state: "unknown", detail: "State=unknown|Reason=WINDOW_NOT_FOUND" };
+
+  const rect = {} as Rect;
+  if (!GetClientRect!(window, rect)) {
+    return { state: "unknown", detail: "State=unknown|Reason=CLIENT_RECT_FAILED" };
+  }
+  const width = rect.right - rect.left;
+  const height = rect.bottom - rect.top;
+  const borderX = Math.round((tileDesignX - 122) * width / 3840);
+  const borderY = Math.round((tileDesignY - 123) * height / 2160);
+  const rgb = readWindowRgb(window, borderX, borderY);
+  if (!rgb) return { state: "unknown", detail: "State=unknown|Reason=PIXEL_READ_FAILED" };
+
+  const [red, green, blue] = rgb;
+  const spread = Math.max(red, green, blue) - Math.min(red, green, blue);
+  const brightness = (red + green + blue) / 3;
+  const state = spread <= 8 && brightness >= 200
+    ? "selected"
+    : spread <= 8 && brightness >= 45 && brightness <= 150
+      ? "not-selected"
+      : "unknown";
+  return {
+    state,
+    detail: `State=${state}|BorderRGB=${formatRgb(rgb)}|ClientPoint=${borderX},${borderY}`
   };
 }
 
