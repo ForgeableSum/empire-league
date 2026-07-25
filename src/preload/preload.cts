@@ -60,3 +60,21 @@ const electronApi: ElectronGameApi = {
 };
 
 contextBridge.exposeInMainWorld("electronApi", electronApi);
+
+const setupInputEvents = [
+  "pointerdown", "pointerup", "mousedown", "mouseup", "click",
+  "dblclick", "contextmenu", "wheel", "keydown", "keyup"
+] as const;
+const blockSetupInput = (event: Event) => {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+};
+ipcRenderer.on("game:setup-input-guard", (_event, active: boolean) => {
+  setupInputEvents.forEach((eventName) => {
+    if (active) {
+      window.addEventListener(eventName, blockSetupInput, { capture: true, passive: false });
+    } else {
+      window.removeEventListener(eventName, blockSetupInput, { capture: true });
+    }
+  });
+});
