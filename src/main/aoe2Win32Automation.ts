@@ -393,6 +393,45 @@ export async function sendAoe2Tab(processId: number): Promise<NativeInputResult>
   };
 }
 
+export type Aoe2ArrowKey = "left" | "up" | "right" | "down";
+
+export async function sendAoe2ArrowKey(
+  processId: number,
+  key: Aoe2ArrowKey
+): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+  const keyData: Record<Aoe2ArrowKey, {
+    virtualKey: number;
+    downLParam: number;
+    upLParam: number;
+  }> = {
+    left: { virtualKey: 0x25, downLParam: 0x014b0001, upLParam: -1052049407 },
+    up: { virtualKey: 0x26, downLParam: 0x01480001, upLParam: -1052246015 },
+    right: { virtualKey: 0x27, downLParam: 0x014d0001, upLParam: -1051918335 },
+    down: { virtualKey: 0x28, downLParam: 0x01500001, upLParam: -1051721727 }
+  };
+  const input = keyData[key];
+  const down = sendWindowMessage(window, 0x0100, input.virtualKey, input.downLParam);
+  await delay(15);
+  const up = sendWindowMessage(window, 0x0101, input.virtualKey, input.upLParam);
+  const sent = down.dispatched && up.dispatched;
+  return {
+    sent,
+    detail: [
+      sent ? "SENT" : "SEND_FAILED",
+      "Mode=WindowMessageSync",
+      `Key=${key.toUpperCase()}`,
+      `Window=${String(window)}`,
+      `Down=${down.dispatched}`,
+      `DownMs=${down.elapsedMs}`,
+      `Up=${up.dispatched}`,
+      `UpMs=${up.elapsedMs}`
+    ].join("|")
+  };
+}
+
 export interface NativeCivilizationTileStateResult {
   state: "selected" | "not-selected" | "unknown";
   detail: string;
@@ -479,22 +518,39 @@ export function readAoe2CivilizationTileState(
   }
   const width = rect.right - rect.left;
   const height = rect.bottom - rect.top;
-  const borderX = Math.round((tileDesignX - 122) * width / 3840);
-  const borderY = Math.round((tileDesignY - 123) * height / 2160);
-  const rgb = readWindowRgb(window, borderX, borderY);
-  if (!rgb) return { state: "unknown", detail: "State=unknown|Reason=PIXEL_READ_FAILED" };
+  const sampleDesignPoints = [
+    [tileDesignX - 80, tileDesignY - 118],
+    [tileDesignX, tileDesignY - 118],
+    [tileDesignX + 80, tileDesignY - 118],
+    [tileDesignX - 118, tileDesignY - 80],
+    [tileDesignX - 118, tileDesignY],
+    [tileDesignX - 118, tileDesignY + 80]
+  ] as const;
+  const samples = sampleDesignPoints
+    .map(([designX, designY]) => {
+      const x = Math.round(designX * width / 3840);
+      const y = Math.round(designY * height / 2160);
+      return { x, y, rgb: readWindowRgb(window, x, y) };
+    })
+    .filter((sample): sample is { x: number; y: number; rgb: [number, number, number] } => Boolean(sample.rgb));
+  if (samples.length === 0) {
+    return { state: "unknown", detail: "State=unknown|Reason=PIXEL_READ_FAILED" };
+  }
 
-  const [red, green, blue] = rgb;
-  const spread = Math.max(red, green, blue) - Math.min(red, green, blue);
-  const brightness = (red + green + blue) / 3;
-  const state = spread <= 8 && brightness >= 200
+  const neutralBrightness = samples.map(({ rgb }) => {
+    const spread = Math.max(...rgb) - Math.min(...rgb);
+    return spread <= 12 ? (rgb[0] + rgb[1] + rgb[2]) / 3 : 0;
+  });
+  const brightSamples = neutralBrightness.filter((brightness) => brightness >= 190).length;
+  const graySamples = neutralBrightness.filter((brightness) => brightness >= 35 && brightness <= 165).length;
+  const state = brightSamples >= 2
     ? "selected"
-    : spread <= 8 && brightness >= 45 && brightness <= 150
+    : graySamples >= 2
       ? "not-selected"
       : "unknown";
   return {
     state,
-    detail: `State=${state}|BorderRGB=${formatRgb(rgb)}|ClientPoint=${borderX},${borderY}`
+    detail: `State=${state}|BrightSamples=${brightSamples}|GraySamples=${graySamples}|Samples=${samples.map(({ x, y, rgb }) => `${x},${y}:${formatRgb(rgb)}`).join(";")}`
   };
 }
 

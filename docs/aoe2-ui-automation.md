@@ -28,9 +28,11 @@ lobby message loop can be throttled while AoE2 is in the background.
    4. Verify that the lobby screen is present again before continuing.
 6. Optionally select a civilization:
    1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
-   2. Resolve the selection's stable unfiltered grid point from the manifest and focus it with a synchronous window-local click. This avoids the picker search field, whose text input and filtered layout are timing-sensitive.
-   3. Dispatch Enter to activate and confirm the focused tile. In this overlay, Enter closes the picker without a separate Confirm-button click.
-   4. Verify that AoE2 returned to the lobby room before continuing.
+   2. Scan the unfiltered 9-column grid for the selected tile's white top/left border.
+   3. Click only that already-selected tile to anchor keyboard focus without changing the selection.
+   4. Move from the detected cell to the manifest cell with directional keys. Verify the expected white border after every key and retry a dropped key once.
+   5. Dispatch Enter only after the requested tile is verified. In this overlay, Enter closes the picker without a separate Confirm-button click.
+   6. Verify that AoE2 returned to the lobby room before continuing.
 7. `copyLobbyUri` (`click`)
 8. Verify the clipboard matches `aoe2de://0/<digits>`.
 9. Publish that URI to the guest. This URI is the normal automated invitation path.
