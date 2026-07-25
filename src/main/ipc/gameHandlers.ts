@@ -571,12 +571,36 @@ $exitCode = [AoeInputGuard]::Run([uint32]$game.Id)
 exit $exitCode
 `;
 
+const blockInputGuardScript = String.raw`
+$ErrorActionPreference = 'Stop'
+$interop = @'
+using System;
+using System.Runtime.InteropServices;
+public static class EmpireLeagueBlockInput {
+  [DllImport("user32.dll", SetLastError=true)]
+  public static extern bool BlockInput(bool block);
+}
+'@
+Add-Type -TypeDefinition $interop
+if (-not [EmpireLeagueBlockInput]::BlockInput($true)) {
+  Write-Output 'GUARD_ERROR|BlockInput failed'
+  exit 2
+}
+Write-Output 'GUARD_READY|Mode=BlockInput'
+[Console]::Out.Flush()
+try {
+  while ($true) { Start-Sleep -Seconds 1 }
+} finally {
+  [EmpireLeagueBlockInput]::BlockInput($false) | Out-Null
+}
+`;
+
 interface PhysicalInputGuard {
   stop(): void;
 }
 
 async function startAoe2PhysicalInputGuard(): Promise<PhysicalInputGuard> {
-  const encodedScript = Buffer.from(inputGuardScript, "utf16le").toString("base64");
+  const encodedScript = Buffer.from(blockInputGuardScript, "utf16le").toString("base64");
   const child = spawn("powershell.exe", [
     "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
   ], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
@@ -1578,7 +1602,7 @@ export function registerGameHandlers(): void {
         return { sent: false, message: "The AoE2 process was not found." };
       }
       inputGuard = await startAoe2PhysicalInputGuard();
-      emitLog(`INPUT_GUARD|Active=True|Target=create-lobby|AoePid=${process.pid}`);
+      emitLog(`INPUT_GUARD|Active=True|Mode=BlockInput|Target=create-lobby|AoePid=${process.pid}`);
       emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
       const clickStep = async (
         name: string,
@@ -1880,7 +1904,7 @@ export function registerGameHandlers(): void {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) return { opened: false };
       inputGuard = await startAoe2PhysicalInputGuard();
-      console.info(`[AoE2 automation] INPUT_GUARD|Active=True|Target=join-lobby|AoePid=${process.pid}`);
+      console.info(`[AoE2 automation] INPUT_GUARD|Active=True|Mode=BlockInput|Target=join-lobby|AoePid=${process.pid}`);
       await shell.openExternal(lobbyId);
       // Steam hands the URI to AoE2 asynchronously. Give the game time to
       // navigate to and finish joining the lobby before Ready automation.
