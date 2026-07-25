@@ -29,9 +29,11 @@ import {
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
   isAoe2NativeWindowForeground,
+  moveAoe2NativeWindowOffscreen,
   postAoe2DesignClick,
   readAoe2HostSetupState,
   readAoe2ReadyState,
+  restoreAoe2NativeWindow,
   sendAoe2Enter,
   sendAoe2Tab
 } from "../aoe2Win32Automation.js";
@@ -48,9 +50,31 @@ let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
 let replayEndPoller: NodeJS.Timeout | undefined;
 let replayDetectionGeneration = 0;
+let lobbyOffscreenMonitor: NodeJS.Timeout | undefined;
+let lobbyOffscreenPid: number | undefined;
 
 const replayPollIntervalMs = 1500;
 const replayStableForMs = 3_000;
+
+function startLobbyOffscreenGuard(pid: number): void {
+  if (lobbyOffscreenMonitor) clearInterval(lobbyOffscreenMonitor);
+  lobbyOffscreenPid = pid;
+  const keepOffscreen = () => {
+    if (lobbyOffscreenPid === pid) moveAoe2NativeWindowOffscreen(pid);
+  };
+  keepOffscreen();
+  lobbyOffscreenMonitor = setInterval(keepOffscreen, 250);
+  console.info(`[AoE2 automation] OFFSCREEN_GUARD|Active=True|AoePid=${pid}`);
+}
+
+function stopLobbyOffscreenGuard(restore = true, focus = false): void {
+  if (lobbyOffscreenMonitor) clearInterval(lobbyOffscreenMonitor);
+  lobbyOffscreenMonitor = undefined;
+  const pid = lobbyOffscreenPid;
+  lobbyOffscreenPid = undefined;
+  if (restore && pid) restoreAoe2NativeWindow(pid, focus, focus);
+  if (pid) console.info(`[AoE2 automation] OFFSCREEN_GUARD|Active=False|Restored=${restore}|AoePid=${pid}`);
+}
 
 interface ReplaySnapshot {
   path: string;
@@ -1307,6 +1331,7 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 
 export function registerGameHandlers(): void {
   app.on("before-quit", (event) => {
+    stopLobbyOffscreenGuard(false);
     stopReplayEndDetection();
     if ((!ownedAoe2Pid && !launchRequested) || quittingAfterGameCleanup) return;
     event.preventDefault();
@@ -1531,11 +1556,13 @@ export function registerGameHandlers(): void {
     setMainWindowGameCoverClickThrough(false);
     event.sender.send("game:setup-input-guard", true);
     await delay(50);
+    let setupCompleted = false;
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
+      startLobbyOffscreenGuard(process.pid);
       emitLog(`INPUT_GUARD|Active=True|Mode=ElectronCapture|Target=create-lobby|AoePid=${process.pid}`);
       emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
       const clickStep = async (
@@ -1621,6 +1648,7 @@ export function registerGameHandlers(): void {
       if (!lobbyUri) throw new Error("Lobby URI was not copied.");
       emitLog(`LOBBY_URI|${lobbyUri}`);
       emitLog("SEQUENCE|Complete=True|Mode=WindowMessage");
+      setupCompleted = true;
       return { sent: true, message: "Cursor lobby creation completed.", lobbyUri };
     } catch (error) {
       emitLog(`ERROR|${error instanceof Error ? error.message : "Native lobby automation failed."}`);
@@ -1629,6 +1657,7 @@ export function registerGameHandlers(): void {
       if (!event.sender.isDestroyed()) event.sender.send("game:setup-input-guard", false);
       emitLog("INPUT_GUARD|Active=False|Mode=ElectronCapture|Target=create-lobby");
       setMainWindowGameCoverClickThrough(false);
+      if (!setupCompleted) stopLobbyOffscreenGuard(true);
     }
   });
 
@@ -1644,6 +1673,7 @@ export function registerGameHandlers(): void {
     setMainWindowGameCoverClickThrough(false);
     event.sender.send("game:setup-input-guard", true);
     await delay(50);
+    let actionSucceeded = false;
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
@@ -1696,9 +1726,11 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
       const sent = result.sent && (!verifiesReady || readyState?.state === "ready");
+      actionSucceeded = sent;
       if (target === "start" && sent) {
+        stopLobbyOffscreenGuard(true, true);
+        restoreAoe2NativeWindow(process.pid, true, true);
         hideMainWindowGameCover();
-        focusAoe2NativeWindow(process.pid);
       }
       return {
         sent,
@@ -1712,6 +1744,7 @@ export function registerGameHandlers(): void {
     } finally {
       if (!event.sender.isDestroyed()) event.sender.send("game:setup-input-guard", false);
       setMainWindowGameCoverClickThrough(false);
+      if (target === "start" || !actionSucceeded) stopLobbyOffscreenGuard(true, target === "start");
     }
   });
 
@@ -1835,18 +1868,22 @@ export function registerGameHandlers(): void {
     setMainWindowGameCoverClickThrough(false);
     event.sender.send("game:setup-input-guard", true);
     await delay(50);
+    let joined = false;
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) return { opened: false };
+      startLobbyOffscreenGuard(process.pid);
       console.info(`[AoE2 automation] INPUT_GUARD|Active=True|Mode=ElectronCapture|Target=join-lobby|AoePid=${process.pid}`);
       await shell.openExternal(lobbyId);
       // Steam hands the URI to AoE2 asynchronously. Give the game time to
       // navigate to and finish joining the lobby before Ready automation.
       await delay(lobbySetupTiming.guestJoinMs);
+      joined = true;
       return { opened: true };
     } finally {
       if (!event.sender.isDestroyed()) event.sender.send("game:setup-input-guard", false);
       console.info("[AoE2 automation] INPUT_GUARD|Active=False|Mode=ElectronCapture|Target=join-lobby");
+      if (!joined) stopLobbyOffscreenGuard(true);
     }
   });
 }

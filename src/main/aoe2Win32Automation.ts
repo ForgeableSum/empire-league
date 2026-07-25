@@ -155,6 +155,28 @@ export function restoreAoe2NativeWindowBehind(processId: number): boolean {
   return true;
 }
 
+export function moveAoe2NativeWindowOffscreen(processId: number): boolean {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return false;
+  ShowWindow!(window, 9);
+  return Boolean(SetWindowPos!(window, null, -32000, -32000, 0, 0, 0x0015));
+}
+
+export function restoreAoe2NativeWindow(
+  processId: number,
+  focus = false,
+  maximize = false
+): boolean {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return false;
+  const positioned = Boolean(SetWindowPos!(window, null, 0, 0, 0, 0, 0x0015));
+  ShowWindow!(window, maximize ? 3 : 9);
+  if (focus) SetForegroundWindow!(window);
+  return positioned;
+}
+
 export async function clickAoe2DesignPoint(
   processId: number,
   designX: number,
