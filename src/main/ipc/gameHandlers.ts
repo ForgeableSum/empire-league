@@ -64,7 +64,7 @@ function startLobbyOffscreenGuard(pid: number): void {
   };
   keepOffscreen();
   lobbyOffscreenMonitor = setInterval(keepOffscreen, 250);
-  console.info(`[AoE2 automation] OFFSCREEN_GUARD|Active=True|AoePid=${pid}`);
+  console.info(`[AoE2 automation] OFFSCREEN_GUARD|Active=True|AoePid=${pid}|Resize=False|Position=-32000,-32000`);
 }
 
 function stopLobbyOffscreenGuard(restore = true, focus = false): void {
@@ -1615,6 +1615,15 @@ export function registerGameHandlers(): void {
         if (!expectedState) return;
         let verification = readAoe2HostSetupState(process.pid as number);
         emitLog(`STEP_VERIFY|${action.label}|Attempt=1|Expected=${expectedState}|${verification.detail}`);
+        if (
+          lobbyOffscreenPid === process.pid
+          && verification.detail === "PIXEL_READ_FAILED"
+        ) {
+          emitLog(
+            `STEP_VERIFY_BYPASS|${action.label}|Reason=OffscreenPixelUnavailable|Expected=${expectedState}`
+          );
+          return;
+        }
         if (verification.state !== expectedState) {
           await performAction(2);
           verification = readAoe2HostSetupState(process.pid as number);
@@ -1694,13 +1703,20 @@ export function registerGameHandlers(): void {
         if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", verificationMessage);
       };
       const verifiesReady = target === "guest-ready" || target === "host-ready";
+      const gameIsOffscreen = lobbyOffscreenPid === process.pid;
       let readyState = verifiesReady ? readAoe2ReadyState(process.pid, action.point[1]) : null;
       if (readyState) emitVerification("before", readyState.detail);
 
       let result = readyState?.state === "ready"
         ? { sent: true, detail: "SKIPPED_ALREADY_READY" }
         : readyState?.state === "unknown"
-          ? { sent: false, detail: "READY_STATE_UNKNOWN_BEFORE_INPUT" }
+          ? gameIsOffscreen
+            ? await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
+                hoverMs: action.hoverMs,
+                holdMs: action.holdMs,
+                synchronous: true
+              })
+            : { sent: false, detail: "READY_STATE_UNKNOWN_BEFORE_INPUT" }
           : await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
               hoverMs: action.hoverMs,
               holdMs: action.holdMs,
@@ -1725,7 +1741,7 @@ export function registerGameHandlers(): void {
       const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.point[0]},${action.point[1]}|${result.detail}`;
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
-      const sent = result.sent && (!verifiesReady || readyState?.state === "ready");
+      const sent = result.sent && (!verifiesReady || gameIsOffscreen || readyState?.state === "ready");
       actionSucceeded = sent;
       if (target === "start" && sent) {
         stopLobbyOffscreenGuard(true, true);
