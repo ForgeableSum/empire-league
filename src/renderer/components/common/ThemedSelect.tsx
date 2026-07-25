@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 export interface ThemedSelectOption {
   value: string;
@@ -10,38 +10,65 @@ export function ThemedSelect({
   options,
   value,
   onChange,
-  className
+  className,
+  disabled = false,
+  searchable = false
 }: {
   label: string;
   options: ThemedSelectOption[];
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  disabled?: boolean;
+  searchable?: boolean;
 }) {
   const dropdownRef = useRef<HTMLDetailsElement>(null);
+  const [query, setQuery] = useState("");
   const selectedLabel = options.find((option) => option.value === value)?.label ?? options[0]?.label ?? "";
+  const visibleOptions = searchable
+    ? options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()))
+    : options;
 
   return (
     <div className={className ? `themed-select-field ${className}` : "themed-select-field"}>
       <span>{label}</span>
-      <details className="themed-select" ref={dropdownRef}>
-        <summary>{selectedLabel}</summary>
-        <div className="themed-select-options" role="listbox" aria-label={label}>
-          {options.map((option) => (
-            <button
-              aria-selected={option.value === value}
-              className={option.value === value ? "selected" : undefined}
-              key={option.value}
-              onClick={() => {
-                onChange(option.value);
-                dropdownRef.current?.removeAttribute("open");
-              }}
-              role="option"
-              type="button"
-            >
-              {option.label}
-            </button>
-          ))}
+      <details className="themed-select" ref={dropdownRef} onToggle={(event) => {
+        if (!event.currentTarget.open) setQuery("");
+      }}>
+        <summary aria-disabled={disabled} onClick={(event) => {
+          if (disabled) event.preventDefault();
+        }}>{selectedLabel}</summary>
+        <div className="themed-select-options">
+          {searchable && (
+            <input
+              aria-label={`Search ${label}`}
+              autoFocus
+              className="themed-select-search"
+              placeholder="Search civilizations..."
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          )}
+          <div className="themed-select-option-list" role="listbox" aria-label={label}>
+            {visibleOptions.map((option) => (
+              <button
+                aria-selected={option.value === value}
+                className={option.value === value ? "selected" : undefined}
+                key={option.value}
+                disabled={disabled}
+                onClick={() => {
+                  onChange(option.value);
+                  dropdownRef.current?.removeAttribute("open");
+                }}
+                role="option"
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+            {visibleOptions.length === 0 && <span className="themed-select-empty">No civilizations found</span>}
+          </div>
         </div>
       </details>
     </div>

@@ -1,4 +1,4 @@
-import { Clock, Copy, Dices, Search, ShieldCheck, Shuffle, Swords, XCircle } from "lucide-react";
+import { Clock, Copy, Dices, Search, Shuffle, Swords, Users, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CivilizationMode } from "../../shared/contracts/matchmaking";
 import { ThemedSelect } from "../components/common/ThemedSelect";
@@ -35,13 +35,15 @@ const civilizationModes: Array<{
 ];
 
 export function QueuePage() {
-  const { state, queues, startQueue, cancelQueue, clearError } = useAppStore();
+  const { state, queues, startQueue, updateActiveQueue, cancelQueue, clearError } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
   const [selectedQueueId, setSelectedQueueId] = useState(() => queues[0]?.id ?? "");
   const selectedQueue = queues.find((queue) => queue.id === selectedQueueId) ?? queues[0];
   const canStartQueue = ["idle", "cancelled", "completed"].includes(state.queueStatus)
     && (!state.activeMatch || state.queueStatus === "completed")
     && state.gameStatus !== "loading";
+  const isSearching = state.queueStatus === "searching";
+  const preferencesLocked = !["idle", "cancelled", "completed", "searching"].includes(state.queueStatus);
   const [selectedMaps, setSelectedMaps] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(queues.map((queue) => [queue.id, queue.mapPool.map((map) => map.id)]))
   );
@@ -95,6 +97,7 @@ export function QueuePage() {
     setSelectedMaps((current) => {
       const queueMaps = current[queueId] ?? [];
       const removing = queueMaps.includes(mapId);
+      if (removing && queueMaps.length === 1) return current;
       return {
         ...current,
         [queueId]: removing
@@ -112,6 +115,22 @@ export function QueuePage() {
     return () => window.clearInterval(timer);
   }, [state.queueStartedAt, state.queueStatus]);
 
+  useEffect(() => {
+    if (!isSearching || !selectedQueue) return;
+    const timer = window.setTimeout(() => {
+      void updateActiveQueue({
+        ...selectedQueue,
+        mapPool: selectedQueue.mapPool.filter((map) => selectedMaps[selectedQueue.id]?.includes(map.id)),
+        favoriteMapId: favoriteMaps[selectedQueue.id],
+        civilizationPreference: {
+          mode: civilizationMode,
+          civilization: civilizationMode === "pick" ? civilization : undefined
+        }
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [civilization, civilizationMode, favoriteMaps, isSearching, selectedMaps, selectedQueue]);
+
   if (["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus)) {
     return <LobbyPreparation />;
   }
@@ -123,7 +142,7 @@ export function QueuePage() {
   }
 
   return (
-    <section className="stack">
+    <section className="stack queue-page">
       {state.error && (
         <div className="error-panel">
           <strong>{state.error.message}</strong>
@@ -131,57 +150,103 @@ export function QueuePage() {
           <button type="button" onClick={clearError}>Dismiss</button>
         </div>
       )}
-      {state.queueStatus === "searching" ? (
-        <div className="search-waiting-layout">
+      {selectedQueue && (
+        <div className="search-waiting-layout matchmaking-overview">
           <div className="search-state">
-            <div className="search-orbit"><Search size={34} /></div>
-            <h2>Searching for an opponent</h2>
-            <div className="metrics-grid compact">
-              <div><span>Your rating</span><strong>{state.currentUser.rating}</strong></div>
-              <div><span>Current search range</span><strong>{state.searchRange.min}-{state.searchRange.max}</strong></div>
-              <div><span>Time searching</span><strong>{formatTime(elapsed)}</strong></div>
-              <div><span>Estimated wait</span><strong>{state.selectedQueue?.estimatedWaitSeconds}s</strong></div>
-            </div>
-            <p>Rating range expands automatically while preserving connection quality and map-pool compatibility.</p>
-            <button className="secondary" type="button" onClick={() => void cancelQueue()}>
-              <XCircle size={18} /> Cancel Search
-            </button>
+            {isSearching ? (
+              <>
+                <div className="search-orbit"><Search size={34} /></div>
+                <h2>Searching for an opponent</h2>
+                <div className="metrics-grid compact">
+                  <div><span>Your rating</span><strong>{state.currentUser.rating}</strong></div>
+                  <div><span>Current search range</span><strong>{state.searchRange.min}-{state.searchRange.max}</strong></div>
+                  <div><span>Time searching</span><strong>{formatTime(elapsed)}</strong></div>
+                  <div><span>Estimated wait</span><strong>{state.selectedQueue?.estimatedWaitSeconds}s</strong></div>
+                </div>
+                <p>Rating range expands automatically. Civilization and map changes below update your active search.</p>
+                <button className="secondary" type="button" onClick={() => void cancelQueue()}>
+                  <XCircle size={18} /> Cancel Search
+                </button>
+              </>
+            ) : (
+              <>
+                <h2>{selectedQueue.name}</h2>
+                <div className="queue-stats">
+                  <span><Search size={18} /><strong>{selectedQueue.playersSearching}</strong> searching</span>
+                  <span><Clock size={18} /><strong>~{selectedQueue.estimatedWaitSeconds}s</strong> wait</span>
+                </div>
+                <div className="queue-summary">
+                  <div><span>Civilization</span><strong>{civilizationMode === "pick"
+                    ? civilization
+                    : civilizationModes.find((mode) => mode.id === civilizationMode)?.label}</strong></div>
+                  <div><span>Maps enabled</span><strong>{selectedMaps[selectedQueue.id]?.length ?? 0}</strong></div>
+                  <div><span>Preferred map</span><strong>{selectedQueue.mapPool.find((map) => map.id === favoriteMaps[selectedQueue.id])?.name ?? "None"}</strong></div>
+                </div>
+                <button
+                  className="queue-search-button"
+                  type="button"
+                  disabled={!canStartQueue || (selectedMaps[selectedQueue.id]?.length ?? 0) === 0}
+                  onClick={() => void startQueue({
+                    ...selectedQueue,
+                    mapPool: selectedQueue.mapPool.filter((map) => selectedMaps[selectedQueue.id]?.includes(map.id)),
+                    favoriteMapId: favoriteMaps[selectedQueue.id],
+                    civilizationPreference: {
+                      mode: civilizationMode,
+                      civilization: civilizationMode === "pick" ? civilization : undefined
+                    }
+                  })}
+                >
+                  <Search size={22} /> {state.gameStatus === "loading" ? "Loading AoE2…" : "Find Match"}
+                </button>
+              </>
+            )}
           </div>
           <YouTubeShorts />
         </div>
-      ) : selectedQueue ? (
+      )}
+      {selectedQueue ? (
         <>
-          <div className="queue-mode-picker">
-            <ThemedSelect
-              label="Match type"
-              options={queues.map((queue) => ({
-                value: queue.id,
-                label: queue.id === "team-games" ? "Team vs Team" : "1v1"
-              }))}
-              value={selectedQueue.id}
-              onChange={setSelectedQueueId}
-            />
-          </div>
-          <div className="play-config-layout">
+          <div className="play-config-layout matchmaking-preferences">
             <article className="queue-card play-preferences" key={selectedQueue.id}>
-              <div className="queue-heading">
-                <ShieldCheck size={22} />
-                <div>
-                  <h2>{selectedQueue.name}</h2>
+              <div className="preference-section match-type-section">
+                <span className="eyebrow">Match type</span>
+                <div className="match-type-options">
+                  {queues.map((queue) => {
+                    const isTeamGame = queue.id === "team-games";
+                    const Icon = isTeamGame ? Users : Swords;
+                    return (
+                      <button
+                        className={selectedQueue.id === queue.id ? "civilization-mode active" : "civilization-mode"}
+                        type="button"
+                        key={queue.id}
+                        aria-pressed={selectedQueue.id === queue.id}
+                        disabled={isSearching || preferencesLocked}
+                        onClick={() => setSelectedQueueId(queue.id)}
+                      >
+                        <Icon size={20} />
+                        <span>
+                          <strong>{isTeamGame ? "Team vs Team" : "1v1"}</strong>
+                          <small>{queue.ruleset}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              <p>{selectedQueue.description}</p>
               <div className="preference-section">
-                <div className="preference-heading">
+                <div className="preference-heading civilization-preference-heading">
                   <div>
                     <span className="eyebrow">Civilization</span>
                   </div>
                   {civilizationMode === "pick" && (
                     <ThemedSelect
+                      className="civilization-select"
                       label="Civilization"
                       options={civilizations.map((name) => ({ value: name, label: name }))}
                       value={civilization}
                       onChange={selectCivilization}
+                      disabled={preferencesLocked}
+                      searchable
                     />
                   )}
                 </div>
@@ -194,6 +259,7 @@ export function QueuePage() {
                         type="button"
                         key={mode.id}
                         aria-pressed={civilizationMode === mode.id}
+                        disabled={preferencesLocked}
                         onClick={() => selectCivilizationMode(mode.id)}
                       >
                         <Icon size={20} />
@@ -207,7 +273,6 @@ export function QueuePage() {
                 <div className="preference-heading">
                   <div>
                     <span className="eyebrow">Map pool</span>
-                    <h3>Pick the battlegrounds</h3>
                   </div>
                   <span className="selection-count">
                     {selectedMaps[selectedQueue.id]?.length ?? 0} of {selectedQueue.mapPool.length} enabled
@@ -219,11 +284,11 @@ export function QueuePage() {
                   onToggle={(mapId) => toggleMap(selectedQueue.id, mapId)}
                   favoriteMapId={favoriteMaps[selectedQueue.id]}
                   onFavorite={(mapId) => toggleFavorite(selectedQueue.id, mapId)}
+                  disabled={preferencesLocked}
                 />
               </div>
             </article>
-            <aside className="queue-card queue-action-panel">
-              <span className="eyebrow">Ready to queue</span>
+            {false && <aside className="queue-card queue-action-panel">
               <h2>{selectedQueue.name}</h2>
               <div className="queue-stats">
                 <span><Search size={18} /><strong>{selectedQueue.playersSearching}</strong> searching</span>
@@ -241,7 +306,7 @@ export function QueuePage() {
                 <div><span>Maps enabled</span><strong>{selectedMaps[selectedQueue.id]?.length ?? 0}</strong></div>
                 <div><span>Preferred map</span><strong>{selectedQueue.mapPool.find((map) => map.id === favoriteMaps[selectedQueue.id])?.name ?? "None"}</strong></div>
               </div>
-                <button
+              <button
                   className="queue-search-button"
                   type="button"
                   disabled={!canStartQueue || (selectedMaps[selectedQueue.id]?.length ?? 0) === 0}
@@ -258,9 +323,8 @@ export function QueuePage() {
                   })}
                 >
                   <Search size={22} /> {state.gameStatus === "loading" ? "Loading AoE2…" : "Find Match"}
-                </button>
-              <p className="queue-action-note">Your settings are saved for the next time you play.</p>
-            </aside>
+              </button>
+            </aside>}
           </div>
         </>
       ) : (

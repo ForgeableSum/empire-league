@@ -8,9 +8,10 @@ interface MapPoolProps {
   onToggle?: (mapId: string) => void;
   favoriteMapId?: string;
   onFavorite?: (mapId: string) => void;
+  disabled?: boolean;
 }
 
-export function MapPool({ maps, limit, selectedMapIds, onToggle, favoriteMapId, onFavorite }: MapPoolProps) {
+export function MapPool({ maps, limit, selectedMapIds, onToggle, favoriteMapId, onFavorite, disabled = false }: MapPoolProps) {
   const visibleMaps = limit === undefined ? maps : maps.slice(0, limit);
   const selectable = selectedMapIds !== undefined && onToggle !== undefined;
 
@@ -21,7 +22,6 @@ export function MapPool({ maps, limit, selectedMapIds, onToggle, favoriteMapId, 
         const content = (
           <>
             <img src={map.thumbnailUrl} alt="" />
-            {selectable && <span className="map-check" aria-hidden="true">{selected ? "✓" : ""}</span>}
             <span className="map-name">{map.name}</span>
           </>
         );
@@ -33,6 +33,7 @@ export function MapPool({ maps, limit, selectedMapIds, onToggle, favoriteMapId, 
               type="button"
               aria-pressed={selected}
               aria-label={`${selected ? "Exclude" : "Include"} ${map.name}`}
+              disabled={disabled}
               onClick={() => onToggle(map.id)}
             >
               {content}
@@ -41,6 +42,7 @@ export function MapPool({ maps, limit, selectedMapIds, onToggle, favoriteMapId, 
               <button
                 className={favoriteMapId === map.id ? "map-favorite active" : "map-favorite"}
                 type="button"
+                disabled={disabled}
                 aria-pressed={favoriteMapId === map.id}
                 aria-label={`${favoriteMapId === map.id ? "Remove" : "Favorite"} ${map.name}`}
                 title={favoriteMapId === map.id ? "Remove favorite" : "Set as favorite"}

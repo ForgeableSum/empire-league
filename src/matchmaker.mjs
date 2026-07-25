@@ -27,7 +27,7 @@ function send(response, status, body) {
   response.writeHead(status, {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
     "Content-Type": "application/json"
   });
   response.end(JSON.stringify(body));
@@ -355,6 +355,24 @@ const server = createServer(async (request, response) => {
     }
 
     const ticketMatch = url.pathname.match(/^\/tickets\/([^/]+)$/);
+    if (request.method === "PATCH" && ticketMatch) {
+      const ticket = tickets.get(decodeURIComponent(ticketMatch[1]));
+      if (!ticket || ticket.player.id !== authenticatedPlayer.id) {
+        return send(response, 404, { error: "ticket not found" });
+      }
+      if (ticket.matchId) return send(response, 409, { error: "queue preferences are locked after a match is found" });
+      const body = await readJson(request);
+      if (!body.queue?.id || body.queue.id !== ticket.queueId) {
+        return send(response, 400, { error: "the active queue cannot be changed" });
+      }
+      if (!Array.isArray(body.queue.mapPool) || body.queue.mapPool.length === 0) {
+        return send(response, 400, { error: "at least one selected map is required" });
+      }
+      ticket.queue = body.queue;
+      await tryMatch(ticket);
+      return send(response, 200, { ok: true });
+    }
+
     if (request.method === "DELETE" && ticketMatch) {
       const ticketId = decodeURIComponent(ticketMatch[1]);
       const ticket = tickets.get(ticketId);

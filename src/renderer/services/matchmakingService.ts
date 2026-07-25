@@ -13,6 +13,7 @@ import { authorizationHeaders, matchmakerUrl } from "./authService";
 
 export interface MatchmakingService {
   joinQueue(request: JoinQueueRequest): Promise<QueueTicket>;
+  updateQueue(ticketId: string, queue: NonNullable<JoinQueueRequest["queue"]>): Promise<void>;
   leaveQueue(ticketId: string): Promise<void>;
   subscribeToQueue(ticketId: string, listener: QueueEventListener): UnsubscribeFunction;
   acceptMatch(matchId: string): Promise<void>;
@@ -35,6 +36,14 @@ export class LocalMatchmakingService implements MatchmakingService {
       body: JSON.stringify({ queue: request.queue, canHost: request.canHost })
     });
     return this.read<QueueTicket>(response);
+  }
+
+  async updateQueue(ticketId: string, queue: NonNullable<JoinQueueRequest["queue"]>): Promise<void> {
+    await this.read(await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
+      body: JSON.stringify({ queue })
+    }));
   }
 
   async leaveQueue(ticketId: string): Promise<void> {
@@ -151,6 +160,13 @@ export class MockMatchmakingService implements MatchmakingService {
     return ticket;
   }
 
+  async updateQueue(ticketId: string, queue: NonNullable<JoinQueueRequest["queue"]>): Promise<void> {
+    await delay(75);
+    if (!this.queuedDefinitions.has(ticketId)) throw new Error("Queue ticket is no longer active.");
+    if (!queue.mapPool.length) throw new Error("At least one selected map is required.");
+    this.queuedDefinitions.set(ticketId, queue);
+  }
+
   async leaveQueue(ticketId: string): Promise<void> {
     await delay(150);
     this.clearTimers(ticketId);
@@ -161,7 +177,6 @@ export class MockMatchmakingService implements MatchmakingService {
   subscribeToQueue(ticketId: string, listener: QueueEventListener): UnsubscribeFunction {
     this.listeners.set(ticketId, listener);
     const queuedDefinition = this.queuedDefinitions.get(ticketId);
-    const selectedMaps = queuedDefinition?.mapPool ?? maps;
     const config = this.getConfig();
     const timers: number[] = [];
     [0, 20000, 40000, 60000, 90000].forEach((at, index) => {
@@ -174,11 +189,13 @@ export class MockMatchmakingService implements MatchmakingService {
     });
     timers.push(
       window.setTimeout(() => {
+        const currentDefinition = this.queuedDefinitions.get(ticketId) ?? queuedDefinition;
+        const selectedMaps = currentDefinition?.mapPool ?? maps;
         const opponent = matchmakingOpponents[Math.floor(Math.random() * matchmakingOpponents.length)];
         const match: MatchSession = {
           id: `match-${crypto.randomUUID().slice(0, 8)}`,
           status: "match_found",
-          queue: queuedDefinition ?? {
+          queue: currentDefinition ?? {
             id: "ranked-rm-1v1",
             name: "Ranked 1v1 Random Map",
             description: "Competitive 1v1 matchmaking with the active community map pool.",

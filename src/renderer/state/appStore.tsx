@@ -23,6 +23,7 @@ interface AppContextValue {
   setPage: (page: AppPage) => void;
   queues: QueueDefinition[];
   startQueue: (queue: QueueDefinition) => Promise<void>;
+  updateActiveQueue: (queue: QueueDefinition) => Promise<void>;
   cancelQueue: () => Promise<void>;
   acceptMatch: () => Promise<void>;
   declineMatch: () => Promise<void>;
@@ -78,7 +79,7 @@ export const queueDefinitions: QueueDefinition[] = [
   {
     id: "ranked-rm-1v1",
     name: "Ranked 1v1 Random Map",
-    description: "Primary prototype queue with ranked settings, hidden civilizations, and verified results.",
+    description: "Ranked 1v1 Random Map.",
     format: "1v1",
     ruleset: "Random Map",
     mapPool: maps,
@@ -654,6 +655,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     log("Queue cancelled");
   }
 
+  async function updateActiveQueue(queue: QueueDefinition): Promise<void> {
+    const ticketId = ticketRef.current;
+    if (!ticketId || stateRef.current.queueStatus !== "searching") return;
+    try {
+      await services.matchmaking.updateQueue(ticketId, queue);
+      if (stateRef.current.queueStatus !== "searching") return;
+      setState((previous) => ({ ...previous, selectedQueue: queue }));
+      log(`Updated active queue preferences: ${queue.civilizationPreference?.mode ?? "pick"}, ${queue.mapPool.length} maps`);
+    } catch (error) {
+      if (stateRef.current.queueStatus !== "searching") return;
+      log(`Active queue preference update failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      notify("Your queue preferences could not be updated", "danger");
+    }
+  }
+
   async function acceptMatch(): Promise<void> {
     if (!state.activeMatch) return;
     void window.electronApi?.stopMatchFoundAlert();
@@ -927,6 +943,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPage,
     queues: queueDefinitions,
     startQueue,
+    updateActiveQueue,
     cancelQueue,
     acceptMatch,
     declineMatch,
