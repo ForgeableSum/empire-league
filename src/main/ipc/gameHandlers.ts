@@ -1529,13 +1529,12 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
-    event.sender.send("game:setup-input-guard", true);
+    let rendererInputGuardActive = false;
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
-      emitLog(`INPUT_GUARD|Active=True|Mode=ElectronCapture|Target=create-lobby|AoePid=${process.pid}`);
       emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
       const clickStep = async (
         name: string,
@@ -1598,6 +1597,9 @@ export function registerGameHandlers(): void {
       };
 
       await actionStep("multiplayer");
+      event.sender.send("game:setup-input-guard", true);
+      rendererInputGuardActive = true;
+      emitLog(`INPUT_GUARD|Active=True|Mode=ElectronCapture|Target=post-multiplayer|AoePid=${process.pid}`);
       await actionStep("hostGame");
       await actionStep("createLobby");
       await clickStep("Reset Settings", 3101, 1976);
@@ -1625,8 +1627,12 @@ export function registerGameHandlers(): void {
       emitLog(`ERROR|${error instanceof Error ? error.message : "Native lobby automation failed."}`);
       return { sent: false, message: "The Create Lobby sequence stopped before completion." };
     } finally {
-      if (!event.sender.isDestroyed()) event.sender.send("game:setup-input-guard", false);
-      emitLog("INPUT_GUARD|Active=False|Mode=ElectronCapture|Target=create-lobby");
+      if (rendererInputGuardActive && !event.sender.isDestroyed()) {
+        event.sender.send("game:setup-input-guard", false);
+      }
+      if (rendererInputGuardActive) {
+        emitLog("INPUT_GUARD|Active=False|Mode=ElectronCapture|Target=post-multiplayer");
+      }
       setMainWindowGameCoverClickThrough(false);
     }
   });
