@@ -558,6 +558,50 @@ $exitCode = [AoeInputGuard]::Run([uint32]$game.Id)
 exit $exitCode
 `;
 
+interface PhysicalInputGuard {
+  stop(): void;
+}
+
+async function startAoe2PhysicalInputGuard(): Promise<PhysicalInputGuard> {
+  const encodedScript = Buffer.from(inputGuardScript, "utf16le").toString("base64");
+  const child = spawn("powershell.exe", [
+    "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+  ], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+  await new Promise<void>((resolve, reject) => {
+    let output = "";
+    const timeout = setTimeout(() => {
+      child.kill();
+      reject(new Error("The physical-input guard did not start in time."));
+    }, 5_000);
+    const cleanup = () => {
+      clearTimeout(timeout);
+      child.stdout?.off("data", onData);
+      child.off("exit", onExit);
+    };
+    const onData = (chunk: Buffer) => {
+      output += chunk.toString();
+      if (!output.includes("GUARD_READY")) return;
+      cleanup();
+      resolve();
+    };
+    const onExit = (code: number | null) => {
+      cleanup();
+      reject(new Error(`The physical-input guard exited during startup (code ${code ?? "unknown"}).`));
+    };
+    child.stdout?.on("data", onData);
+    child.once("exit", onExit);
+  });
+
+  let stopped = false;
+  return {
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      child.kill();
+    }
+  };
+}
+
 const createLobbySequenceScript = String.raw`
 $ProgressPreference = 'SilentlyContinue'
 $interop = @'
@@ -1514,11 +1558,14 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    let inputGuard: PhysicalInputGuard | undefined;
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
+      inputGuard = await startAoe2PhysicalInputGuard();
+      emitLog(`INPUT_GUARD|Active=True|Target=create-lobby|AoePid=${process.pid}`);
       emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
       const clickStep = async (
         name: string,
@@ -1608,6 +1655,8 @@ export function registerGameHandlers(): void {
       emitLog(`ERROR|${error instanceof Error ? error.message : "Native lobby automation failed."}`);
       return { sent: false, message: "The Create Lobby sequence stopped before completion." };
     } finally {
+      inputGuard?.stop();
+      if (inputGuard) emitLog("INPUT_GUARD|Active=False|Target=create-lobby");
       setMainWindowGameCoverClickThrough(false);
     }
   });
@@ -1622,11 +1671,13 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    let inputGuard: PhysicalInputGuard | undefined;
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
+      inputGuard = await startAoe2PhysicalInputGuard();
       const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`;
       console.info(`[AoE2 automation] ${visibilityMessage}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", visibilityMessage);
@@ -1688,6 +1739,7 @@ export function registerGameHandlers(): void {
       console.error(`[AoE2 automation] Cursor action ${target} failed`, error);
       return { sent: false, message: `${target} cursor action failed.` };
     } finally {
+      inputGuard?.stop();
       setMainWindowGameCoverClickThrough(false);
     }
   });
@@ -1810,10 +1862,20 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
-    await shell.openExternal(lobbyId);
-    // Steam hands the URI to AoE2 asynchronously. Give the game time to
-    // navigate to and finish joining the lobby before Ready automation.
-    await delay(lobbySetupTiming.guestJoinMs);
-    return { opened: true };
+    let inputGuard: PhysicalInputGuard | undefined;
+    try {
+      const process = await detectAoe2Process();
+      if (!process.running || !process.pid) return { opened: false };
+      inputGuard = await startAoe2PhysicalInputGuard();
+      console.info(`[AoE2 automation] INPUT_GUARD|Active=True|Target=join-lobby|AoePid=${process.pid}`);
+      await shell.openExternal(lobbyId);
+      // Steam hands the URI to AoE2 asynchronously. Give the game time to
+      // navigate to and finish joining the lobby before Ready automation.
+      await delay(lobbySetupTiming.guestJoinMs);
+      return { opened: true };
+    } finally {
+      inputGuard?.stop();
+      if (inputGuard) console.info("[AoE2 automation] INPUT_GUARD|Active=False|Target=join-lobby");
+    }
   });
 }
