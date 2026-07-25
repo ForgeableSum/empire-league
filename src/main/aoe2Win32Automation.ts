@@ -393,6 +393,33 @@ export async function sendAoe2Tab(processId: number): Promise<NativeInputResult>
   };
 }
 
+export async function sendAoe2Text(processId: number, text: string): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+  if (!text || /[^\x20-\x7e]/.test(text)) {
+    return { sent: false, detail: "TEXT_NOT_SUPPORTED" };
+  }
+
+  const results = [];
+  for (const character of text) {
+    const result = sendWindowMessage(window, 0x0102, character.charCodeAt(0), 1);
+    results.push(result);
+    if (!result.dispatched) break;
+    await delay(15);
+  }
+  const sent = results.length === text.length && results.every((result) => result.dispatched);
+  return {
+    sent,
+    detail: [
+      sent ? "SENT" : "SEND_FAILED",
+      "Mode=WindowMessageText",
+      `Characters=${results.length}/${text.length}`,
+      `ElapsedMs=${results.reduce((total, result) => total + result.elapsedMs, 0).toFixed(1)}`
+    ].join("|")
+  };
+}
+
 export function readAoe2ReadyState(processId: number, designY: number): NativeReadyStateResult {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);

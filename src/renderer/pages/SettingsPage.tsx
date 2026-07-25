@@ -92,7 +92,7 @@ export function SettingsPage() {
     setLobbySequenceRunning(true);
     setDetectionFeedback({ tone: "success", message: "Running ranked-lobby test…" });
     try {
-      const result = await window.electronApi.runAoe2CreateLobbySequence();
+      const result = await window.electronApi.runAoe2CreateLobbySequence("Arabia");
       setDetectionFeedback({ tone: result.sent ? "success" : "error", message: result.message });
     } finally {
       setLobbySequenceRunning(false);

@@ -21,18 +21,23 @@ lobby message loop can be throttled while AoE2 is in the background.
 2. `hostGame` (`clickEnter`)
 3. `createLobby` (`click`)
 4. Apply the standard lobby settings.
-5. Optionally select a civilization:
+5. Select the matchmaker's map:
+   1. Open the lobby's Location picker.
+   2. Focus the picker search field and send the selected map name with window-local `WM_CHAR` messages.
+   3. Resolve the exact map's filtered-result index from the manifest and click that tile. This matters for substring collisions such as Aquarena/Arena and Land Nomad/Nomad.
+   4. Verify that the lobby screen is present again before continuing.
+6. Optionally select a civilization:
    1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
    2. Resolve the civilization name through `civilizationDesignPoint`.
    3. Click the resulting grid point.
    4. `confirmCivilization` (`clickEnter`)
-6. `copyLobbyUri` (`click`)
-7. Verify the clipboard matches `aoe2de://0/<digits>`.
-8. Publish that URI to the guest. This URI is the normal automated invitation path.
-9. If an explicit in-game invite is needed, use `hostInvite`.
-10. Wait for the guest-ready report.
-11. `hostReady` (`click`)
-12. `startGame` (`click`)
+7. `copyLobbyUri` (`click`)
+8. Verify the clipboard matches `aoe2de://0/<digits>`.
+9. Publish that URI to the guest. This URI is the normal automated invitation path.
+10. If an explicit in-game invite is needed, use `hostInvite`.
+11. Wait for the guest-ready report.
+12. `hostReady` (`click`)
+13. `startGame` (`click`)
 
 The first three transitions are verified from stable points on AoE2's rendered
 window surface. If the expected next screen is not present, that step is

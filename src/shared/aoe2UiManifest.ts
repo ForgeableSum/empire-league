@@ -81,6 +81,23 @@ export const aoe2UiManifest = {
     activation: "click",
     settleMs: 500
   },
+  mapPicker: {
+    openPoint: [3049, 725] as const,
+    searchPoint: [1040, 431] as const,
+    resultColumnCenters: [738, 1064, 1390, 1715, 2040, 2365] as const,
+    resultRowCenters: [665, 989, 1313, 1637] as const,
+    entries: {
+      Acropolis: 0,
+      Arabia: 0,
+      Arena: 1,
+      "Gold Rush": 0,
+      MegaRandom: 0,
+      Nomad: 1
+    } satisfies Record<string, number>,
+    openSettleMs: 1_000,
+    searchSettleMs: 750,
+    selectionSettleMs: 1_000
+  },
   civilizationGrid: {
     columns: 9,
     columnCenters: [248, 501, 755, 1007, 1259, 1512, 1764, 2018, 2271],
@@ -149,6 +166,18 @@ export type Aoe2ActionName = keyof typeof aoe2UiManifest.actions;
 export type Aoe2Civilization = keyof typeof aoe2UiManifest.civilizationGrid.entries;
 export type Aoe2CivilizationSelector = keyof typeof aoe2UiManifest.civilizationGrid.selectorEntries;
 export type Aoe2CivilizationSelection = Aoe2Civilization | Aoe2CivilizationSelector;
+export type Aoe2MapSelection = keyof typeof aoe2UiManifest.mapPicker.entries;
+
+export function mapDesignPoint(selection: Aoe2MapSelection): readonly [number, number] {
+  const index = aoe2UiManifest.mapPicker.entries[selection];
+  const columns = aoe2UiManifest.mapPicker.resultColumnCenters.length;
+  const x = aoe2UiManifest.mapPicker.resultColumnCenters[index % columns];
+  const y = aoe2UiManifest.mapPicker.resultRowCenters[Math.floor(index / columns)];
+  if (x === undefined || y === undefined) {
+    throw new Error(`AoE2 map ${selection} is outside the supported result grid.`);
+  }
+  return [x, y];
+}
 
 export function civilizationDesignPoint(selection: Aoe2CivilizationSelection): readonly [number, number] {
   const gridEntries: Record<string, readonly [number, number]> = {

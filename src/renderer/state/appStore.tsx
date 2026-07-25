@@ -502,7 +502,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             lobbyAutomationRef.current = delayForLobbyInput(lobbySetupTiming.hostLobbyAutomationSettleMs)
               .then(() => {
                 log("Starting AoE2 lobby automation");
-                return window.electronApi!.runAoe2CreateLobbySequence();
+                return window.electronApi!.runAoe2CreateLobbySequence(acceptedSession.selectedMap?.name ?? "Arabia");
               });
             void prepareLobby(acceptedSession);
           }
@@ -723,7 +723,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await services.game.launchGame();
       log("Opening multiplayer menu");
       if (window.electronApi) {
-        const automation = await (lobbyAutomationRef.current ?? window.electronApi.runAoe2CreateLobbySequence());
+        const automation = await (lobbyAutomationRef.current ?? window.electronApi.runAoe2CreateLobbySequence(match.selectedMap.name));
         lobbyAutomationRef.current = null;
         if (!automation.sent) throw new Error(automation.message);
         if (!automation.lobbyUri) throw new Error("AoE2 did not copy a valid lobby URI.");

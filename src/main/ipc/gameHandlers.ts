@@ -9,8 +9,10 @@ import {
   aoe2UiManifest,
   civilizationDesignPoint,
   civilizationSlotDesignPoint,
+  mapDesignPoint,
   type Aoe2ActionName,
-  type Aoe2CivilizationSelection
+  type Aoe2CivilizationSelection,
+  type Aoe2MapSelection
 } from "../../shared/aoe2UiManifest.js";
 import {
   cursorAutomationEnabled,
@@ -36,7 +38,8 @@ import {
   readAoe2HostSetupState,
   readAoe2ReadyState,
   sendAoe2Enter,
-  sendAoe2Tab
+  sendAoe2Tab,
+  sendAoe2Text
 } from "../aoe2Win32Automation.js";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -1504,10 +1507,14 @@ export function registerGameHandlers(): void {
     }
   });
 
-  ipcMain.handle("game:run-create-lobby-sequence", async (event) => {
+  ipcMain.handle("game:run-create-lobby-sequence", async (event, mapName: string) => {
     stopTabTest();
+    const normalizedMapName = typeof mapName === "string" ? mapName.trim() : "";
     if (process.platform !== "win32") {
       return { sent: false, message: "Lobby automation is only supported on Windows." };
+    }
+    if (!(normalizedMapName in aoe2UiManifest.mapPicker.entries)) {
+      return { sent: false, message: "A supported AoE2 map name is required." };
     }
 
     const emitLog = (message: string) => {
@@ -1592,6 +1599,24 @@ export function registerGameHandlers(): void {
       emitLog(`STEP|Confirm Reset|Key=ENTER|${reset.detail}`);
       if (!reset.sent) throw new Error("The reset confirmation could not be sent.");
       await delay(lobbySetupTiming.resetConfirmationMs);
+
+      const mapPicker = aoe2UiManifest.mapPicker;
+      const mapPoint = mapDesignPoint(normalizedMapName as Aoe2MapSelection);
+      await clickStep("Open Map Picker", mapPicker.openPoint[0], mapPicker.openPoint[1], { synchronous: true });
+      await delay(mapPicker.openSettleMs);
+      await clickStep("Focus Map Search", mapPicker.searchPoint[0], mapPicker.searchPoint[1], { synchronous: true });
+      const mapSearch = await sendAoe2Text(process.pid, normalizedMapName);
+      emitLog(`MAP_SELECT|Step=Search|Map=${normalizedMapName}|${mapSearch.detail}`);
+      if (!mapSearch.sent) throw new Error(`${normalizedMapName} could not be entered in the map search.`);
+      await delay(mapPicker.searchSettleMs);
+      await clickStep(`Select ${normalizedMapName}`, mapPoint[0], mapPoint[1], { synchronous: true });
+      await delay(mapPicker.selectionSettleMs);
+      const mapLobbyState = readAoe2HostSetupState(process.pid);
+      emitLog(`MAP_SELECT|Step=VerifyReturn|Map=${normalizedMapName}|${mapLobbyState.detail}`);
+      if (mapLobbyState.state !== "lobby-room") {
+        throw new Error(`${normalizedMapName} selection did not return to the lobby room.`);
+      }
+      emitLog(`MAP_SELECT|Complete=True|Map=${normalizedMapName}`);
 
       clipboard.writeText("EL_CURSOR_COPY_PENDING");
       await actionStep("copyLobbyUri");

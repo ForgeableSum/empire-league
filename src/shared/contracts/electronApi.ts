@@ -28,7 +28,7 @@ export interface ElectronGameApi {
   startAoe2TabTest(): Promise<GameInputTestResult>;
   stopAoe2TabTest(): Promise<void>;
   sendAoe2Key(key: GameInputKey): Promise<GameInputResult>;
-  runAoe2CreateLobbySequence(): Promise<GameInputResult>;
+  runAoe2CreateLobbySequence(mapName: string): Promise<GameInputResult>;
   runAoe2LobbyCursorAction(target: "guest-ready" | "host-ready" | "start"): Promise<GameInputResult>;
   selectAoe2Civilization(selection: Aoe2CivilizationSelection, slot: number): Promise<GameInputResult>;
   testAoe2HostGameMouseClick(): Promise<GameInputResult>;
