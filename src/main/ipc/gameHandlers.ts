@@ -582,8 +582,15 @@ public static class EmpireLeagueBlockInput {
 }
 '@
 Add-Type -TypeDefinition $interop
-if (-not [EmpireLeagueBlockInput]::BlockInput($true)) {
-  Write-Output 'GUARD_ERROR|BlockInput failed'
+$blocked = [EmpireLeagueBlockInput]::BlockInput($true)
+if (-not $blocked) {
+  $firstError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+  Start-Sleep -Milliseconds 250
+  $blocked = [EmpireLeagueBlockInput]::BlockInput($true)
+}
+if (-not $blocked) {
+  $secondError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+  Write-Output "GUARD_ERROR|BlockInputFailed|FirstError=$firstError|SecondError=$secondError"
   exit 2
 }
 Write-Output 'GUARD_READY|Mode=BlockInput'
@@ -623,7 +630,10 @@ async function startAoe2PhysicalInputGuard(): Promise<PhysicalInputGuard> {
     };
     const onExit = (code: number | null) => {
       cleanup();
-      reject(new Error(`The physical-input guard exited during startup (code ${code ?? "unknown"}).`));
+      const detail = output.trim().replace(/\s+/g, " ") || "No helper output";
+      reject(new Error(
+        `The physical-input guard exited during startup (code ${code ?? "unknown"}; ${detail}).`
+      ));
     };
     child.stdout?.on("data", onData);
     child.once("exit", onExit);
