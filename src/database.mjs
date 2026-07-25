@@ -217,7 +217,9 @@ export async function getLeaderboard(limit = 500) {
   const safeLimit = Math.max(1, Math.min(500, Number(limit) || 500));
   const [rows] = await database.query(
     `SELECT id, aoe_profile_id, steam_id, display_name, avatar_url, country_code,
-            rating, peak_rating, wins, losses, streak,
+            rating, peak_rating, team_rating, team_peak_rating,
+            legacy_solo_wins, legacy_solo_losses, legacy_team_wins, legacy_team_losses,
+            wins, losses, streak,
             RANK() OVER (ORDER BY rating DESC) AS ladder_rank
      FROM players
      ORDER BY rating DESC, wins DESC, display_name ASC
@@ -236,6 +238,12 @@ export async function getLeaderboard(limit = 500) {
       countryCode: row.country_code ?? undefined,
       rating: Number(row.rating),
       peakRating: Number(row.peak_rating),
+      teamRating: Number(row.team_rating),
+      teamPeakRating: Number(row.team_peak_rating),
+      legacy1v1Wins: Number(row.legacy_solo_wins),
+      legacy1v1Losses: Number(row.legacy_solo_losses),
+      legacyTeamWins: Number(row.legacy_team_wins),
+      legacyTeamLosses: Number(row.legacy_team_losses),
       rank: Number(row.ladder_rank),
       division: divisionForRating(Number(row.rating)),
       wins,

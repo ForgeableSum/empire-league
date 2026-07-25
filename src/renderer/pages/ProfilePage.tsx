@@ -19,8 +19,18 @@ export function ProfilePage() {
         {recentForm.length > 0 && <FormPips form={recentForm} />}
       </div>
       <div className="metrics-grid">
-        <Metric label="Current Rating" value={user.rating} />
-        <Metric label="Peak Rating" value={user.peakRating} />
+        <Metric
+          label="1v1 RM Rating"
+          value={user.rating}
+          detail={`${user.legacy1v1Wins}-${user.legacy1v1Losses} legacy record`}
+        />
+        <Metric label="1v1 RM Peak" value={user.peakRating} />
+        <Metric
+          label="Team RM Rating"
+          value={user.teamRating}
+          detail={`${user.legacyTeamWins}-${user.legacyTeamLosses} legacy record`}
+        />
+        <Metric label="Team RM Peak" value={user.teamPeakRating} />
         <Metric label="Global Rank" value={`#${user.rank.toLocaleString()}`} />
         <Metric label="Season Record" value={`${user.wins}-${user.losses}`} />
       </div>

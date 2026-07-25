@@ -9,6 +9,12 @@ export interface PlayerProfile {
   countryCode?: string;
   rating: number;
   peakRating: number;
+  teamRating: number;
+  teamPeakRating: number;
+  legacy1v1Wins: number;
+  legacy1v1Losses: number;
+  legacyTeamWins: number;
+  legacyTeamLosses: number;
   rank: number;
   division: Division;
   wins: number;

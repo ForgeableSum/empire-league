@@ -1,5 +1,6 @@
 const aoeCommunityApiUrl = "https://aoe-api.worldsedgelink.com/community/leaderboard/getPersonalStat";
 const soloRandomMapLeaderboardId = 3;
+const teamRandomMapLeaderboardId = 4;
 
 export async function attemptAoeRatingSeed(database, playerId, steamId) {
   const [claim] = await database.execute(
@@ -15,22 +16,47 @@ export async function attemptAoeRatingSeed(database, playerId, steamId) {
   try {
     const seed = await fetchAoeRatingSeed(steamId);
     if (!seed) {
-      console.info(`[aoe-rating-seed] No ranked 1v1 RM rating found for Steam ${steamId}.`);
+      console.info(`[aoe-rating-seed] No ranked RM rating found for Steam ${steamId}.`);
       return { attempted: true, seeded: false };
     }
 
     await database.execute(
       `UPDATE players
        SET aoe_profile_id = ?,
-           rating = ?,
-           peak_rating = ?,
+           rating = COALESCE(?, rating),
+           peak_rating = COALESCE(?, peak_rating),
            aoe_initial_rating = ?,
+           team_rating = COALESCE(?, team_rating),
+           team_peak_rating = COALESCE(?, team_peak_rating),
+           aoe_team_initial_rating = ?,
+           legacy_solo_wins = ?,
+           legacy_solo_losses = ?,
+           legacy_team_wins = ?,
+           legacy_team_losses = ?,
            country_code = COALESCE(?, country_code),
            aoe_rating_seeded_at = NOW(3)
        WHERE id = ?`,
-      [seed.profileId, seed.rating, seed.peakRating, seed.rating, seed.countryCode, playerId]
+      [
+        seed.profileId,
+        seed.rating,
+        seed.peakRating,
+        seed.rating,
+        seed.teamRating,
+        seed.teamPeakRating,
+        seed.teamRating,
+        seed.legacySoloWins,
+        seed.legacySoloLosses,
+        seed.legacyTeamWins,
+        seed.legacyTeamLosses,
+        seed.countryCode,
+        playerId
+      ]
     );
-    console.info(`[aoe-rating-seed] Seeded ${playerId} at ${seed.rating} from ranked 1v1 RM.`);
+    console.info(
+      `[aoe-rating-seed] Seeded ${playerId} at`
+      + (seed.rating ? ` 1v1 RM ${seed.rating}` : " no 1v1 RM rating")
+      + (seed.teamRating ? ` and Team RM ${seed.teamRating}.` : "; no Team RM rating found.")
+    );
     return { attempted: true, seeded: true, ...seed };
   } catch (error) {
     console.warn(
@@ -83,30 +109,53 @@ export async function fetchAoeRatingSeed(steamId) {
 export function parseAoeRatingSeed(payload) {
   if (payload?.result?.code !== 0) return null;
 
-  const stat = payload?.leaderboardStats?.find(
+  const soloStat = payload?.leaderboardStats?.find(
     (item) => Number(item?.leaderboard_id) === soloRandomMapLeaderboardId
   );
-  const rating = Number(stat?.rating);
-  if (!Number.isInteger(rating) || rating <= 0 || rating > 5000) return null;
+  const rating = validRating(soloStat?.rating);
+  const teamStat = payload?.leaderboardStats?.find(
+    (item) => Number(item?.leaderboard_id) === teamRandomMapLeaderboardId
+  );
+  const teamRating = validRating(teamStat?.rating);
+  if (!rating && !teamRating) return null;
 
+  const profileStat = soloStat ?? teamStat;
   const statGroup = payload?.statGroups?.find(
-    (group) => Number(group?.id) === Number(stat?.statgroup_id)
+    (group) => Number(group?.id) === Number(profileStat?.statgroup_id)
   );
   const profileId = Number(statGroup?.members?.[0]?.profile_id);
   if (!Number.isSafeInteger(profileId) || profileId <= 0) return null;
 
   const member = statGroup?.members?.[0];
-  const reportedPeak = Number(stat?.highestrating);
   return {
     profileId,
     rating,
-    peakRating: Number.isInteger(reportedPeak) && reportedPeak >= rating && reportedPeak <= 5000
-      ? reportedPeak
-      : rating,
+    peakRating: rating ? validPeakRating(soloStat?.highestrating, rating) : null,
+    legacySoloWins: rating ? validCount(soloStat?.wins) : 0,
+    legacySoloLosses: rating ? validCount(soloStat?.losses) : 0,
+    teamRating,
+    teamPeakRating: teamRating ? validPeakRating(teamStat?.highestrating, teamRating) : null,
+    legacyTeamWins: teamRating ? validCount(teamStat?.wins) : 0,
+    legacyTeamLosses: teamRating ? validCount(teamStat?.losses) : 0,
     countryCode: normalizeCountryCode(
-      member?.countryCode ?? member?.country_code ?? member?.country ?? stat?.country
+      member?.countryCode ?? member?.country_code ?? member?.country ?? profileStat?.country
     )
   };
+}
+
+function validRating(value) {
+  const rating = Number(value);
+  return Number.isInteger(rating) && rating > 0 && rating <= 5000 ? rating : null;
+}
+
+function validPeakRating(value, rating) {
+  const peak = Number(value);
+  return Number.isInteger(peak) && peak >= rating && peak <= 5000 ? peak : rating;
+}
+
+function validCount(value) {
+  const count = Number(value);
+  return Number.isSafeInteger(count) && count >= 0 ? count : 0;
 }
 
 function normalizeCountryCode(value) {
