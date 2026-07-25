@@ -235,6 +235,12 @@ export function setMainWindowGameCoverClickThrough(clickThrough: boolean): void 
   window.setIgnoreMouseEvents(clickThrough);
 }
 
+export function setMainWindowGameCoverOpacity(opacity: number): void {
+  const window = coveredMainWindow;
+  if (!window || window.isDestroyed()) return;
+  window.setOpacity(Math.max(0, Math.min(1, opacity)));
+}
+
 export function hideMainWindowGameCover(): void {
   const window = coveredMainWindow;
   if (!window || window.isDestroyed()) return;

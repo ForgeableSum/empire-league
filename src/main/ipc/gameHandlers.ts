@@ -21,6 +21,7 @@ import {
   restoreMainWindowFromGameCover,
   setMouseCoordinateOverlayEnabled,
   setMainWindowGameCoverClickThrough,
+  setMainWindowGameCoverOpacity,
   setMainWindowGameCoverOverAoe,
   showMainWindowAsGameCover
 } from "../window.js";
@@ -1529,6 +1530,7 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    setMainWindowGameCoverOpacity(0.7);
     event.sender.send("game:setup-input-guard", true);
     try {
       const process = await detectAoe2Process();
@@ -1627,6 +1629,7 @@ export function registerGameHandlers(): void {
     } finally {
       if (!event.sender.isDestroyed()) event.sender.send("game:setup-input-guard", false);
       emitLog("INPUT_GUARD|Active=False|Mode=ElectronCapture|Target=create-lobby");
+      setMainWindowGameCoverOpacity(1);
       setMainWindowGameCoverClickThrough(false);
     }
   });
@@ -1641,6 +1644,7 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    setMainWindowGameCoverOpacity(0.7);
     event.sender.send("game:setup-input-guard", true);
     try {
       const process = await detectAoe2Process();
@@ -1709,6 +1713,7 @@ export function registerGameHandlers(): void {
       return { sent: false, message: `${target} cursor action failed.` };
     } finally {
       if (!event.sender.isDestroyed()) event.sender.send("game:setup-input-guard", false);
+      setMainWindowGameCoverOpacity(1);
       setMainWindowGameCoverClickThrough(false);
     }
   });
@@ -1831,6 +1836,7 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    setMainWindowGameCoverOpacity(0.7);
     event.sender.send("game:setup-input-guard", true);
     try {
       const process = await detectAoe2Process();
@@ -1844,6 +1850,7 @@ export function registerGameHandlers(): void {
     } finally {
       if (!event.sender.isDestroyed()) event.sender.send("game:setup-input-guard", false);
       console.info("[AoE2 automation] INPUT_GUARD|Active=False|Mode=ElectronCapture|Target=join-lobby");
+      setMainWindowGameCoverOpacity(1);
     }
   });
 }
