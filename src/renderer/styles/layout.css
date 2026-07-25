@@ -361,6 +361,7 @@
 .panel::before,
 .queue-card::before,
 .search-state::before,
+.shorts-panel::before,
 .match-focus::before,
 .result-screen::before,
 .error-panel::before,
@@ -385,6 +386,7 @@
 .panel::after,
 .queue-card::after,
 .search-state::after,
+.shorts-panel::after,
 .match-focus::after,
 .result-screen::after,
 .error-panel::after,
@@ -1174,6 +1176,8 @@
 }
 
 .shorts-panel {
+  position: relative;
+  isolation: isolate;
   min-width: 0;
   min-height: 520px;
   padding: 12px;
