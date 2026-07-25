@@ -219,9 +219,6 @@ export function YouTubeShorts() {
               <span className="shorts-launch-emblem" aria-hidden="true">
                 <Play size={30} fill="currentColor" />
               </span>
-              <strong>{current ? "Watch AoE2 Shorts" : "Gathering AoE2 Shorts…"}</strong>
-              <small>{current ? "Click to load the first short" : "Preparing the battlefield"}</small>
-              <span className="shorts-launch-rule" aria-hidden="true" />
             </button>
           ) : current ? (
             <iframe
