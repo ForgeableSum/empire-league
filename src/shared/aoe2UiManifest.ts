@@ -81,6 +81,12 @@ export const aoe2UiManifest = {
     activation: "click",
     settleMs: 500
   },
+  civilizationPicker: {
+    searchPoint: [375, 300] as const,
+    filteredCivilizationPoint: [1259, 515] as const,
+    searchSettleMs: 3_000,
+    tileSettleMs: 500
+  },
   mapPicker: {
     openPoint: [3049, 725] as const,
     searchPoint: [1040, 431] as const,
