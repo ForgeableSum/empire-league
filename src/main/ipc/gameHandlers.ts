@@ -257,9 +257,11 @@ function moveAoe2WindowOffscreen(): void {
       const game = detectAoe2NativeProcess();
       if (game.running && game.pid && game.windowReady) {
         sawGame = true;
+        moveAoe2NativeWindowOffscreen(game.pid);
         if (game.pid !== lastPid) {
-          focusAoe2NativeWindow(game.pid);
-          console.info(`[AoE2 automation] MOUSE_TEST|Visible=True|DefaultWindowState=True|Pid=${game.pid}|Mode=Koffi`);
+          console.info(
+            `[AoE2 automation] STARTUP_OFFSCREEN|Active=True|Pid=${game.pid}|Mode=Koffi|Position=-32000,-32000`
+          );
           lastPid = game.pid;
         }
         const foreground = isAoe2NativeWindowForeground(game.pid);
@@ -1434,10 +1436,13 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:focus", async () => {
     if (cursorAutomationEnabled && process.platform === "win32") {
       setMainWindowGameCoverFocusable(true);
+      restoreAoe2Window();
       stopLobbyOffscreenGuard(true, true);
       hideMainWindowGameCover();
       const game = detectAoe2NativeProcess();
-      return { focused: Boolean(game.pid) && focusAoe2NativeWindow(game.pid as number) };
+      if (!game.pid) return { focused: false };
+      restoreAoe2NativeWindow(game.pid, true, true);
+      return { focused: focusAoe2NativeWindow(game.pid) };
     }
     restoreAoe2Window(true, true);
     return { focused: true };
@@ -1756,6 +1761,7 @@ export function registerGameHandlers(): void {
       if (target === "start" && offscreenSent) {
         setMainWindowGameCoverFocusable(true);
         if (gameIsOffscreen) {
+          restoreAoe2Window();
           stopLobbyOffscreenGuard(true, true);
           restoreAoe2NativeWindow(process.pid, true, true);
         } else {
