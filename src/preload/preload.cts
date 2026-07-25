@@ -63,7 +63,7 @@ contextBridge.exposeInMainWorld("electronApi", electronApi);
 
 const setupInputEvents = [
   "pointerdown", "pointerup", "mousedown", "mouseup", "click",
-  "dblclick", "contextmenu", "wheel", "keydown", "keyup"
+  "dblclick", "contextmenu", "wheel"
 ] as const;
 const blockSetupInput = (event: Event) => {
   event.preventDefault();
