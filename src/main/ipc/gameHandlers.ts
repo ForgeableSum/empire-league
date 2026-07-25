@@ -1780,20 +1780,13 @@ export function registerGameHandlers(): void {
       await delay(aoe2UiManifest.civilizationPicker.tileSettleMs);
 
       const confirm = aoe2UiManifest.actions.confirmCivilization;
-      const confirmResult = await postAoe2DesignClick(
+      const confirmResult = await clickAoe2DesignPoint(
         gameProcess.pid,
         confirm.point[0],
-        confirm.point[1],
-        { synchronous: true }
+        confirm.point[1]
       );
       emitLog(`CIV_SELECT|Step=Confirm|Selection=${selection}|${confirmResult.detail}`);
       if (!confirmResult.sent) throw new Error("Civilization selection could not be confirmed.");
-      if (confirm.activation === "clickEnter") {
-        await delay(500);
-        const enter = await sendAoe2Enter(gameProcess.pid);
-        emitLog(`CIV_SELECT|Step=ConfirmEnter|${enter.detail}`);
-        if (!enter.sent) throw new Error("Civilization confirmation Enter could not be sent.");
-      }
       await delay(confirm.settleMs);
       const lobbyState = readAoe2HostSetupState(gameProcess.pid);
       emitLog(`CIV_SELECT|Step=VerifyReturn|Selection=${selection}|${lobbyState.detail}`);

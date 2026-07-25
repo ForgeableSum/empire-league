@@ -71,7 +71,7 @@ export const aoe2UiManifest = {
     confirmCivilization: {
       label: "Confirm Civilization",
       point: [1316, 2019],
-      activation: "clickEnter",
+      activation: "click",
       settleMs: 1_000
     }
   } satisfies Record<string, Aoe2UiAction>,

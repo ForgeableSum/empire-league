@@ -9,7 +9,7 @@ The checked-in source of truth is `src/shared/aoe2UiManifest.ts`. Coordinates ar
 - `click`: send `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, and `WM_LBUTTONUP` using the action's configured delivery mode.
 - `clickEnter`: post the click above, wait for AoE2 to select the widget, then synchronously dispatch Enter with a bounded timeout.
 
-Legacy buttons such as Multiplayer, Host Game, and Confirm Civilization require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, civilization tiles, and Copy respond to `click`.
+Legacy buttons such as Multiplayer and Host Game require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, and Copy respond to window-local `click`; civilization tiles and Confirm require guarded foreground clicks.
 
 Click timing is action-specific. General navigation uses a 100 ms hover and
 120 ms press. Ready and Start use a 250 ms hover and 250 ms press because the
@@ -31,7 +31,7 @@ lobby message loop can be throttled while AoE2 is in the background.
    2. For a named civilization, enter its exact name in the picker search field and wait for the four selector modes plus the matching civilization tile to settle.
    3. Activate the filtered civilization tile with a guarded foreground click; AoE2 does not reliably activate civilization tiles from background mouse messages. The cursor is restored immediately.
    4. Random, Full Random, and Mirror continue to use their stable selector points.
-   5. `confirmCivilization` (`clickEnter`) and verify that AoE2 returned to the lobby room.
+   5. Activate `confirmCivilization` with a guarded foreground click and verify that AoE2 returned to the lobby room. Background click-plus-Enter is not reliable for this overlay.
 7. `copyLobbyUri` (`click`)
 8. Verify the clipboard matches `aoe2de://0/<digits>`.
 9. Publish that URI to the guest. This URI is the normal automated invitation path.
