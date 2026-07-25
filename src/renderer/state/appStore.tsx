@@ -523,6 +523,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               if (result.opened) {
                 log("Guest lobby opened; waiting for the Ready button state to settle");
                 await delayForLobbyInput(lobbySetupTiming.guestReadySettleMs);
+                const preference = matchedSessionRef.current?.queue.civilizationPreference;
+                if (preference?.mode === "pick" && preference.civilization) {
+                  log(`Selecting ${preference.civilization} for guest lobby slot 2`);
+                  const selected = await window.electronApi!.selectAoe2Civilization(
+                    preference.civilization as import("../../shared/aoe2UiManifest").Aoe2Civilization,
+                    2
+                  );
+                  if (!selected.sent) throw new Error(selected.message);
+                  log(`${preference.civilization} selected in AoE2`);
+                }
                 log("Guest lobby opened; clicking Ready");
                 const ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
                 if (!ready.sent) throw new Error(ready.message);
@@ -701,6 +711,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!automation.sent) throw new Error(automation.message);
         if (!automation.lobbyUri) throw new Error("AoE2 did not copy a valid lobby URI.");
         log("AoE2 host-lobby sequence completed");
+        const preference = match.queue.civilizationPreference;
+        if (preference?.mode === "pick" && preference.civilization) {
+          log(`Selecting ${preference.civilization} for host lobby slot 1`);
+          const selected = await window.electronApi.selectAoe2Civilization(
+            preference.civilization as import("../../shared/aoe2UiManifest").Aoe2Civilization,
+            1
+          );
+          if (!selected.sent) throw new Error(selected.message);
+          log(`${preference.civilization} selected in AoE2`);
+        }
         log(`Lobby URI discovered: ${automation.lobbyUri}`);
         const lobbyResult = await services.game.createLobby({
           matchId: match.id,

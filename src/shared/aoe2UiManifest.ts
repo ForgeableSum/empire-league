@@ -68,12 +68,6 @@ export const aoe2UiManifest = {
       hoverMs: 250,
       holdMs: 250
     },
-    hostCivilization: {
-      label: "Host Civilization",
-      point: [1778, 555],
-      activation: "click",
-      settleMs: 500
-    },
     confirmCivilization: {
       label: "Confirm Civilization",
       point: [1316, 2019],
@@ -81,6 +75,12 @@ export const aoe2UiManifest = {
       settleMs: 1_000
     }
   } satisfies Record<string, Aoe2UiAction>,
+  civilizationSlotButtons: {
+    x: 1778,
+    rowCenters: [555, 645, 735, 825, 915, 1005, 1095, 1185],
+    activation: "click",
+    settleMs: 500
+  },
   civilizationGrid: {
     columns: 9,
     columnCenters: [248, 501, 755, 1007, 1259, 1512, 1764, 2018, 2271],
@@ -88,27 +88,27 @@ export const aoe2UiManifest = {
     entries: {
       Bengalis: [4, 0],
       Bohemians: [5, 0],
-      Gurjaras: [6, 0],
-      Italians: [7, 0],
-      Magyars: [8, 0],
-      Malay: [0, 1],
-      Vikings: [1, 1],
-      Armenians: [2, 1],
-      Aztecs: [3, 1],
-      Berbers: [4, 1],
-      Britons: [5, 1],
-      Bulgarians: [6, 1],
-      Burgundians: [7, 1],
-      Burmese: [8, 1],
-      Byzantines: [0, 2],
-      Celts: [1, 2],
-      Chinese: [2, 2],
-      Cumans: [3, 2],
-      Dravidians: [4, 2],
-      Ethiopians: [5, 2],
-      Franks: [6, 2],
-      Georgians: [7, 2],
-      Goths: [8, 2],
+      Goths: [6, 0],
+      Gurjaras: [7, 0],
+      Italians: [8, 0],
+      Magyars: [0, 1],
+      Malay: [1, 1],
+      Vikings: [2, 1],
+      Armenians: [3, 1],
+      Aztecs: [4, 1],
+      Berbers: [5, 1],
+      Britons: [6, 1],
+      Bulgarians: [7, 1],
+      Burgundians: [8, 1],
+      Burmese: [0, 2],
+      Byzantines: [1, 2],
+      Celts: [2, 2],
+      Chinese: [3, 2],
+      Cumans: [4, 2],
+      Dravidians: [5, 2],
+      Ethiopians: [6, 2],
+      Franks: [7, 2],
+      Georgians: [8, 2],
       Hindustanis: [0, 3],
       Huns: [1, 3],
       Incas: [2, 3],
@@ -149,4 +149,10 @@ export function civilizationDesignPoint(civilization: Aoe2Civilization): readonl
     aoe2UiManifest.civilizationGrid.columnCenters[column],
     aoe2UiManifest.civilizationGrid.rowCenters[row]
   ];
+}
+
+export function civilizationSlotDesignPoint(slot: number): readonly [number, number] {
+  const y = aoe2UiManifest.civilizationSlotButtons.rowCenters[slot - 1];
+  if (y === undefined) throw new Error(`AoE2 lobby slot ${slot} is outside the supported 1-8 range.`);
+  return [aoe2UiManifest.civilizationSlotButtons.x, y];
 }

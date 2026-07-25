@@ -7,7 +7,10 @@ import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
 import {
   aoe2UiManifest,
-  type Aoe2ActionName
+  civilizationDesignPoint,
+  civilizationSlotDesignPoint,
+  type Aoe2ActionName,
+  type Aoe2Civilization
 } from "../../shared/aoe2UiManifest.js";
 import {
   cursorAutomationEnabled,
@@ -1687,6 +1690,70 @@ export function registerGameHandlers(): void {
     } catch (error) {
       console.error(`[AoE2 automation] Cursor action ${target} failed`, error);
       return { sent: false, message: `${target} cursor action failed.` };
+    } finally {
+      setMainWindowGameCoverClickThrough(false);
+    }
+  });
+
+  ipcMain.handle("game:select-civilization", async (
+    event,
+    civilization: Aoe2Civilization,
+    slot: number
+  ) => {
+    if (process.platform !== "win32"
+      || !Number.isInteger(slot)
+      || slot < 1
+      || slot > aoe2UiManifest.civilizationSlotButtons.rowCenters.length
+      || !(civilization in aoe2UiManifest.civilizationGrid.entries)) {
+      return { sent: false, message: "That civilization selection is not supported." };
+    }
+
+    const emitLog = (message: string) => {
+      console.info(`[AoE2 automation] ${message}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+    };
+    const appWindow = BrowserWindow.fromWebContents(event.sender);
+    if (appWindow) showMainWindowAsGameCover(appWindow);
+    setMainWindowGameCoverClickThrough(false);
+    try {
+      const gameProcess = await detectAoe2Process();
+      if (!gameProcess.running || !gameProcess.pid) {
+        return { sent: false, message: "The AoE2 process was not found." };
+      }
+      const [slotX, slotY] = civilizationSlotDesignPoint(slot);
+      const [civilizationX, civilizationY] = civilizationDesignPoint(civilization);
+      const slotResult = await postAoe2DesignClick(gameProcess.pid, slotX, slotY, { synchronous: true });
+      emitLog(`CIV_SELECT|Step=Open|Slot=${slot}|DesignPoint=${slotX},${slotY}|${slotResult.detail}`);
+      if (!slotResult.sent) throw new Error(`Lobby slot ${slot} civilization button could not be opened.`);
+      await delay(aoe2UiManifest.civilizationSlotButtons.settleMs);
+
+      const tileResult = await postAoe2DesignClick(gameProcess.pid, civilizationX, civilizationY, { synchronous: true });
+      emitLog(`CIV_SELECT|Step=Tile|Civilization=${civilization}|DesignPoint=${civilizationX},${civilizationY}|${tileResult.detail}`);
+      if (!tileResult.sent) throw new Error(`${civilization} could not be selected.`);
+      await delay(500);
+
+      const confirm = aoe2UiManifest.actions.confirmCivilization;
+      const confirmResult = await postAoe2DesignClick(
+        gameProcess.pid,
+        confirm.point[0],
+        confirm.point[1],
+        { synchronous: true }
+      );
+      emitLog(`CIV_SELECT|Step=Confirm|Civilization=${civilization}|${confirmResult.detail}`);
+      if (!confirmResult.sent) throw new Error("Civilization selection could not be confirmed.");
+      if (confirm.activation === "clickEnter") {
+        await delay(500);
+        const enter = await sendAoe2Enter(gameProcess.pid);
+        emitLog(`CIV_SELECT|Step=ConfirmEnter|${enter.detail}`);
+        if (!enter.sent) throw new Error("Civilization confirmation Enter could not be sent.");
+      }
+      await delay(confirm.settleMs);
+      emitLog(`CIV_SELECT|Complete=True|Civilization=${civilization}|Slot=${slot}`);
+      return { sent: true, message: `${civilization} selected for AoE2 lobby slot ${slot}.` };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Civilization selection failed.";
+      emitLog(`CIV_SELECT|Complete=False|Error=${detail}`);
+      return { sent: false, message: detail };
     } finally {
       setMainWindowGameCoverClickThrough(false);
     }

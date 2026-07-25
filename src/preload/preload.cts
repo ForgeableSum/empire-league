@@ -21,6 +21,7 @@ const electronApi: ElectronGameApi = {
   sendAoe2Key: (key) => ipcRenderer.invoke("game:send-background-key", key),
   runAoe2CreateLobbySequence: () => ipcRenderer.invoke("game:run-create-lobby-sequence"),
   runAoe2LobbyCursorAction: (target) => ipcRenderer.invoke("game:run-lobby-cursor-action", target),
+  selectAoe2Civilization: (civilization, slot) => ipcRenderer.invoke("game:select-civilization", civilization, slot),
   testAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:test-host-game-mouse-click"),
   calibrateAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:calibrate-host-game-mouse-click"),
   testAoe2FakeActivationMouseClick: () => ipcRenderer.invoke("game:test-fake-activation-mouse-click"),

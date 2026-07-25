@@ -22,7 +22,7 @@ lobby message loop can be throttled while AoE2 is in the background.
 3. `createLobby` (`click`)
 4. Apply the standard lobby settings.
 5. Optionally select a civilization:
-   1. `hostCivilization` (`click`)
+   1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
    2. Resolve the civilization name through `civilizationDesignPoint`.
    3. Click the resulting grid point.
    4. `confirmCivilization` (`clickEnter`)
@@ -44,7 +44,7 @@ wrong screen.
 1. Receive the published `aoe2de://0/<digits>` URI.
 2. Open the URI through Steam/AoE2.
 3. Wait for the lobby screen to settle.
-4. Optionally select a civilization using the client lobby's civilization button, the shared grid, and `confirmCivilization`.
+4. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), the shared grid, and `confirmCivilization`.
 5. `guestReady` (`click`). The guest and host lobby layouts intentionally use different ready points.
 6. Report guest readiness to the matchmaker.
 7. Wait for the host to start the match.
@@ -54,6 +54,10 @@ wrong screen.
 The manifest contains every currently visible Age of Empires II civilization in game build `101.103.48987.0`. Entries map names to grid column/row positions; grid centers are stored once. This avoids maintaining fifty independent pixel coordinates.
 
 The first four cells are selector modes (Random, Full Random, Mirror, and Custom), not civilizations. The first civilization row therefore begins at column four.
+
+Lobby civilization buttons are stored separately as eight row centers because
+the correct button depends on the player's slot. The matchmaking flow currently
+uses slot 1 for its host and slot 2 for its guest.
 
 ## Updating after an AoE2 patch
 
