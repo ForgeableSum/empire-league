@@ -1548,6 +1548,16 @@ export function registerGameHandlers(): void {
         const action = aoe2UiManifest.actions[actionName];
         const expectedState = expectedHostState[actionName];
         const performAction = async (attempt: number) => {
+          const actionFocusDeadline = Date.now() + 1_500;
+          let focusedForAction = focusAoe2NativeWindow(process.pid as number);
+          let foregroundForAction = isAoe2NativeWindowForeground(process.pid as number);
+          while (!foregroundForAction && Date.now() < actionFocusDeadline) {
+            await delay(25);
+            focusedForAction = focusAoe2NativeWindow(process.pid as number) || focusedForAction;
+            foregroundForAction = isAoe2NativeWindowForeground(process.pid as number);
+          }
+          emitLog(`STEP_FOCUS|${action.label}|Attempt=${attempt}|Focused=${focusedForAction}|Foreground=${foregroundForAction}`);
+          if (!foregroundForAction) throw new Error(`${action.label} could not focus AoE2.`);
           if (actionName === "multiplayer") {
             for (let index = 1; index <= 6; index += 1) {
               const tab = await sendAoe2Tab(process.pid as number);
