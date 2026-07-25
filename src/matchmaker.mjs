@@ -9,9 +9,7 @@ import {
   recordMatchResultConflict,
   recordVerifiedMatchResult,
   saveMatch,
-  saveQueueTicket,
-  updateMatchStatus,
-  updateTicketStatus
+  updateMatchStatus
 } from "./database.mjs";
 import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
 
@@ -335,7 +333,6 @@ const server = createServer(async (request, response) => {
       };
       tickets.set(ticket.id, ticket);
       try {
-        await saveQueueTicket(ticket);
         await tryMatch(ticket);
         return send(response, 201, { id: ticket.id, queueId: ticket.queueId, joinedAt: ticket.joinedAt });
       } catch (error) {
@@ -377,7 +374,6 @@ const server = createServer(async (request, response) => {
       const ticketId = decodeURIComponent(ticketMatch[1]);
       const ticket = tickets.get(ticketId);
       if (!ticket || ticket.player.id !== authenticatedPlayer.id) return send(response, 404, { error: "ticket not found" });
-      if (ticket && !ticket.matchId) await updateTicketStatus(ticketId, "cancelled");
       tickets.delete(ticketId);
       return send(response, 200, { ok: true });
     }

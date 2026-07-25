@@ -18,21 +18,6 @@ CREATE TABLE IF NOT EXISTS players (
   INDEX idx_players_rating (rating DESC)
 );
 
-CREATE TABLE IF NOT EXISTS queue_tickets (
-  id VARCHAR(64) PRIMARY KEY,
-  player_id VARCHAR(64) NOT NULL,
-  queue_id VARCHAR(64) NOT NULL,
-  selected_maps JSON NOT NULL,
-  favorite_map_id VARCHAR(64) NULL,
-  can_host BOOLEAN NOT NULL DEFAULT TRUE,
-  status ENUM('searching', 'matched', 'cancelled', 'expired') NOT NULL DEFAULT 'searching',
-  joined_at DATETIME(3) NOT NULL,
-  matched_at DATETIME(3) NULL,
-  CONSTRAINT fk_queue_tickets_player FOREIGN KEY (player_id) REFERENCES players(id),
-  INDEX idx_queue_search (queue_id, status, joined_at),
-  INDEX idx_queue_player (player_id, joined_at DESC)
-);
-
 CREATE TABLE IF NOT EXISTS matches (
   id VARCHAR(64) PRIMARY KEY,
   queue_id VARCHAR(64) NOT NULL,
