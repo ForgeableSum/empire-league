@@ -534,11 +534,9 @@ public static class AoeInputGuard {
 
   private static IntPtr OnMouse(int code, IntPtr wParam, IntPtr lParam) {
     if (code >= 0) {
-      MouseHookData data = Marshal.PtrToStructure<MouseHookData>(lParam);
-      IntPtr pointedWindow = GetAncestor(WindowFromPoint(data.Point), GA_ROOT);
-      if (GetForegroundWindow() == targetWindow || pointedWindow == targetWindow) {
-        return new IntPtr(1);
-      }
+      // Mouse events can change focus/z-order between down and up. Suppress the
+      // whole physical gesture while setup automation owns the input boundary.
+      return new IntPtr(1);
     }
     return CallNextHookEx(mouseHook, code, wParam, lParam);
   }
