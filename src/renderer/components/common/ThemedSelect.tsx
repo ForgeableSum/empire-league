@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface ThemedSelectOption {
   value: string;
@@ -30,6 +30,18 @@ export function ThemedSelect({
   const visibleOptions = searchable
     ? options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()))
     : options;
+
+  useEffect(() => {
+    const closeOnOutsideInteraction = (event: PointerEvent) => {
+      const dropdown = dropdownRef.current;
+      if (dropdown?.open && event.target instanceof Node && !dropdown.contains(event.target)) {
+        dropdown.removeAttribute("open");
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideInteraction);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideInteraction);
+  }, []);
 
   return (
     <div className={className ? `themed-select-field ${className}` : "themed-select-field"}>
