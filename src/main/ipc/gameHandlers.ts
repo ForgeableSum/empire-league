@@ -1519,16 +1519,7 @@ export function registerGameHandlers(): void {
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
-      const focusDeadline = Date.now() + 1_500;
-      let focused = focusAoe2NativeWindow(process.pid);
-      let foreground = isAoe2NativeWindowForeground(process.pid);
-      while (!foreground && Date.now() < focusDeadline) {
-        await delay(25);
-        focused = focusAoe2NativeWindow(process.pid) || focused;
-        foreground = isAoe2NativeWindowForeground(process.pid);
-      }
-      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocusable=${appWindow?.isFocusable() ?? false}|Focused=${focused}|AoeForeground=${foreground}`);
-      if (!foreground) throw new Error("AoE2 did not become the foreground window.");
+      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
       const clickStep = async (
         name: string,
         x: number,
@@ -1636,8 +1627,7 @@ export function registerGameHandlers(): void {
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
-      const focused = focusAoe2NativeWindow(process.pid);
-      const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=False|ClickThrough=False|ElectronFocusable=${appWindow?.isFocusable() ?? false}|Focused=${focused}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`;
+      const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`;
       console.info(`[AoE2 automation] ${visibilityMessage}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", visibilityMessage);
       const actionName = target === "guest-ready"
