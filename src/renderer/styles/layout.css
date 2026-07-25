@@ -16,7 +16,7 @@
   z-index: 1000;
   height: 40px;
   background: #141312;
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
 }
 
 .window-title {
@@ -32,7 +32,7 @@
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
   user-select: none;
 }
 
@@ -1856,4 +1856,5 @@
   inset: 0;
   z-index: 2147483647;
   cursor: wait;
+  -webkit-app-region: no-drag;
 }
