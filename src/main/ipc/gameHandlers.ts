@@ -1511,23 +1511,15 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
-    hideMainWindowGameCover();
-    setMainWindowGameCoverClickThrough(true);
+    const appWindow = BrowserWindow.fromWebContents(event.sender);
+    if (appWindow) showMainWindowAsGameCover(appWindow);
+    setMainWindowGameCoverClickThrough(false);
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
-      const focusDeadline = Date.now() + 1_500;
-      let focused = focusAoe2NativeWindow(process.pid);
-      let foreground = isAoe2NativeWindowForeground(process.pid);
-      while (!foreground && Date.now() < focusDeadline) {
-        await delay(25);
-        focused = focusAoe2NativeWindow(process.pid) || focused;
-        foreground = isAoe2NativeWindowForeground(process.pid);
-      }
-      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=True|Focused=${focused}|Foreground=${foreground}`);
-      if (!foreground) throw new Error("AoE2 did not become the foreground window.");
+      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
       const clickStep = async (
         name: string,
         x: number,
@@ -1627,15 +1619,15 @@ export function registerGameHandlers(): void {
     if (process.platform !== "win32" || !["guest-ready", "host-ready", "start"].includes(target)) {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
-    hideMainWindowGameCover();
-    setMainWindowGameCoverClickThrough(true);
+    const appWindow = BrowserWindow.fromWebContents(event.sender);
+    if (appWindow) showMainWindowAsGameCover(appWindow);
+    setMainWindowGameCoverClickThrough(false);
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
-      const focused = focusAoe2NativeWindow(process.pid);
-      const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=True|Focused=${focused}|Foreground=${isAoe2NativeWindowForeground(process.pid)}`;
+      const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`;
       console.info(`[AoE2 automation] ${visibilityMessage}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", visibilityMessage);
       const actionName = target === "guest-ready"
@@ -1682,6 +1674,10 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
       const sent = result.sent && (!verifiesReady || readyState?.state === "ready");
+      if (target === "start" && sent) {
+        hideMainWindowGameCover();
+        focusAoe2NativeWindow(process.pid);
+      }
       return {
         sent,
         message: sent
@@ -1807,17 +1803,17 @@ export function registerGameHandlers(): void {
     };
   });
 
-  ipcMain.handle("game:open-lobby", async (_event, lobbyId: string) => {
+  ipcMain.handle("game:open-lobby", async (event, lobbyId: string) => {
     if (!/^aoe2de:\/\/0\/\d+$/.test(lobbyId)) {
       return { opened: false };
     }
-    hideMainWindowGameCover();
+    const appWindow = BrowserWindow.fromWebContents(event.sender);
+    if (appWindow) showMainWindowAsGameCover(appWindow);
+    setMainWindowGameCoverClickThrough(false);
     await shell.openExternal(lobbyId);
     // Steam hands the URI to AoE2 asynchronously. Give the game time to
     // navigate to and finish joining the lobby before Ready automation.
     await delay(lobbySetupTiming.guestJoinMs);
-    const process = await detectAoe2Process();
-    if (process.pid) focusAoe2NativeWindow(process.pid);
     return { opened: true };
   });
 }
