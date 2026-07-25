@@ -29,9 +29,9 @@ const civilizationModes: Array<{
   icon: typeof Swords;
 }> = [
   { id: "pick", label: "Choose Civ", detail: "Play your selected civilization", icon: Swords },
-  { id: "prefer-random", label: "Prefer Random", detail: "Random if your opponent agrees; otherwise use your fallback", icon: Shuffle },
+  { id: "random", label: "Random", detail: "Choose any civilization; duplicates are allowed", icon: Shuffle },
   { id: "mirror", label: "Mirror", detail: "Match your opponent's civilization", icon: Copy },
-  { id: "full-random", label: "Full Random", detail: "Independent random civilizations", icon: Dices }
+  { id: "full-random", label: "Full Random", detail: "Choose randomly without duplicating another player's civilization", icon: Dices }
 ];
 
 export function QueuePage() {
@@ -55,7 +55,7 @@ export function QueuePage() {
   const [civilizationMode, setCivilizationMode] = useState<CivilizationMode>(() => {
     try {
       const savedMode = JSON.parse(window.localStorage.getItem(civilizationPreferenceKey) ?? "{}").mode;
-      return savedMode === "random" ? "prefer-random" : savedMode ?? "pick";
+      return savedMode === "prefer-random" ? "random" : savedMode ?? "pick";
     } catch {
       return "pick";
     }
@@ -176,9 +176,9 @@ export function QueuePage() {
                   <div>
                     <span className="eyebrow">Civilization</span>
                   </div>
-                  {(civilizationMode === "pick" || civilizationMode === "prefer-random") && (
+                  {civilizationMode === "pick" && (
                     <ThemedSelect
-                      label={civilizationMode === "prefer-random" ? "Fallback civilization" : "Civilization"}
+                      label="Civilization"
                       options={civilizations.map((name) => ({ value: name, label: name }))}
                       value={civilization}
                       onChange={selectCivilization}
@@ -235,9 +235,7 @@ export function QueuePage() {
                   <strong>
                     {civilizationMode === "pick"
                       ? civilization
-                      : civilizationMode === "prefer-random"
-                        ? `Prefer Random · ${civilization} fallback`
-                        : civilizationModes.find((mode) => mode.id === civilizationMode)?.label}
+                      : civilizationModes.find((mode) => mode.id === civilizationMode)?.label}
                   </strong>
                 </div>
                 <div><span>Maps enabled</span><strong>{selectedMaps[selectedQueue.id]?.length ?? 0}</strong></div>
@@ -253,7 +251,7 @@ export function QueuePage() {
                     favoriteMapId: favoriteMaps[selectedQueue.id],
                     civilizationPreference: {
                       mode: civilizationMode,
-                      civilization: civilizationMode === "pick" || civilizationMode === "prefer-random"
+                      civilization: civilizationMode === "pick"
                         ? civilization
                         : undefined
                     }

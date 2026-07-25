@@ -12,7 +12,7 @@ import type {
   MouseTestPointerInfo,
   OpenLobbyResult
 } from "./gameIntegration.js";
-import type { Aoe2Civilization } from "../aoe2UiManifest.js";
+import type { Aoe2CivilizationSelection } from "../aoe2UiManifest.js";
 
 export interface ElectronGameApi {
   detectAoe2Installation(): Promise<GameInstallationStatus>;
@@ -30,7 +30,7 @@ export interface ElectronGameApi {
   sendAoe2Key(key: GameInputKey): Promise<GameInputResult>;
   runAoe2CreateLobbySequence(): Promise<GameInputResult>;
   runAoe2LobbyCursorAction(target: "guest-ready" | "host-ready" | "start"): Promise<GameInputResult>;
-  selectAoe2Civilization(civilization: Aoe2Civilization, slot: number): Promise<GameInputResult>;
+  selectAoe2Civilization(selection: Aoe2CivilizationSelection, slot: number): Promise<GameInputResult>;
   testAoe2HostGameMouseClick(): Promise<GameInputResult>;
   calibrateAoe2HostGameMouseClick(): Promise<GameInputResult>;
   testAoe2FakeActivationMouseClick(): Promise<GameInputResult>;

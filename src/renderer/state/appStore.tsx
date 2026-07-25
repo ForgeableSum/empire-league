@@ -524,14 +524,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 log("Guest lobby opened; waiting for the Ready button state to settle");
                 await delayForLobbyInput(lobbySetupTiming.guestReadySettleMs);
                 const preference = matchedSessionRef.current?.queue.civilizationPreference;
-                if (preference?.mode === "pick" && preference.civilization) {
-                  log(`Selecting ${preference.civilization} for guest lobby slot 2`);
+                const selection = aoe2SelectionForPreference(preference);
+                if (selection) {
+                  log(`Selecting ${selection} for guest lobby slot 2`);
                   const selected = await window.electronApi!.selectAoe2Civilization(
-                    preference.civilization as import("../../shared/aoe2UiManifest").Aoe2Civilization,
+                    selection,
                     2
                   );
                   if (!selected.sent) throw new Error(selected.message);
-                  log(`${preference.civilization} selected in AoE2`);
+                  log(`${selection} selected in AoE2`);
                 }
                 log("Guest lobby opened; clicking Ready");
                 const ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
@@ -712,14 +713,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!automation.lobbyUri) throw new Error("AoE2 did not copy a valid lobby URI.");
         log("AoE2 host-lobby sequence completed");
         const preference = match.queue.civilizationPreference;
-        if (preference?.mode === "pick" && preference.civilization) {
-          log(`Selecting ${preference.civilization} for host lobby slot 1`);
+        const selection = aoe2SelectionForPreference(preference);
+        if (selection) {
+          log(`Selecting ${selection} for host lobby slot 1`);
           const selected = await window.electronApi.selectAoe2Civilization(
-            preference.civilization as import("../../shared/aoe2UiManifest").Aoe2Civilization,
+            selection,
             1
           );
           if (!selected.sent) throw new Error(selected.message);
-          log(`${preference.civilization} selected in AoE2`);
+          log(`${selection} selected in AoE2`);
         }
         log(`Lobby URI discovered: ${automation.lobbyUri}`);
         const lobbyResult = await services.game.createLobby({
@@ -975,6 +977,19 @@ function delayForStartup(milliseconds: number): Promise<void> {
 
 function delayForLobbyInput(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function aoe2SelectionForPreference(
+  preference: import("../../shared/contracts/matchmaking").CivilizationPreference | undefined
+): import("../../shared/aoe2UiManifest").Aoe2CivilizationSelection | null {
+  if (!preference) return null;
+  if (preference.mode === "pick") {
+    return (preference.civilization as import("../../shared/aoe2UiManifest").Aoe2Civilization | undefined) ?? null;
+  }
+  if (preference.mode === "random") return "Random";
+  if (preference.mode === "full-random") return "Full Random";
+  if (preference.mode === "mirror") return "Mirror";
+  return null;
 }
 
 export function useAppStore(): AppContextValue {

@@ -85,6 +85,11 @@ export const aoe2UiManifest = {
     columns: 9,
     columnCenters: [248, 501, 755, 1007, 1259, 1512, 1764, 2018, 2271],
     rowCenters: [515, 767, 1020, 1272, 1524, 1776],
+    selectorEntries: {
+      Random: [0, 0],
+      "Full Random": [1, 0],
+      Mirror: [2, 0]
+    } satisfies Record<string, readonly [column: number, row: number]>,
     entries: {
       Bengalis: [4, 0],
       Bohemians: [5, 0],
@@ -142,9 +147,15 @@ export const aoe2UiManifest = {
 
 export type Aoe2ActionName = keyof typeof aoe2UiManifest.actions;
 export type Aoe2Civilization = keyof typeof aoe2UiManifest.civilizationGrid.entries;
+export type Aoe2CivilizationSelector = keyof typeof aoe2UiManifest.civilizationGrid.selectorEntries;
+export type Aoe2CivilizationSelection = Aoe2Civilization | Aoe2CivilizationSelector;
 
-export function civilizationDesignPoint(civilization: Aoe2Civilization): readonly [number, number] {
-  const [column, row] = aoe2UiManifest.civilizationGrid.entries[civilization];
+export function civilizationDesignPoint(selection: Aoe2CivilizationSelection): readonly [number, number] {
+  const gridEntries: Record<string, readonly [number, number]> = {
+    ...aoe2UiManifest.civilizationGrid.selectorEntries,
+    ...aoe2UiManifest.civilizationGrid.entries
+  };
+  const [column, row] = gridEntries[selection];
   return [
     aoe2UiManifest.civilizationGrid.columnCenters[column],
     aoe2UiManifest.civilizationGrid.rowCenters[row]

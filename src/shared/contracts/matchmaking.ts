@@ -84,7 +84,7 @@ export interface MapDefinition {
   thumbnailUrl: string;
 }
 
-export type CivilizationMode = "pick" | "prefer-random" | "mirror" | "full-random";
+export type CivilizationMode = "pick" | "random" | "mirror" | "full-random";
 
 export interface CivilizationPreference {
   mode: CivilizationMode;
