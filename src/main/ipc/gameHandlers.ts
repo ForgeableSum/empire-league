@@ -434,6 +434,8 @@ public static class AoeInputGuard {
   private const int VK_SHIFT = 0x10;
   private const int VK_F12 = 0x7B;
   private const uint GA_ROOT = 2;
+  private const uint LLKHF_INJECTED = 0x10;
+  private const uint LLMHF_INJECTED = 0x01;
 
   private delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
   private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
@@ -445,6 +447,15 @@ public static class AoeInputGuard {
   private struct MouseHookData {
     public Point Point;
     public uint MouseData;
+    public uint Flags;
+    public uint Time;
+    public IntPtr ExtraInfo;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct KeyboardHookData {
+    public uint VirtualKey;
+    public uint ScanCode;
     public uint Flags;
     public uint Time;
     public IntPtr ExtraInfo;
@@ -519,13 +530,13 @@ public static class AoeInputGuard {
 
   private static IntPtr OnKeyboard(int code, IntPtr wParam, IntPtr lParam) {
     if (code >= 0) {
-      int key = Marshal.ReadInt32(lParam);
-      bool emergency = key == VK_F12
+      KeyboardHookData data = Marshal.PtrToStructure<KeyboardHookData>(lParam);
+      bool emergency = data.VirtualKey == VK_F12
         && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
         && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
       if (emergency) {
         PostThreadMessage(guardThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
-      } else if (GetForegroundWindow() == targetWindow) {
+      } else if ((data.Flags & LLKHF_INJECTED) == 0 && GetForegroundWindow() == targetWindow) {
         return new IntPtr(1);
       }
     }
@@ -534,6 +545,10 @@ public static class AoeInputGuard {
 
   private static IntPtr OnMouse(int code, IntPtr wParam, IntPtr lParam) {
     if (code >= 0) {
+      MouseHookData data = Marshal.PtrToStructure<MouseHookData>(lParam);
+      if ((data.Flags & LLMHF_INJECTED) != 0) {
+        return CallNextHookEx(mouseHook, code, wParam, lParam);
+      }
       // Mouse events can change focus/z-order between down and up. Suppress the
       // whole physical gesture while setup automation owns the input boundary.
       return new IntPtr(1);
