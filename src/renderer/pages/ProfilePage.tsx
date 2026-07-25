@@ -42,18 +42,6 @@ export function ProfilePage() {
           </div>
         )}
       </div>
-      <div className="panel">
-        <h2>Favorite Maps</h2>
-        {user.preferredMaps.length > 0
-          ? <div className="tag-list">{user.preferredMaps.map((map) => <span key={map}>{map}</span>)}</div>
-          : <div className="empty-state">No favorite maps yet.</div>}
-      </div>
-      <div className="panel">
-        <h2>Favorite Civilizations</h2>
-        {user.favoriteCivilizations.length > 0
-          ? <div className="tag-list">{user.favoriteCivilizations.map((civ) => <span key={civ}>{civ}</span>)}</div>
-          : <div className="empty-state">No favorite civilizations yet.</div>}
-      </div>
     </section>
   );
 }

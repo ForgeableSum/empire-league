@@ -34,6 +34,10 @@ button {
   cursor: pointer;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {

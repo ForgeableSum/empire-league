@@ -241,6 +241,19 @@
   color: var(--text);
 }
 
+.panel > h2 + .status-list {
+  margin-top: 14px;
+}
+
+.status-list div {
+  align-items: center;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: #1d1b18;
+}
+
 .status-online {
   color: var(--success) !important;
 }

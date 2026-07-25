@@ -168,26 +168,26 @@ export function SettingsPage() {
         />
         <Toggle label="Enable replay detection" checked={settings.replayDetection} onChange={(replayDetection) => updateSettings({ replayDetection })} />
         <label>Recorded-game folder<input value={settings.replayFolder} onChange={(event) => updateSettings({ replayFolder: event.target.value })} placeholder="Not configured" /></label>
-        <button type="button" className="secondary" disabled={detecting} onClick={() => void testGameDetection()}>
+        <button type="button" className="secondary" hidden disabled onClick={() => void testGameDetection()}>
           {detecting ? "Detecting…" : "Test Game Detection"}
         </button>
-        <button type="button" className="secondary" onClick={() => void toggleTabTest()}>
+        <button type="button" className="secondary" hidden disabled onClick={() => void toggleTabTest()}>
           {tabTestRunning ? "Stop Tab Test" : "Run 15-second Tab Test"}
         </button>
-        <div className="game-input-controls">
-          <button type="button" className="secondary" onClick={() => void sendGameKey("TAB")}>Send Tab</button>
-          <button type="button" className="secondary" onClick={() => void sendGameKey("ENTER")}>Send Enter</button>
+        <div className="game-input-controls" hidden>
+          <button type="button" className="secondary" disabled onClick={() => void sendGameKey("TAB")}>Send Tab</button>
+          <button type="button" className="secondary" disabled onClick={() => void sendGameKey("ENTER")}>Send Enter</button>
         </div>
-        <button type="button" className="primary" disabled={lobbySequenceRunning} onClick={() => void runCreateLobbySequence()}>
+        <button type="button" className="primary" hidden disabled onClick={() => void runCreateLobbySequence()}>
           {lobbySequenceRunning ? "Creating Ranked Lobby…" : "Test Ranked Lobby Sequence"}
         </button>
-        <button type="button" className="secondary" onClick={() => void testHostGameMouseClick()}>
+        <button type="button" className="secondary" hidden disabled onClick={() => void testHostGameMouseClick()}>
           Test Mouse Click: Host Game
         </button>
-        <button type="button" className="secondary" disabled={mouseCalibrationRunning} onClick={() => void calibrateHostGameMouseClick()}>
+        <button type="button" className="secondary" hidden disabled onClick={() => void calibrateHostGameMouseClick()}>
           {mouseCalibrationRunning ? "Hover Over Host Game…" : "Calibrate Mouse: Host Game"}
         </button>
-        <button type="button" className="secondary" onClick={() => void testFakeActivationMouseClick()}>
+        <button type="button" className="secondary" hidden disabled onClick={() => void testFakeActivationMouseClick()}>
           Test Fake Activation: Host Game
         </button>
         {detectionFeedback && (
@@ -205,7 +205,7 @@ export function SettingsPage() {
         <Toggle label="Allow rematch offers" checked={settings.rematchOffers} onChange={(rematchOffers) => updateSettings({ rematchOffers })} />
       </SettingsGroup>
       <SettingsGroup title="Interface">
-        <button type="button" className="secondary" onClick={() => void toggleMouseTestMode()}>
+        <button type="button" className="secondary" hidden disabled onClick={() => void toggleMouseTestMode()}>
           {mouseTestRunning ? "Hide Mouse Coordinates" : "Show Mouse Coordinates"}
         </button>
         <label>Sound volume<input type="range" min="0" max="100" value={settings.soundVolume} onChange={(event) => updateSettings({ soundVolume: Number(event.target.value) })} /></label>
