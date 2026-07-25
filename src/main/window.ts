@@ -84,6 +84,7 @@ export function createMainWindow(): BrowserWindow {
     maximizable: false,
     autoHideMenuBar: true,
     backgroundColor: "#141312",
+    opacity: 0.7,
     webPreferences: {
       preload: join(currentDir, "../preload/preload.cjs"),
       contextIsolation: true,
@@ -156,7 +157,7 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   }
   mainCoverManuallyVisible = true;
   window.setIgnoreMouseEvents(false);
-  window.setOpacity(1);
+  window.setOpacity(0.7);
   window.setKiosk(true);
   window.setAlwaysOnTop(true, "screen-saver");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -233,12 +234,6 @@ export function setMainWindowGameCoverClickThrough(clickThrough: boolean): void 
     if (mainCoverManuallyVisible) window.showInactive();
   }
   window.setIgnoreMouseEvents(clickThrough);
-}
-
-export function setMainWindowGameCoverOpacity(opacity: number): void {
-  const window = coveredMainWindow;
-  if (!window || window.isDestroyed()) return;
-  window.setOpacity(Math.max(0, Math.min(1, opacity)));
 }
 
 export function hideMainWindowGameCover(): void {

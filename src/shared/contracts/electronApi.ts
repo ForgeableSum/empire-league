@@ -38,6 +38,7 @@ export interface ElectronGameApi {
   onMouseTestCoordinatesCopied(listener: (coordinates: string) => void): () => void;
   onMouseTestModeChanged(listener: (active: boolean) => void): () => void;
   onAoe2AutomationLog(listener: (message: string) => void): () => void;
+  onSetupInputGuardChanged(listener: (active: boolean) => void): () => void;
   createRanked1v1Lobby(request: CreateLobbyRequest): Promise<CreateLobbyResult>;
   openAoe2Lobby(lobbyId: string): Promise<OpenLobbyResult>;
   openSteamLogin(url: string): Promise<void>;

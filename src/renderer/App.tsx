@@ -18,8 +18,25 @@ import empireLeagueLogo from "./assets/el-2.png";
 
 export function App() {
   const [mouseTestActive, setMouseTestActive] = useState(false);
+  const [setupInputGuardActive, setSetupInputGuardActive] = useState(false);
   const [startupScreenVisible, setStartupScreenVisible] = useState(true);
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
+  useEffect(() => window.electronApi?.onSetupInputGuardChanged(setSetupInputGuardActive), []);
+  useEffect(() => {
+    if (!setupInputGuardActive) return;
+    const blockMouseInput = (event: Event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
+    const events = [
+      "pointerdown", "pointerup", "mousedown", "mouseup",
+      "click", "dblclick", "contextmenu", "wheel"
+    ] as const;
+    events.forEach((name) => window.addEventListener(name, blockMouseInput, { capture: true, passive: false }));
+    return () => {
+      events.forEach((name) => window.removeEventListener(name, blockMouseInput, { capture: true }));
+    };
+  }, [setupInputGuardActive]);
   useEffect(() => {
     const timer = window.setTimeout(() => setStartupScreenVisible(false), 3000);
     return () => window.clearTimeout(timer);
@@ -86,6 +103,7 @@ export function App() {
       <StartupGamePrompt />
       <RoomSetupRecoveryPrompt />
       {mouseTestActive && <TestOverlay />}
+      {setupInputGuardActive && <div className="setup-input-guard" aria-hidden="true" />}
     </>
   );
 }

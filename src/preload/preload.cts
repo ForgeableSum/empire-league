@@ -46,6 +46,11 @@ const electronApi: ElectronGameApi = {
     ipcRenderer.on("game:automation-log", handler);
     return () => ipcRenderer.removeListener("game:automation-log", handler);
   },
+  onSetupInputGuardChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, active: boolean) => listener(active);
+    ipcRenderer.on("game:setup-input-guard", handler);
+    return () => ipcRenderer.removeListener("game:setup-input-guard", handler);
+  },
   createRanked1v1Lobby: (request) => ipcRenderer.invoke("game:create-ranked-1v1-lobby", request),
   openAoe2Lobby: (lobbyId) => ipcRenderer.invoke("game:open-lobby", lobbyId),
   openSteamLogin: (url) => ipcRenderer.invoke("auth:open-steam-login", url),
@@ -60,21 +65,3 @@ const electronApi: ElectronGameApi = {
 };
 
 contextBridge.exposeInMainWorld("electronApi", electronApi);
-
-const setupInputEvents = [
-  "pointerdown", "pointerup", "mousedown", "mouseup", "click",
-  "dblclick", "contextmenu", "wheel"
-] as const;
-const blockSetupInput = (event: Event) => {
-  event.preventDefault();
-  event.stopImmediatePropagation();
-};
-ipcRenderer.on("game:setup-input-guard", (_event, active: boolean) => {
-  setupInputEvents.forEach((eventName) => {
-    if (active) {
-      window.addEventListener(eventName, blockSetupInput, { capture: true, passive: false });
-    } else {
-      window.removeEventListener(eventName, blockSetupInput, { capture: true });
-    }
-  });
-});

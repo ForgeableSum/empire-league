@@ -1851,3 +1851,9 @@
     min-height: 680px;
   }
 }
+.setup-input-guard {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  cursor: wait;
+}
