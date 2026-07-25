@@ -235,6 +235,13 @@ export function setMainWindowGameCoverClickThrough(clickThrough: boolean): void 
   window.setIgnoreMouseEvents(clickThrough);
 }
 
+export function setMainWindowGameCoverFocusable(focusable: boolean): void {
+  const window = coveredMainWindow;
+  if (!window || window.isDestroyed()) return;
+  window.setFocusable(focusable);
+  if (mainCoverManuallyVisible) window.showInactive();
+}
+
 export function hideMainWindowGameCover(): void {
   const window = coveredMainWindow;
   if (!window || window.isDestroyed()) return;

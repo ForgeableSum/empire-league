@@ -21,6 +21,7 @@ import {
   restoreMainWindowFromGameCover,
   setMouseCoordinateOverlayEnabled,
   setMainWindowGameCoverClickThrough,
+  setMainWindowGameCoverFocusable,
   setMainWindowGameCoverOverAoe,
   showMainWindowAsGameCover
 } from "../window.js";
@@ -1432,6 +1433,8 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:focus", async () => {
     if (cursorAutomationEnabled && process.platform === "win32") {
+      setMainWindowGameCoverFocusable(true);
+      stopLobbyOffscreenGuard(true, true);
       hideMainWindowGameCover();
       const game = detectAoe2NativeProcess();
       return { focused: Boolean(game.pid) && focusAoe2NativeWindow(game.pid as number) };
@@ -1562,6 +1565,7 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    setMainWindowGameCoverFocusable(false);
     let setupCompleted = false;
     try {
       const process = await detectAoe2Process();
@@ -1608,7 +1612,7 @@ export function registerGameHandlers(): void {
           await clickStep(action.label, action.point[0], action.point[1], {
             hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
             holdMs: "holdMs" in action ? action.holdMs : undefined,
-            synchronous: action.activation === "click"
+            synchronous: true
           });
           if (action.activation === "clickEnter") {
             await delay(500);
@@ -1669,7 +1673,10 @@ export function registerGameHandlers(): void {
       return { sent: false, message: "The Create Lobby sequence stopped before completion." };
     } finally {
       setMainWindowGameCoverClickThrough(false);
-      if (!setupCompleted) stopLobbyOffscreenGuard(true);
+      if (!setupCompleted) {
+        setMainWindowGameCoverFocusable(true);
+        stopLobbyOffscreenGuard(true);
+      }
     }
   });
 
@@ -1683,6 +1690,7 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    setMainWindowGameCoverFocusable(false);
     let actionSucceeded = false;
     let gameIsOffscreen = false;
     try {
@@ -1743,6 +1751,7 @@ export function registerGameHandlers(): void {
       const offscreenSent = result.sent && (!verifiesReady || gameIsOffscreen || readyState?.state === "ready");
       actionSucceeded = offscreenSent;
       if (target === "start" && offscreenSent) {
+        setMainWindowGameCoverFocusable(true);
         if (gameIsOffscreen) {
           stopLobbyOffscreenGuard(true, true);
           restoreAoe2NativeWindow(process.pid, true, true);
@@ -1763,6 +1772,7 @@ export function registerGameHandlers(): void {
     } finally {
       setMainWindowGameCoverClickThrough(false);
       if (gameIsOffscreen && (target === "start" || !actionSucceeded)) {
+        setMainWindowGameCoverFocusable(true);
         stopLobbyOffscreenGuard(true, target === "start");
       }
     }
@@ -1886,6 +1896,7 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    setMainWindowGameCoverFocusable(false);
     let joined = false;
     try {
       const process = await detectAoe2Process();
@@ -1896,7 +1907,10 @@ export function registerGameHandlers(): void {
       joined = true;
       return { opened: true };
     } finally {
-      if (!joined) stopLobbyOffscreenGuard(true);
+      if (!joined) {
+        setMainWindowGameCoverFocusable(true);
+        stopLobbyOffscreenGuard(true);
+      }
     }
   });
 }
