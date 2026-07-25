@@ -9,7 +9,7 @@ The checked-in source of truth is `src/shared/aoe2UiManifest.ts`. Coordinates ar
 - `click`: send `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, and `WM_LBUTTONUP` using the action's configured delivery mode.
 - `clickEnter`: post the click above, wait for AoE2 to select the widget, then synchronously dispatch Enter with a bounded timeout.
 
-Legacy buttons such as Multiplayer and Host Game require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, and Copy respond to window-local `click`; civilization tiles and Confirm require guarded foreground clicks.
+Legacy buttons such as Multiplayer and Host Game require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, and Copy respond to window-local `click`. Civilization selection uses a window-local tile click followed by Enter.
 
 Click timing is action-specific. General navigation uses a 100 ms hover and
 120 ms press. Ready and Start use a 250 ms hover and 250 ms press because the
@@ -28,10 +28,9 @@ lobby message loop can be throttled while AoE2 is in the background.
    4. Verify that the lobby screen is present again before continuing.
 6. Optionally select a civilization:
    1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
-   2. For a named civilization, enter its exact name in the picker search field and wait for the four selector modes plus the matching civilization tile to settle.
-   3. Activate the filtered civilization tile with a guarded foreground click; AoE2 does not reliably activate civilization tiles from background mouse messages. Verify the tile's white selected border and retry up to twice if AoE2 drops the click. The cursor is restored immediately.
-   4. Random, Full Random, and Mirror continue to use their stable selector points.
-   5. Activate `confirmCivilization` with a guarded foreground click and verify that AoE2 returned to the lobby room. Retry Confirm once if the picker remains open. Background click-plus-Enter is not reliable for this overlay.
+   2. Resolve the selection's stable unfiltered grid point from the manifest and focus it with a synchronous window-local click. This avoids the picker search field, whose text input and filtered layout are timing-sensitive.
+   3. Dispatch Enter to activate and confirm the focused tile. In this overlay, Enter closes the picker without a separate Confirm-button click.
+   4. Verify that AoE2 returned to the lobby room before continuing.
 7. `copyLobbyUri` (`click`)
 8. Verify the clipboard matches `aoe2de://0/<digits>`.
 9. Publish that URI to the guest. This URI is the normal automated invitation path.
