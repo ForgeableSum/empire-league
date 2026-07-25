@@ -156,6 +156,7 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   }
   mainCoverManuallyVisible = true;
   window.setIgnoreMouseEvents(false);
+  window.setFocusable(false);
   window.setOpacity(1);
   window.setKiosk(true);
   window.setAlwaysOnTop(true, "screen-saver");
