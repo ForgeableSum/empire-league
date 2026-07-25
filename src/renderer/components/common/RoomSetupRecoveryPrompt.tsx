@@ -21,7 +21,7 @@ export function RoomSetupRecoveryPrompt() {
             ? "The running AoE2 DE process wasn’t launched by Empire League. Restart Empire League to relaunch the game, or quit."
             : gameNotRunning
               ? "AoE2 DE needs to be running before you queue. Restart Empire League to launch it again, or quit."
-              : "Empire League couldn’t finish setting up the game room within 65 seconds."}
+              : "Empire League stopped making progress while setting up the game room for 65 seconds."}
         </p>
         <div className="modal-actions">
           <button autoFocus className="primary" type="button" onClick={() => void exitAfterRoomSetupFailure(true)}>

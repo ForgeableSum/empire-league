@@ -501,6 +501,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             log("Assigned as host; waiting for AoE2 lobby automation to settle");
             lobbyAutomationRef.current = delayForLobbyInput(lobbySetupTiming.hostLobbyAutomationSettleMs)
               .then(() => {
+                startRoomSetupWatchdog();
                 log("Starting AoE2 lobby automation");
                 return window.electronApi!.runAoe2CreateLobbySequence(acceptedSession.selectedMap?.name ?? "Arabia");
               });
@@ -508,6 +509,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
         if (event.type === "lobby_ready") {
+          startRoomSetupWatchdog();
           setState((previous) => ({
             ...previous,
             queueStatus: "ready",
@@ -541,6 +543,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 log("Guest Ready click sent; reporting readiness to the host");
                 await services.matchmaking.reportGuestLobbyReady(event.matchId);
                 log("Guest readied and notified the host");
+                clearRoomSetupWatchdog();
                 setState((previous) => ({
                   ...previous,
                   roomSetupMilestone: "Ready — waiting for the host to start"
@@ -728,6 +731,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!automation.sent) throw new Error(automation.message);
         if (!automation.lobbyUri) throw new Error("AoE2 did not copy a valid lobby URI.");
         log("AoE2 host-lobby sequence completed");
+        startRoomSetupWatchdog();
         const preference = match.queue.civilizationPreference;
         const selection = aoe2SelectionForPreference(preference);
         if (selection) {
@@ -751,6 +755,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         log(`Lobby created: ${discoveredLobby.platformLobbyId}`);
         await services.matchmaking.publishLobby(match.id, discoveredLobby);
         log("Lobby details published to opponent");
+        clearRoomSetupWatchdog();
         setState((previous) => ({
           ...previous,
           activeMatch: previous.activeMatch ? { ...previous.activeMatch, lobby: discoveredLobby } : null,
