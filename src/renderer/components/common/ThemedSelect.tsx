@@ -12,7 +12,8 @@ export function ThemedSelect({
   onChange,
   className,
   disabled = false,
-  searchable = false
+  searchable = false,
+  displayValue
 }: {
   label: string;
   options: ThemedSelectOption[];
@@ -21,10 +22,11 @@ export function ThemedSelect({
   className?: string;
   disabled?: boolean;
   searchable?: boolean;
+  displayValue?: string;
 }) {
   const dropdownRef = useRef<HTMLDetailsElement>(null);
   const [query, setQuery] = useState("");
-  const selectedLabel = options.find((option) => option.value === value)?.label ?? options[0]?.label ?? "";
+  const selectedLabel = displayValue ?? options.find((option) => option.value === value)?.label ?? options[0]?.label ?? "";
   const visibleOptions = searchable
     ? options.filter((option) => option.label.toLowerCase().includes(query.trim().toLowerCase()))
     : options;

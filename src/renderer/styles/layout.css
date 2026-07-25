@@ -873,10 +873,14 @@
 
 .civilization-preference-heading {
   align-items: flex-start;
-  flex-direction: column;
 }
 
-.civilization-preference-heading .themed-select-options {
+.civilization-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.civilization-select .themed-select-options {
   right: auto;
   left: 0;
 }
@@ -911,6 +915,28 @@
   text-align: left;
 }
 
+.civilization-option-card {
+  min-height: 108px;
+  display: flex;
+  flex-direction: column;
+  padding: 7px;
+  border: 1px solid rgba(140, 100, 46, 0.38);
+  background: #171614;
+}
+
+.civilization-mode-choice {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  text-align: left;
+}
+
 .civilization-mode:hover,
 .civilization-mode.active {
   border-color: var(--accent);
@@ -918,7 +944,30 @@
   background: rgba(197, 141, 69, 0.12);
 }
 
+.civilization-option-card:hover {
+  border-color: rgba(197, 141, 69, 0.58);
+  background: #1b1916;
+}
+
+.civilization-option-card.active {
+  border-color: rgba(197, 141, 69, 0.72);
+  background: rgba(197, 141, 69, 0.055);
+}
+
+.civilization-option-card .themed-select summary {
+  min-height: 36px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  border-color: rgba(140, 100, 46, 0.52);
+  background: #12110f;
+}
+
+.civilization-option-card .themed-select[open] summary {
+  border-color: rgba(197, 141, 69, 0.78);
+}
+
 .civilization-mode:disabled,
+.civilization-mode-choice:disabled,
 .map-thumbnail:disabled,
 .map-favorite:disabled {
   cursor: not-allowed;
@@ -926,15 +975,23 @@
 }
 
 .civilization-mode span,
-.civilization-mode small {
+.civilization-mode small,
+.civilization-option-card span,
+.civilization-option-card small {
   display: block;
 }
 
-.civilization-mode strong {
+.civilization-option-card .civilization-select > span {
+  display: none;
+}
+
+.civilization-mode strong,
+.civilization-option-card strong {
   color: var(--text);
 }
 
-.civilization-mode small {
+.civilization-mode small,
+.civilization-option-card small {
   margin-top: 4px;
   color: var(--muted);
   line-height: 1.25;

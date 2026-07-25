@@ -238,33 +238,41 @@ export function QueuePage() {
                   <div>
                     <span className="eyebrow">Civilization</span>
                   </div>
-                  {civilizationMode === "pick" && (
-                    <ThemedSelect
-                      className="civilization-select"
-                      label="Civilization"
-                      options={civilizations.map((name) => ({ value: name, label: name }))}
-                      value={civilization}
-                      onChange={selectCivilization}
-                      disabled={preferencesLocked}
-                      searchable
-                    />
-                  )}
                 </div>
                 <div className="civilization-modes">
                   {civilizationModes.map((mode) => {
                     const Icon = mode.icon;
                     return (
-                      <button
-                        className={civilizationMode === mode.id ? "civilization-mode active" : "civilization-mode"}
-                        type="button"
+                      <div
+                        className={civilizationMode === mode.id ? "civilization-option-card active" : "civilization-option-card"}
                         key={mode.id}
-                        aria-pressed={civilizationMode === mode.id}
-                        disabled={preferencesLocked}
-                        onClick={() => selectCivilizationMode(mode.id)}
                       >
-                        <Icon size={20} />
-                        <span><strong>{mode.label}</strong><small>{mode.detail}</small></span>
-                      </button>
+                        <button
+                          className="civilization-mode-choice"
+                          type="button"
+                          aria-pressed={civilizationMode === mode.id}
+                          disabled={preferencesLocked}
+                          onClick={() => selectCivilizationMode(mode.id)}
+                        >
+                          <Icon size={20} />
+                          <span>
+                            <strong>{mode.label}</strong>
+                            {mode.detail && <small>{mode.detail}</small>}
+                          </span>
+                        </button>
+                        {mode.id === "pick" && (
+                          <ThemedSelect
+                            className="civilization-select"
+                            label="Civilization"
+                            options={civilizations.map((name) => ({ value: name, label: name }))}
+                            value={civilization}
+                            onChange={selectCivilization}
+                            disabled={preferencesLocked || civilizationMode !== "pick"}
+                            searchable
+                            displayValue={civilizationMode === "pick" ? undefined : "N/A"}
+                          />
+                        )}
+                      </div>
                     );
                   })}
                 </div>
