@@ -1569,7 +1569,7 @@ export function registerGameHandlers(): void {
     };
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
-    setMainWindowGameCoverClickThrough(false);
+    setMainWindowGameCoverClickThrough(true);
     setMainWindowGameCoverFocusable(false);
     let setupCompleted = false;
     try {
@@ -1578,7 +1578,7 @@ export function registerGameHandlers(): void {
         return { sent: false, message: "The AoE2 process was not found." };
       }
       startLobbyOffscreenGuard(process.pid);
-      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
+      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=True|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
       const clickStep = async (
         name: string,
         x: number,
@@ -1697,7 +1697,7 @@ export function registerGameHandlers(): void {
     }
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
-    setMainWindowGameCoverClickThrough(false);
+    setMainWindowGameCoverClickThrough(true);
     setMainWindowGameCoverFocusable(false);
     let actionSucceeded = false;
     let gameIsOffscreen = false;
@@ -1708,7 +1708,7 @@ export function registerGameHandlers(): void {
       }
       gameIsOffscreen = lobbyOffscreenPid === process.pid;
       if (gameIsOffscreen) await focusOffscreenAoe2(process.pid, target);
-      const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`;
+      const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=False|ClickThrough=True|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`;
       console.info(`[AoE2 automation] ${visibilityMessage}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", visibilityMessage);
       const actionName = target === "guest-ready"
@@ -1904,7 +1904,7 @@ export function registerGameHandlers(): void {
     }
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
-    setMainWindowGameCoverClickThrough(false);
+    setMainWindowGameCoverClickThrough(true);
     setMainWindowGameCoverFocusable(false);
     let joined = false;
     try {
@@ -1916,6 +1916,7 @@ export function registerGameHandlers(): void {
       joined = true;
       return { opened: true };
     } finally {
+      setMainWindowGameCoverClickThrough(false);
       if (!joined) {
         setMainWindowGameCoverFocusable(true);
         stopLobbyOffscreenGuard(true);
