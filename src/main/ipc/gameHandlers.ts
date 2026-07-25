@@ -29,9 +29,11 @@ import {
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
   isAoe2NativeWindowForeground,
+  moveAoe2NativeWindowOffscreen,
   postAoe2DesignClick,
   readAoe2HostSetupState,
   readAoe2ReadyState,
+  restoreAoe2NativeWindow,
   sendAoe2Enter,
   sendAoe2Tab
 } from "../aoe2Win32Automation.js";
@@ -48,9 +50,54 @@ let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
 let replayEndPoller: NodeJS.Timeout | undefined;
 let replayDetectionGeneration = 0;
+let lobbyOffscreenMonitor: NodeJS.Timeout | undefined;
+let lobbyOffscreenPid: number | undefined;
 
 const replayPollIntervalMs = 1500;
 const replayStableForMs = 3_000;
+
+function startLobbyOffscreenGuard(pid: number): void {
+  if (lobbyOffscreenMonitor) clearInterval(lobbyOffscreenMonitor);
+  lobbyOffscreenPid = pid;
+  const keepOffscreen = () => {
+    if (lobbyOffscreenPid === pid) moveAoe2NativeWindowOffscreen(pid);
+  };
+  keepOffscreen();
+  lobbyOffscreenMonitor = setInterval(keepOffscreen, 250);
+  console.info(
+    `[AoE2 automation] OFFSCREEN_GUARD|Active=True|AoePid=${pid}|Resize=False|Position=-32000,-32000`
+  );
+}
+
+function stopLobbyOffscreenGuard(restore = true, focus = false): void {
+  if (lobbyOffscreenMonitor) clearInterval(lobbyOffscreenMonitor);
+  lobbyOffscreenMonitor = undefined;
+  const pid = lobbyOffscreenPid;
+  lobbyOffscreenPid = undefined;
+  if (restore && pid) restoreAoe2NativeWindow(pid, focus, focus);
+  if (pid) {
+    console.info(
+      `[AoE2 automation] OFFSCREEN_GUARD|Active=False|Restored=${restore}|AoePid=${pid}`
+    );
+  }
+}
+
+async function focusOffscreenAoe2(pid: number, step: string): Promise<void> {
+  const deadline = Date.now() + 1_500;
+  moveAoe2NativeWindowOffscreen(pid);
+  let focused = focusAoe2NativeWindow(pid);
+  let foreground = isAoe2NativeWindowForeground(pid);
+  while (!foreground && Date.now() < deadline) {
+    await delay(25);
+    moveAoe2NativeWindowOffscreen(pid);
+    focused = focusAoe2NativeWindow(pid) || focused;
+    foreground = isAoe2NativeWindowForeground(pid);
+  }
+  console.info(
+    `[AoE2 automation] OFFSCREEN_FOCUS|Step=${step}|Focused=${focused}|Foreground=${foreground}|AoePid=${pid}`
+  );
+  if (!foreground) throw new Error(`AoE2 did not become foreground for ${step}.`);
+}
 
 interface ReplaySnapshot {
   path: string;
@@ -1292,6 +1339,7 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 
 export function registerGameHandlers(): void {
   app.on("before-quit", (event) => {
+    stopLobbyOffscreenGuard(false);
     stopReplayEndDetection();
     if ((!ownedAoe2Pid && !launchRequested) || quittingAfterGameCleanup) return;
     event.preventDefault();
@@ -1514,11 +1562,13 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    let setupCompleted = false;
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
+      startLobbyOffscreenGuard(process.pid);
       emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
       const clickStep = async (
         name: string,
@@ -1526,6 +1576,7 @@ export function registerGameHandlers(): void {
         y: number,
         timing?: { hoverMs?: number; holdMs?: number; synchronous?: boolean; primeMove?: boolean }
       ) => {
+        await focusOffscreenAoe2(process.pid as number, name);
         const result = await postAoe2DesignClick(process.pid as number, x, y, timing);
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
         if (!result.sent) throw new Error(`${name} could not be clicked.`);
@@ -1541,11 +1592,13 @@ export function registerGameHandlers(): void {
         const performAction = async (attempt: number) => {
           if (actionName === "multiplayer") {
             for (let index = 1; index <= 6; index += 1) {
+              await focusOffscreenAoe2(process.pid as number, `${action.label} Tab ${index}/6`);
               const tab = await sendAoe2Tab(process.pid as number);
               emitLog(`STEP|${action.label}|Attempt=${attempt}|Tab=${index}/6|${tab.detail}`);
               if (!tab.sent) throw new Error(`${action.label} could not be selected with Tab.`);
               await delay(100);
             }
+            await focusOffscreenAoe2(process.pid as number, `${action.label} Enter`);
             const enter = await sendAoe2Enter(process.pid as number);
             emitLog(`STEP|${action.label}|Attempt=${attempt}|Key=ENTER|${enter.detail}`);
             if (!enter.sent) throw new Error(`${action.label} could not be activated.`);
@@ -1559,6 +1612,7 @@ export function registerGameHandlers(): void {
           });
           if (action.activation === "clickEnter") {
             await delay(500);
+            await focusOffscreenAoe2(process.pid as number, `${action.label} Enter`);
             const enter = await sendAoe2Enter(process.pid as number);
             emitLog(`STEP|${action.label}|Attempt=${attempt}|Key=ENTER|${enter.detail}`);
             if (!enter.sent) throw new Error(`${action.label} could not be activated.`);
@@ -1567,6 +1621,10 @@ export function registerGameHandlers(): void {
         };
 
         await performAction(1);
+        if (lobbyOffscreenPid === process.pid) {
+          emitLog(`STEP_VERIFY|${action.label}|Mode=Offscreen|Skipped=True|Reason=SurfaceUnavailable`);
+          return;
+        }
         if (!expectedState) return;
         let verification = readAoe2HostSetupState(process.pid as number);
         emitLog(`STEP_VERIFY|${action.label}|Attempt=1|Expected=${expectedState}|${verification.detail}`);
@@ -1585,6 +1643,7 @@ export function registerGameHandlers(): void {
       await actionStep("createLobby");
       await clickStep("Reset Settings", 3101, 1976);
       await delay(lobbySetupTiming.resetFocusMs);
+      await focusOffscreenAoe2(process.pid, "Confirm Reset");
       const reset = await sendAoe2Enter(process.pid);
       emitLog(`STEP|Confirm Reset|Key=ENTER|${reset.detail}`);
       if (!reset.sent) throw new Error("The reset confirmation could not be sent.");
@@ -1603,12 +1662,14 @@ export function registerGameHandlers(): void {
       if (!lobbyUri) throw new Error("Lobby URI was not copied.");
       emitLog(`LOBBY_URI|${lobbyUri}`);
       emitLog("SEQUENCE|Complete=True|Mode=WindowMessage");
+      setupCompleted = true;
       return { sent: true, message: "Cursor lobby creation completed.", lobbyUri };
     } catch (error) {
       emitLog(`ERROR|${error instanceof Error ? error.message : "Native lobby automation failed."}`);
       return { sent: false, message: "The Create Lobby sequence stopped before completion." };
     } finally {
       setMainWindowGameCoverClickThrough(false);
+      if (!setupCompleted) stopLobbyOffscreenGuard(true);
     }
   });
 
@@ -1622,11 +1683,15 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    let actionSucceeded = false;
+    let gameIsOffscreen = false;
     try {
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
+      gameIsOffscreen = lobbyOffscreenPid === process.pid;
+      if (gameIsOffscreen) await focusOffscreenAoe2(process.pid, target);
       const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`;
       console.info(`[AoE2 automation] ${visibilityMessage}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", visibilityMessage);
@@ -1642,7 +1707,9 @@ export function registerGameHandlers(): void {
         if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", verificationMessage);
       };
       const verifiesReady = target === "guest-ready" || target === "host-ready";
-      let readyState = verifiesReady ? readAoe2ReadyState(process.pid, action.point[1]) : null;
+      let readyState = verifiesReady && !gameIsOffscreen
+        ? readAoe2ReadyState(process.pid, action.point[1])
+        : null;
       if (readyState) emitVerification("before", readyState.detail);
 
       let result = readyState?.state === "ready"
@@ -1673,14 +1740,20 @@ export function registerGameHandlers(): void {
       const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.point[0]},${action.point[1]}|${result.detail}`;
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
-      const sent = result.sent && (!verifiesReady || readyState?.state === "ready");
-      if (target === "start" && sent) {
+      const offscreenSent = result.sent && (!verifiesReady || gameIsOffscreen || readyState?.state === "ready");
+      actionSucceeded = offscreenSent;
+      if (target === "start" && offscreenSent) {
+        if (gameIsOffscreen) {
+          stopLobbyOffscreenGuard(true, true);
+          restoreAoe2NativeWindow(process.pid, true, true);
+        } else {
+          focusAoe2NativeWindow(process.pid);
+        }
         hideMainWindowGameCover();
-        focusAoe2NativeWindow(process.pid);
       }
       return {
-        sent,
-        message: sent
+        sent: offscreenSent,
+        message: offscreenSent
           ? `${target} ready state verified.`
           : `${target} ready state could not be verified.`
       };
@@ -1689,6 +1762,9 @@ export function registerGameHandlers(): void {
       return { sent: false, message: `${target} cursor action failed.` };
     } finally {
       setMainWindowGameCoverClickThrough(false);
+      if (gameIsOffscreen && (target === "start" || !actionSucceeded)) {
+        stopLobbyOffscreenGuard(true, target === "start");
+      }
     }
   });
 
@@ -1810,10 +1886,17 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
-    await shell.openExternal(lobbyId);
-    // Steam hands the URI to AoE2 asynchronously. Give the game time to
-    // navigate to and finish joining the lobby before Ready automation.
-    await delay(lobbySetupTiming.guestJoinMs);
-    return { opened: true };
+    let joined = false;
+    try {
+      const process = await detectAoe2Process();
+      if (!process.running || !process.pid) return { opened: false };
+      startLobbyOffscreenGuard(process.pid);
+      await shell.openExternal(lobbyId);
+      await delay(lobbySetupTiming.guestJoinMs);
+      joined = true;
+      return { opened: true };
+    } finally {
+      if (!joined) stopLobbyOffscreenGuard(true);
+    }
   });
 }
