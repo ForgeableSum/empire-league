@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Expand, Minimize, Pause, Play, Volume2, VolumeX, Youtube } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { stopYouTubeShortsEvent } from "../../services/shortsPlaybackService";
 import { getAoe2Shorts, type YouTubeShort } from "../../services/youtubeShortsService";
 
 interface YouTubePlayer {
@@ -83,6 +84,20 @@ export function YouTubeShorts() {
         void document.exitFullscreen();
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const stopPlayback = () => {
+      autoplayNext.current = false;
+      player.current?.pauseVideo();
+      setIsPlaying(false);
+      setHasStarted(false);
+      setPlayerReady(false);
+      setCurrentTime(0);
+      setDuration(0);
+    };
+    window.addEventListener(stopYouTubeShortsEvent, stopPlayback);
+    return () => window.removeEventListener(stopYouTubeShortsEvent, stopPlayback);
   }, []);
 
   useEffect(() => {

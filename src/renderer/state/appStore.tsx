@@ -14,6 +14,7 @@ import { nowLog } from "../services/timing";
 import { authService } from "../services/authService";
 import { matchHistoryService } from "../services/matchHistoryService";
 import { parseReplayMetadata } from "../services/replayMetadataService";
+import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
 
 type AppPage = "home" | "play" | "match-history" | "leaderboard" | "profile" | "settings";
@@ -862,6 +863,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const detection = await window.electronApi.startReplayEndDetection(state.settings.replayFolder || undefined);
       if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
     }
+    await stopYouTubeShorts();
     await services.game.focusGame();
     setState((previous) => ({ ...previous, queueStatus: "in_game", gameStatus: "in_match" }));
     log("Focused AoE2");
@@ -976,6 +978,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const detection = await window.electronApi.startReplayEndDetection(settings.replayFolder || undefined);
       if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
     }
+    await stopYouTubeShorts();
     await window.electronApi.focusAoe2();
     setState((previous) => ({
       ...previous,
