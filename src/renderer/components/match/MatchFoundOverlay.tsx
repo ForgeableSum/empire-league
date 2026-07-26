@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatDivisionForRating } from "../../../shared/contracts/matchmaking";
-import { FormPips } from "../common/FormPips";
+import { maps } from "../../mocks/mockPlayers";
 import { useAppStore } from "../../state/appStore";
 
 export function MatchFoundOverlay() {
@@ -9,7 +8,8 @@ export function MatchFoundOverlay() {
   const autoAcceptStarted = useRef(false);
   const deadline = autoAcceptDeadline.current;
   const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
-  const opponent = state.activeMatch?.opponent;
+  const match = state.activeMatch;
+  const selectedMap = maps.find((map) => map.id === match?.selectedMap?.id) ?? match?.selectedMap;
 
   useEffect(() => {
     const update = () => setRemaining(Math.max(0, Math.ceil((deadline - Date.now()) / 1000)));
@@ -36,23 +36,20 @@ export function MatchFoundOverlay() {
     return () => window.removeEventListener("keydown", onKey);
   }, [declineMatch]);
 
-  if (!opponent) return null;
+  if (!match) return null;
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="match-found-title">
       <div className="match-modal">
-        <span className="eyebrow">Auto-accepting in {remaining} seconds</span>
+        <span className="eyebrow">Auto-accepting</span>
         <h2 id="match-found-title">Match Found</h2>
-        <div className="opponent-card">
-          <div className="avatar large-avatar">?</div>
-          <div>
-            <strong>Opponent found</strong>
-            <span>Rank #{opponent.rank}</span>
-            <span>{formatDivisionForRating(opponent.rating)} · {opponent.countryCode}</span>
-          </div>
-        </div>
-        <FormPips form={opponent.recentForm} />
-        <div className="tag-list">{opponent.preferredMaps.map((map) => <span key={map}>{map}</span>)}</div>
+        {selectedMap && (
+          <figure className="match-map-thumbnail">
+            <img src={selectedMap.thumbnailUrl} alt="" />
+            <strong className="match-game-type">{match.queue.format}</strong>
+            <figcaption>{selectedMap.name}</figcaption>
+          </figure>
+        )}
         <div className="countdown">{remaining}s</div>
         <div className="modal-actions">
           <button className="secondary" type="button" onClick={() => void declineMatch()}>Decline Match</button>

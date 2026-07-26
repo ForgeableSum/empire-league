@@ -52,7 +52,7 @@ function Toast({ item, dismiss }: { item: NotificationItem; dismiss: () => void 
         <strong>{item.message}</strong>
         {item.detail && <span>{item.detail}</span>}
       </div>
-      {item.tone !== "loading" && (
+      {item.tone !== "loading" && item.dismissible !== false && (
         <button type="button" onClick={dismiss} aria-label="Dismiss notification">
           <X size={16} />
         </button>

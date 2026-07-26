@@ -40,7 +40,7 @@ interface AppContextValue {
   notify: (
     message: string,
     tone?: NotificationItem["tone"],
-    options?: { detail?: string; durationMs?: number | null }
+    options?: { detail?: string; durationMs?: number | null; dismissible?: boolean }
   ) => string;
   dismissNotification: (id: string) => void;
   clearError: () => void;
@@ -387,7 +387,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   function notify(
     message: string,
     tone: NotificationItem["tone"] = "info",
-    options: { detail?: string; durationMs?: number | null } = {}
+    options: { detail?: string; durationMs?: number | null; dismissible?: boolean } = {}
   ): string {
     const id = crypto.randomUUID();
     setState((previous) => ({
@@ -397,7 +397,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         message,
         tone,
         detail: options.detail,
-        durationMs: options.durationMs === undefined ? (tone === "danger" ? 8000 : 5000) : options.durationMs
+        durationMs: options.durationMs === undefined ? (tone === "danger" ? 8000 : 5000) : options.durationMs,
+        dismissible: options.dismissible
       }, ...previous.notifications].slice(0, 4)
     }));
     return id;
@@ -752,7 +753,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           completeResult(event.result);
         }
         if (event.type === "error") {
-          if (event.code === "MATCH_DECLINED" || event.code === "MATCH_EXPIRED") {
+          if (event.code === "MATCH_DECLINED") {
+            void window.electronApi?.stopMatchFoundAlert();
+            clearRoomSetupWatchdog();
+            queueJoinInFlightRef.current = false;
+            matchedSessionRef.current = null;
+            if (ticketRef.current) {
+              void services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+              ticketRef.current = null;
+            }
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+            setState((previous) => ({
+              ...previous,
+              queueStatus: "cancelled",
+              activeMatch: null,
+              error: null
+            }));
+            notify(event.message, "warning", { durationMs: 5000, dismissible: false });
+            log("Opponent declined; returning to queue");
+            window.setTimeout(() => void startQueue(queue), 0);
+            return;
+          }
+          if (event.code === "MATCH_EXPIRED") {
             void window.electronApi?.stopMatchFoundAlert();
             clearRoomSetupWatchdog();
             queueJoinInFlightRef.current = false;

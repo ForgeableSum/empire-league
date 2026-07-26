@@ -36,6 +36,7 @@ export interface NotificationItem {
   message: string;
   detail?: string;
   durationMs: number | null;
+  dismissible?: boolean;
 }
 
 export interface UserSettings {

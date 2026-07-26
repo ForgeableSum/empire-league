@@ -1957,6 +1957,46 @@
   gap: 16px;
 }
 
+.match-map-thumbnail {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #1a1816;
+}
+
+.match-map-thumbnail img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.match-map-thumbnail figcaption {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 28px 12px 10px;
+  color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
+  font-weight: 800;
+}
+
+.match-game-type {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  color: #fff;
+  background: rgba(20, 19, 17, 0.82);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .countdown {
   font-size: 42px;
   font-weight: 900;
