@@ -14,6 +14,11 @@ const electronApi: ElectronGameApi = {
     ipcRenderer.on("game:replay-ended", handler);
     return () => ipcRenderer.removeListener("game:replay-ended", handler);
   },
+  onReplayDetectionFailed: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, message: string) => listener(message);
+    ipcRenderer.on("game:replay-detection-failed", handler);
+    return () => ipcRenderer.removeListener("game:replay-detection-failed", handler);
+  },
   readReplayFile: (filePath) => ipcRenderer.invoke("game:read-replay-file", filePath),
   showAoe2FullscreenAfterDelay: () => ipcRenderer.invoke("game:show-fullscreen-after-delay"),
   startAoe2TabTest: () => ipcRenderer.invoke("game:start-tab-test"),

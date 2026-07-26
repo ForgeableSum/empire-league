@@ -208,6 +208,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [services]);
 
+  useEffect(() => {
+    if (!window.electronApi) return;
+    return window.electronApi.onReplayDetectionFailed((message) => {
+      const match = stateRef.current.activeMatch;
+      if (!match || replayResultInFlightRef.current) return;
+      replayResultInFlightRef.current = true;
+      setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
+      log("Replay recording did not start; reporting the result as contested");
+      void services.matchmaking.reportMatchResult({ matchId: match.id, error: message })
+        .then(() => {
+          log("Missing replay reported; waiting for contested result");
+        })
+        .catch((error) => {
+          replayResultInFlightRef.current = false;
+          setError({
+            code: "RESULT_VERIFICATION_FAILED",
+            message: "The missing replay could not be reported.",
+            technicalDetails: error instanceof Error ? error.message : message,
+            retryable: true
+          });
+        });
+    });
+  }, [services]);
+
   async function signInWithSteam(): Promise<void> {
     setAuthStatus("authenticating");
     setAuthError(null);

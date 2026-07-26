@@ -57,6 +57,7 @@ let replayDetectionGeneration = 0;
 
 const replayPollIntervalMs = 1500;
 const replayStableForMs = 3_000;
+const replayStartTimeoutMs = 30_000;
 
 interface ReplaySnapshot {
   path: string;
@@ -155,6 +156,19 @@ async function startReplayEndDetection(
           console.info(`[AoE2 replay] END|File=${current.path}|StableMs=${replayStableForMs}`);
           return;
         }
+      }
+
+      if (!observedGrowth && Date.now() - startedAt >= replayStartTimeoutMs) {
+        stopReplayEndDetection();
+        focusMainWindow(window);
+        if (!window.webContents.isDestroyed()) {
+          window.webContents.send(
+            "game:replay-detection-failed",
+            "The replay file did not start updating within 30 seconds of the match starting."
+          );
+        }
+        console.warn(`[AoE2 replay] START_TIMEOUT|TimeoutMs=${replayStartTimeoutMs}`);
+        return;
       }
     } catch (error) {
       console.error("[AoE2 replay] Poll failed", error);

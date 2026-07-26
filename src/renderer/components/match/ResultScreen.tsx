@@ -14,7 +14,7 @@ export function ResultScreen() {
         {contested ? "Result Contested" : won ? "Victory" : result.outcome === "loss" ? "Defeat" : "No Contest"}
       </h2>
       {contested && (
-        <p>The replay reports did not agree. The result was discarded and ratings were not changed.</p>
+        <p>The replay result could not be verified. The result was discarded and ratings were not changed.</p>
       )}
       <div className="rating-swing">
         <strong>{result.ratingChange > 0 ? "+" : ""}{result.ratingChange} Rating</strong>
@@ -25,7 +25,7 @@ export function ResultScreen() {
         <div><span>Map</span><strong>{match.selectedMap?.name}</strong></div>
         <div><span>Reason</span><strong>{result.reason}</strong></div>
         <div><span>Source</span><strong>{result.verificationSource}</strong></div>
-        <div><span>Replay</span><strong>Available</strong></div>
+        <div><span>Replay</span><strong>{contested ? "Not verified" : "Available"}</strong></div>
         <div><span>Status</span><strong>{contested ? "Discarded" : "Recorded"}</strong></div>
       </div>
       <div className="button-row">
