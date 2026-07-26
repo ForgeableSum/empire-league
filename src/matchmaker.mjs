@@ -20,6 +20,7 @@ const publicBaseUrl = (process.env.PUBLIC_MATCHMAKER_URL ?? `http://127.0.0.1:${
 const tickets = new Map();
 const matches = new Map();
 const playersJoiningQueue = new Set();
+const minimumQueueTimeMs = 15_000;
 let eventSequence = 0;
 
 function send(response, status, body) {
@@ -179,6 +180,26 @@ function sharedMapPool(firstQueue, secondQueue) {
   return firstQueue.mapPool.filter((map) => secondMapIds.has(map.id));
 }
 
+function hasCompletedMinimumQueueTime(ticket, now = Date.now()) {
+  return now - new Date(ticket.joinedAt).getTime() >= minimumQueueTimeMs;
+}
+
+function opponentPreference(ticket, candidate) {
+  const ratingDifference = Math.abs(Number(candidate.player.rating) - Number(ticket.player.rating));
+  return [
+    Number.isFinite(ratingDifference) ? ratingDifference : Number.MAX_SAFE_INTEGER,
+    new Date(candidate.joinedAt).getTime()
+  ];
+}
+
+function compareOpponentPreference(ticket, left, right) {
+  const leftPreference = opponentPreference(ticket, left);
+  const rightPreference = opponentPreference(ticket, right);
+  return leftPreference[0] - rightPreference[0]
+    || leftPreference[1] - rightPreference[1]
+    || left.id.localeCompare(right.id);
+}
+
 function sessionFor(match, ticket) {
   const opponent = match.host.id === ticket.id ? match.guest : match.host;
   return {
@@ -199,14 +220,17 @@ function sessionFor(match, ticket) {
 }
 
 async function tryMatch(ticket) {
-  const opponent = [...tickets.values()].find((candidate) =>
+  if (ticket.matchId || !tickets.has(ticket.id) || !hasCompletedMinimumQueueTime(ticket)) return;
+
+  const opponent = [...tickets.values()].filter((candidate) =>
     candidate.id !== ticket.id
       && candidate.player.id !== ticket.player.id
       && !candidate.matchId
+      && hasCompletedMinimumQueueTime(candidate)
       && candidate.queueId === ticket.queueId
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
       && (candidate.canHost || ticket.canHost)
-  );
+  ).sort((left, right) => compareOpponentPreference(ticket, left, right))[0];
   if (!opponent) return;
 
   const host = opponent.canHost && ticket.canHost
@@ -232,6 +256,8 @@ async function tryMatch(ticket) {
   };
   host.matchId = match.id;
   guest.matchId = match.id;
+  clearTimeout(host.matchSearchTimer);
+  clearTimeout(guest.matchSearchTimer);
   matches.set(match.id, match);
   await saveMatch(match);
   emit(host, { type: "match_found", match: sessionFor(match, host) });
@@ -343,6 +369,11 @@ const server = createServer(async (request, response) => {
         events: []
       };
       tickets.set(ticket.id, ticket);
+      ticket.matchSearchTimer = setTimeout(() => {
+        void tryMatch(ticket).catch((error) => {
+          console.error(`[matchmaker] Failed to match matured ticket ${ticket.id}:`, error);
+        });
+      }, minimumQueueTimeMs);
       try {
         await tryMatch(ticket);
         return send(response, 201, { id: ticket.id, queueId: ticket.queueId, joinedAt: ticket.joinedAt });
@@ -387,6 +418,7 @@ const server = createServer(async (request, response) => {
       const ticketId = decodeURIComponent(ticketMatch[1]);
       const ticket = tickets.get(ticketId);
       if (!ticket || ticket.player.id !== authenticatedPlayer.id) return send(response, 404, { error: "ticket not found" });
+      clearTimeout(ticket.matchSearchTimer);
       tickets.delete(ticketId);
       return send(response, 200, { ok: true });
     }
