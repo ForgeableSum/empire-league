@@ -393,45 +393,6 @@ export async function sendAoe2Tab(processId: number): Promise<NativeInputResult>
   };
 }
 
-export type Aoe2ArrowKey = "left" | "up" | "right" | "down";
-
-export async function sendAoe2ArrowKey(
-  processId: number,
-  key: Aoe2ArrowKey
-): Promise<NativeInputResult> {
-  ensureWindowsBindings();
-  const window = findLargestProcessWindow(processId);
-  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
-  const keyData: Record<Aoe2ArrowKey, {
-    virtualKey: number;
-    downLParam: number;
-    upLParam: number;
-  }> = {
-    left: { virtualKey: 0x25, downLParam: 0x014b0001, upLParam: -1052049407 },
-    up: { virtualKey: 0x26, downLParam: 0x01480001, upLParam: -1052246015 },
-    right: { virtualKey: 0x27, downLParam: 0x014d0001, upLParam: -1051918335 },
-    down: { virtualKey: 0x28, downLParam: 0x01500001, upLParam: -1051721727 }
-  };
-  const input = keyData[key];
-  const down = sendWindowMessage(window, 0x0100, input.virtualKey, input.downLParam);
-  await delay(15);
-  const up = sendWindowMessage(window, 0x0101, input.virtualKey, input.upLParam);
-  const sent = down.dispatched && up.dispatched;
-  return {
-    sent,
-    detail: [
-      sent ? "SENT" : "SEND_FAILED",
-      "Mode=WindowMessageSync",
-      `Key=${key.toUpperCase()}`,
-      `Window=${String(window)}`,
-      `Down=${down.dispatched}`,
-      `DownMs=${down.elapsedMs}`,
-      `Up=${up.dispatched}`,
-      `UpMs=${up.elapsedMs}`
-    ].join("|")
-  };
-}
-
 export interface NativeCivilizationTileStateResult {
   state: "selected" | "not-selected" | "unknown";
   detail: string;

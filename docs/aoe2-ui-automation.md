@@ -9,7 +9,7 @@ The checked-in source of truth is `src/shared/aoe2UiManifest.ts`. Coordinates ar
 - `click`: send `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, and `WM_LBUTTONUP` using the action's configured delivery mode.
 - `clickEnter`: post the click above, wait for AoE2 to select the widget, then synchronously dispatch Enter with a bounded timeout.
 
-Legacy buttons such as Multiplayer and Host Game require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, and Copy respond to window-local `click`. Civilization selection uses a window-local tile click followed by Enter.
+Legacy buttons such as Multiplayer and Host Game require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, and Copy respond to window-local `click`. Civilization tiles use their stable unfiltered grid points.
 
 Click timing is action-specific. General navigation uses a 100 ms hover and
 120 ms press. Ready and Start use a 250 ms hover and 250 ms press because the
@@ -28,11 +28,10 @@ lobby message loop can be throttled while AoE2 is in the background.
    4. Verify that the lobby screen is present again before continuing.
 6. Optionally select a civilization:
    1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
-   2. Scan the unfiltered 9-column grid for the selected tile's white top/left border.
-   3. Click only that already-selected tile to anchor keyboard focus without changing the selection.
-   4. Move from the detected cell to the manifest cell with directional keys. Verify the expected white border after every key and retry a dropped key once.
-   5. Dispatch Enter only after the requested tile is verified. In this overlay, Enter closes the picker without a separate Confirm-button click.
-   6. Verify that AoE2 returned to the lobby room before continuing.
+   2. Resolve the selection's stable unfiltered grid point from the manifest and click it synchronously.
+   3. Verify the requested tile's white borders and retry the same direct click up to twice if AoE2 drops it.
+   4. Activate the original `confirmCivilization` click-plus-Enter action only after the requested tile is verified.
+   5. Verify that AoE2 returned to the lobby room before continuing.
 7. `copyLobbyUri` (`click`)
 8. Verify the clipboard matches `aoe2de://0/<digits>`.
 9. Publish that URI to the guest. This URI is the normal automated invitation path.

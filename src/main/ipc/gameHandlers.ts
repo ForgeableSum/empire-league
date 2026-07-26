@@ -38,7 +38,6 @@ import {
   readAoe2CivilizationTileState,
   readAoe2HostSetupState,
   readAoe2ReadyState,
-  sendAoe2ArrowKey,
   sendAoe2Enter,
   sendAoe2Tab,
   sendAoe2Text
@@ -1755,79 +1754,41 @@ export function registerGameHandlers(): void {
       if (!slotResult.sent) throw new Error(`Lobby slot ${slot} civilization button could not be opened.`);
       await delay(aoe2UiManifest.civilizationSlotButtons.settleMs);
 
-      const grid = aoe2UiManifest.civilizationGrid;
-      const selectedCells: Array<readonly [column: number, row: number]> = [];
-      for (let row = 0; row < grid.rowCenters.length; row += 1) {
-        for (let column = 0; column < grid.columnCenters.length; column += 1) {
-          const state = readAoe2CivilizationTileState(
-            processId,
-            grid.columnCenters[column],
-            grid.rowCenters[row]
-          );
-          if (state.state === "selected") selectedCells.push([column, row]);
-        }
-      }
-      emitLog(`CIV_SELECT|Step=DetectCurrent|Cells=${selectedCells.map(([column, row]) => `${column},${row}`).join(";") || "none"}`);
-      if (selectedCells.length !== 1) {
-        throw new Error(`The current civilization grid position could not be identified.`);
-      }
-
-      let [currentColumn, currentRow] = selectedCells[0];
       const [civilizationX, civilizationY] = civilizationDesignPoint(selection);
-      const targetColumn = Array.from<number>(grid.columnCenters).indexOf(civilizationX);
-      const targetRow = Array.from<number>(grid.rowCenters).indexOf(civilizationY);
-      if (targetColumn < 0 || targetRow < 0) {
-        throw new Error(`${selection} does not have a valid civilization grid position.`);
+      let tileState = readAoe2CivilizationTileState(processId, civilizationX, civilizationY);
+      for (let attempt = 1; attempt <= 3 && tileState.state !== "selected"; attempt += 1) {
+        const tileResult = await postAoe2DesignClick(
+          processId,
+          civilizationX,
+          civilizationY,
+          { synchronous: true }
+        );
+        emitLog(`CIV_SELECT|Step=Tile|Attempt=${attempt}|Selection=${selection}|DesignPoint=${civilizationX},${civilizationY}|${tileResult.detail}`);
+        if (!tileResult.sent) throw new Error(`${selection} could not be selected.`);
+        await delay(500);
+        tileState = readAoe2CivilizationTileState(processId, civilizationX, civilizationY);
+        emitLog(`CIV_SELECT|Step=TileVerify|Attempt=${attempt}|Selection=${selection}|${tileState.detail}`);
+      }
+      if (tileState.state !== "selected") {
+        throw new Error(`${selection} could not be verified as selected.`);
       }
 
-      const focusResult = await postAoe2DesignClick(
+      const confirm = aoe2UiManifest.actions.confirmCivilization;
+      const confirmResult = await postAoe2DesignClick(
         processId,
-        grid.columnCenters[currentColumn],
-        grid.rowCenters[currentRow],
+        confirm.point[0],
+        confirm.point[1],
         { synchronous: true }
       );
-      emitLog(`CIV_SELECT|Step=AnchorFocus|Cell=${currentColumn},${currentRow}|${focusResult.detail}`);
-      if (!focusResult.sent) throw new Error("The current civilization tile could not be focused.");
-      await delay(aoe2UiManifest.civilizationPicker.tileSettleMs);
-
-      const moveSelection = async (
-        key: "left" | "up" | "right" | "down",
-        nextColumn: number,
-        nextRow: number
-      ) => {
-        let verification = readAoe2CivilizationTileState(
-          processId,
-          grid.columnCenters[nextColumn],
-          grid.rowCenters[nextRow]
-        );
-        for (let attempt = 1; attempt <= 2 && verification.state !== "selected"; attempt += 1) {
-          const move = await sendAoe2ArrowKey(processId, key);
-          emitLog(`CIV_SELECT|Step=Arrow|Key=${key}|Attempt=${attempt}|From=${currentColumn},${currentRow}|To=${nextColumn},${nextRow}|${move.detail}`);
-          if (!move.sent) throw new Error(`The ${key} arrow key could not be sent.`);
-          await delay(150);
-          verification = readAoe2CivilizationTileState(
-            processId,
-            grid.columnCenters[nextColumn],
-            grid.rowCenters[nextRow]
-          );
-          emitLog(`CIV_SELECT|Step=ArrowVerify|Key=${key}|Attempt=${attempt}|Cell=${nextColumn},${nextRow}|${verification.detail}`);
-        }
-        if (verification.state !== "selected") {
-          throw new Error(`Civilization navigation did not reach grid cell ${nextColumn},${nextRow}.`);
-        }
-        currentColumn = nextColumn;
-        currentRow = nextRow;
-      };
-
-      while (currentRow > targetRow) await moveSelection("up", currentColumn, currentRow - 1);
-      while (currentRow < targetRow) await moveSelection("down", currentColumn, currentRow + 1);
-      while (currentColumn > targetColumn) await moveSelection("left", currentColumn - 1, currentRow);
-      while (currentColumn < targetColumn) await moveSelection("right", currentColumn + 1, currentRow);
-
-      const confirmResult = await sendAoe2Enter(processId);
-      emitLog(`CIV_SELECT|Step=ConfirmEnter|Selection=${selection}|${confirmResult.detail}`);
-      if (!confirmResult.sent) throw new Error("Civilization selection could not be confirmed with Enter.");
-      await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+      emitLog(`CIV_SELECT|Step=Confirm|Selection=${selection}|${confirmResult.detail}`);
+      if (!confirmResult.sent) throw new Error("Civilization selection could not be confirmed.");
+      if (confirm.activation === "clickEnter") {
+        await delay(500);
+        const enter = await sendAoe2Enter(processId);
+        emitLog(`CIV_SELECT|Step=ConfirmEnter|Selection=${selection}|${enter.detail}`);
+        if (!enter.sent) throw new Error("Civilization confirmation Enter could not be sent.");
+      }
+      await delay(confirm.settleMs);
 
       const lobbyState = readAoe2HostSetupState(processId);
       emitLog(`CIV_SELECT|Step=VerifyReturn|Selection=${selection}|${lobbyState.detail}`);
