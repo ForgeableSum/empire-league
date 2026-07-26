@@ -42,7 +42,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="app-shell">
       <div className="window-title">
         <img src={appIcon} alt="" />
-        <span>AoE2:DE Community Client &amp; Matchmaker</span>
+        <span>Empire League - AoE2:DE Community Client &amp; Matchmaker</span>
       </div>
       <WindowControls />
       <aside className="sidebar">
