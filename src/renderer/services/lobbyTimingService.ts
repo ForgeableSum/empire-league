@@ -1,7 +1,7 @@
 import { aoe2UiManifest, type Aoe2UiAction } from "../../shared/aoe2UiManifest";
 import type { CivilizationPreference, MatchSession } from "../../shared/contracts/matchmaking";
 import {
-  aoe2PhysicalClickSettleMs,
+  contentConfirmationKeyDelayMs,
   lobbySetupTiming,
   matchmakerEventPollMs
 } from "../../shared/runtimeConfig";
@@ -65,7 +65,7 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
 
   if (custom) {
     total += lobbySetupTiming.customMapTransferPollMs + actions.guestReady.settleMs;
-    total += aoe2PhysicalClickSettleMs + actions.confirmGuestContent.settleMs;
+    total += contentConfirmationKeyDelayMs + actions.confirmGuestContent.settleMs;
     total += matchmakerEventPollMs;
     total += lobbySetupTiming.hostReadySettleMs + actionDuration(actions.hostReady);
     total += lobbySetupTiming.customMapTransferPollMs;

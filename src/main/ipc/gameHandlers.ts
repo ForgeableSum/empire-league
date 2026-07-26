@@ -16,6 +16,7 @@ import {
 } from "../../shared/aoe2UiManifest.js";
 import {
   cursorAutomationEnabled,
+  contentConfirmationKeyDelayMs,
   lobbySetupRetryTiming,
   lobbySetupTiming
 } from "../../shared/runtimeConfig.js";
@@ -30,7 +31,6 @@ import {
   showMainWindowAsGameCover
 } from "../window.js";
 import {
-  clickAoe2DesignPoint,
   closeAoe2NativeWindow,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
@@ -1715,12 +1715,14 @@ export function registerGameHandlers(): void {
           ? { sent: false, detail: "READY_STATE_UNKNOWN_BEFORE_INPUT" }
           : target === "content-confirm"
             ? await (async () => {
-                hideMainWindowGameCover();
-                try {
-                  return await clickAoe2DesignPoint(process.pid as number, action.point[0], action.point[1]);
-                } finally {
-                  if (appWindow) showMainWindowAsGameCover(appWindow);
-                }
+                const tab = await sendAoe2Tab(process.pid as number);
+                if (!tab.sent) return tab;
+                await delay(contentConfirmationKeyDelayMs);
+                const enter = await sendAoe2Enter(process.pid as number);
+                return {
+                  sent: enter.sent,
+                  detail: `Mode=WindowMessageTabEnter|Tab=${tab.detail}|Enter=${enter.detail}`
+                };
               })()
             : await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
                 hoverMs: "hoverMs" in action ? action.hoverMs : undefined,

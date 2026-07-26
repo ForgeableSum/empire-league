@@ -61,7 +61,7 @@ wrong screen.
 9. Report guest readiness to the matchmaker.
 10. Wait for the host to start the match.
 
-The normal lobby controls accept window-local messages. AoE2's unverified-content modal does not: its `Yes` control requires a foreground physical click, so the client briefly hides its game cover for that action and restores it immediately afterward.
+AoE2's unverified-content modal is accepted with one window-local Tab followed by Enter. The guest sends this sequence only once, then continues polling Ready while the host verifies its Ready state again.
 
 ## Lobby countdown
 

@@ -654,12 +654,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               do {
                 await delayForLobbyInput(lobbySetupTiming.customMapTransferPollMs);
                 ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
-                if (!ready.sent && customContentFlow) {
+                if (!ready.sent && customContentFlow && !contentAcceptanceReported) {
                   log("Guest Ready remains unavailable; checking for the unverified-content confirmation");
                   const confirmation = await window.electronApi!.runAoe2LobbyCursorAction("content-confirm");
                   if (!confirmation.sent) {
-                    log("Unverified-content confirmation click could not be sent");
-                  } else if (!contentAcceptanceReported) {
+                    log("Unverified-content confirmation keys could not be sent");
+                  } else {
                     await services.matchmaking.reportGuestContentAccepted(event.matchId);
                     contentAcceptanceReported = true;
                     log("Content accepted; asked the host to verify Ready again");
