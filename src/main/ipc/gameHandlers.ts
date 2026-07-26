@@ -35,7 +35,6 @@ import {
   focusAoe2NativeWindow,
   isAoe2NativeWindowForeground,
   postAoe2DesignClick,
-  readAoe2CivilizationTileState,
   readAoe2HostSetupState,
   readAoe2ReadyState,
   sendAoe2Enter,
@@ -1755,23 +1754,15 @@ export function registerGameHandlers(): void {
       await delay(aoe2UiManifest.civilizationSlotButtons.settleMs);
 
       const [civilizationX, civilizationY] = civilizationDesignPoint(selection);
-      let tileState = readAoe2CivilizationTileState(processId, civilizationX, civilizationY);
-      for (let attempt = 1; attempt <= 3 && tileState.state !== "selected"; attempt += 1) {
-        const tileResult = await postAoe2DesignClick(
-          processId,
-          civilizationX,
-          civilizationY,
-          { synchronous: true }
-        );
-        emitLog(`CIV_SELECT|Step=Tile|Attempt=${attempt}|Selection=${selection}|DesignPoint=${civilizationX},${civilizationY}|${tileResult.detail}`);
-        if (!tileResult.sent) throw new Error(`${selection} could not be selected.`);
-        await delay(500);
-        tileState = readAoe2CivilizationTileState(processId, civilizationX, civilizationY);
-        emitLog(`CIV_SELECT|Step=TileVerify|Attempt=${attempt}|Selection=${selection}|${tileState.detail}`);
-      }
-      if (tileState.state !== "selected") {
-        throw new Error(`${selection} could not be verified as selected.`);
-      }
+      const tileResult = await postAoe2DesignClick(
+        processId,
+        civilizationX,
+        civilizationY,
+        { synchronous: true }
+      );
+      emitLog(`CIV_SELECT|Step=Tile|Selection=${selection}|DesignPoint=${civilizationX},${civilizationY}|${tileResult.detail}`);
+      if (!tileResult.sent) throw new Error(`${selection} could not be selected.`);
+      await delay(500);
 
       const confirm = aoe2UiManifest.actions.confirmCivilization;
       const confirmResult = await postAoe2DesignClick(

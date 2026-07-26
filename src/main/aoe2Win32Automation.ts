@@ -393,11 +393,6 @@ export async function sendAoe2Tab(processId: number): Promise<NativeInputResult>
   };
 }
 
-export interface NativeCivilizationTileStateResult {
-  state: "selected" | "not-selected" | "unknown";
-  detail: string;
-}
-
 export async function sendAoe2Text(processId: number, text: string): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
@@ -461,57 +456,6 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
   return {
     state,
     detail: `State=${state}|Window=${String(window)}|ClientPoint=${x},${y}|RGB=${red},${green},${blue}`
-  };
-}
-
-export function readAoe2CivilizationTileState(
-  processId: number,
-  tileDesignX: number,
-  tileDesignY: number
-): NativeCivilizationTileStateResult {
-  ensureWindowsBindings();
-  const window = findLargestProcessWindow(processId);
-  if (!window) return { state: "unknown", detail: "State=unknown|Reason=WINDOW_NOT_FOUND" };
-
-  const rect = {} as Rect;
-  if (!GetClientRect!(window, rect)) {
-    return { state: "unknown", detail: "State=unknown|Reason=CLIENT_RECT_FAILED" };
-  }
-  const width = rect.right - rect.left;
-  const height = rect.bottom - rect.top;
-  const sampleDesignPoints = [
-    [tileDesignX - 80, tileDesignY - 118],
-    [tileDesignX, tileDesignY - 118],
-    [tileDesignX + 80, tileDesignY - 118],
-    [tileDesignX - 118, tileDesignY - 80],
-    [tileDesignX - 118, tileDesignY],
-    [tileDesignX - 118, tileDesignY + 80]
-  ] as const;
-  const samples = sampleDesignPoints
-    .map(([designX, designY]) => {
-      const x = Math.round(designX * width / 3840);
-      const y = Math.round(designY * height / 2160);
-      return { x, y, rgb: readWindowRgb(window, x, y) };
-    })
-    .filter((sample): sample is { x: number; y: number; rgb: [number, number, number] } => Boolean(sample.rgb));
-  if (samples.length === 0) {
-    return { state: "unknown", detail: "State=unknown|Reason=PIXEL_READ_FAILED" };
-  }
-
-  const neutralBrightness = samples.map(({ rgb }) => {
-    const spread = Math.max(...rgb) - Math.min(...rgb);
-    return spread <= 12 ? (rgb[0] + rgb[1] + rgb[2]) / 3 : 0;
-  });
-  const brightSamples = neutralBrightness.filter((brightness) => brightness >= 190).length;
-  const graySamples = neutralBrightness.filter((brightness) => brightness >= 35 && brightness <= 165).length;
-  const state = brightSamples >= 2
-    ? "selected"
-    : graySamples >= 2
-      ? "not-selected"
-      : "unknown";
-  return {
-    state,
-    detail: `State=${state}|BrightSamples=${brightSamples}|GraySamples=${graySamples}|Samples=${samples.map(({ x, y, rgb }) => `${x},${y}:${formatRgb(rgb)}`).join(";")}`
   };
 }
 
