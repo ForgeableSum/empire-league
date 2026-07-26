@@ -195,24 +195,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
       log(`Replay stopped updating: ${filePath}`);
       void (async () => {
+        let replay: Awaited<ReturnType<typeof parseReplayMetadata>>;
         try {
-          const replay = await parseReplayMetadata(filePath);
-          await services.matchmaking.reportMatchResult({ matchId: match.id, replay });
-          log("Replay result reported; waiting for opponent report");
+          replay = await parseReplayMetadata(filePath);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Replay parsing failed.";
           try {
             await services.matchmaking.reportMatchResult({ matchId: match.id, error: message });
             log("Replay could not be parsed; result reported as contested");
             return;
-          } catch {
-            // Fall through to the local connection error below.
+          } catch (reportError) {
+            replayResultInFlightRef.current = false;
+            setError({
+              code: "RESULT_VERIFICATION_FAILED",
+              message: "The replay parsing failure could not be reported.",
+              technicalDetails: reportError instanceof Error ? reportError.message : message,
+              retryable: true
+            });
+            return;
           }
+        }
+
+        try {
+          await services.matchmaking.reportMatchResult({ matchId: match.id, replay });
+          log("Replay result reported; waiting for opponent report");
+        } catch (error) {
           replayResultInFlightRef.current = false;
           setError({
             code: "RESULT_VERIFICATION_FAILED",
             message: "The replay result could not be reported.",
-            technicalDetails: message,
+            technicalDetails: error instanceof Error ? error.message : "Matchmaker reporting failed.",
             retryable: true
           });
         }

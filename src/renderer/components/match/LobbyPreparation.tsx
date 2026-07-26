@@ -35,12 +35,10 @@ export function LobbyPreparation() {
         <span className="eyebrow">Preparing game</span>
         <h2>{remaining > 0 ? "Game starts in" : "Starting game…"}</h2>
         {remaining > 0 && <div className="lobby-countdown" aria-live="polite">{remaining}</div>}
-        {remaining > 0 && (
-          <div className="lobby-milestone" aria-live="polite">
-            <Loader2 size={18} className="spin" aria-hidden="true" />
-            <span>{state.roomSetupMilestone ?? "Preparing game"}</span>
-          </div>
-        )}
+        <div className="lobby-milestone" aria-live="polite">
+          <Loader2 size={18} className="spin" aria-hidden="true" />
+          <span>{state.roomSetupMilestone ?? "Preparing game"}</span>
+        </div>
         {state.error && (
           <div className="error-panel">
             <strong>{state.error.message}</strong>

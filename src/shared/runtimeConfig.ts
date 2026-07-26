@@ -19,8 +19,25 @@ export const lobbySetupTiming = {
   revealAfterStartMs: 8000
 } as const;
 
-export const lobbySetupCountdownMs = Object.values(lobbySetupTiming)
-  .reduce((total, milliseconds) => total + milliseconds, 0);
+// This is a user-facing estimate, not the watchdog deadline. Keep maximum
+// retry/transfer timeouts out of it so a slow-path safety limit is not shown
+// as the expected start time.
+export const lobbySetupCountdownMs = [
+  lobbySetupTiming.hostLobbyAutomationSettleMs,
+  lobbySetupTiming.multiplayerMenuMs,
+  lobbySetupTiming.hostGameMenuMs,
+  lobbySetupTiming.lobbyCreationMs,
+  lobbySetupTiming.resetFocusMs,
+  lobbySetupTiming.resetConfirmationMs,
+  lobbySetupTiming.clipboardReadMs,
+  lobbySetupTiming.lobbyMetadataMs,
+  lobbySetupTiming.guestJoinMs,
+  lobbySetupTiming.guestReadySettleMs,
+  lobbySetupTiming.hostReadySettleMs,
+  lobbySetupTiming.hostReadyToStartMs,
+  lobbySetupTiming.startGameSettleMs,
+  lobbySetupTiming.revealAfterStartMs
+].reduce((total, milliseconds) => total + milliseconds, 5_000);
 
 export const lobbySetupRetryTiming = {
   beforeClipboardRetryMs: 1000,
