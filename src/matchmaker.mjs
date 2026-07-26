@@ -472,6 +472,36 @@ const server = createServer(async (request, response) => {
       return send(response, 200, { published: true });
     }
 
+    const guestJoinedMatch = url.pathname.match(/^\/matches\/([^/]+)\/guest-joined$/);
+    if (request.method === "POST" && guestJoinedMatch) {
+      const match = matches.get(decodeURIComponent(guestJoinedMatch[1]));
+      const body = await readJson(request);
+      if (!match || body.ticketId !== match.guest.id || match.guest.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only the guest may report joining the lobby" });
+      }
+      if (!match.lobby) return send(response, 409, { error: "the lobby has not been published" });
+      if (!match.guestLobbyJoined) {
+        match.guestLobbyJoined = true;
+        emit(match.host, { type: "guest_lobby_joined", matchId: match.id });
+      }
+      return send(response, 200, { joined: true });
+    }
+
+    const hostReadyMatch = url.pathname.match(/^\/matches\/([^/]+)\/host-ready$/);
+    if (request.method === "POST" && hostReadyMatch) {
+      const match = matches.get(decodeURIComponent(hostReadyMatch[1]));
+      const body = await readJson(request);
+      if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only the host may report lobby readiness" });
+      }
+      if (!match.guestLobbyJoined) return send(response, 409, { error: "the guest has not joined the lobby" });
+      if (!match.hostLobbyReady) {
+        match.hostLobbyReady = true;
+        emit(match.guest, { type: "host_lobby_ready", matchId: match.id });
+      }
+      return send(response, 200, { ready: true });
+    }
+
     const guestReadyMatch = url.pathname.match(/^\/matches\/([^/]+)\/guest-ready$/);
     if (request.method === "POST" && guestReadyMatch) {
       const match = matches.get(decodeURIComponent(guestReadyMatch[1]));

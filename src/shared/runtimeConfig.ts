@@ -11,6 +11,8 @@ export const lobbySetupTiming = {
   lobbyMetadataMs: 700,
   guestJoinMs: 10000,
   guestReadySettleMs: 2000,
+  customMapTransferPollMs: 1500,
+  customMapTransferTimeoutMs: 60_000,
   hostReadySettleMs: 2000,
   hostReadyToStartMs: 1000,
   startGameSettleMs: 2000,

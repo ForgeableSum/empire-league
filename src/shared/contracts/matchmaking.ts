@@ -192,6 +192,8 @@ export type QueueEvent =
   | { type: "match_found"; match: MatchSession }
   | { type: "opponent_accepted"; matchId: string; role?: "host" | "guest" }
   | { type: "lobby_ready"; matchId: string; lobby: LobbySession }
+  | { type: "guest_lobby_joined"; matchId: string }
+  | { type: "host_lobby_ready"; matchId: string }
   | { type: "guest_lobby_ready"; matchId: string }
   | { type: "game_started"; matchId: string }
   | { type: "result_verified"; matchId: string; result: MatchResult }

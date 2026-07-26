@@ -37,9 +37,10 @@ lobby message loop can be throttled while AoE2 is in the background.
 8. Verify the clipboard matches `aoe2de://0/<digits>`.
 9. Publish that URI to the guest. This URI is the normal automated invitation path.
 10. If an explicit in-game invite is needed, use `hostInvite`.
-11. Wait for the guest-ready report.
-12. `hostReady` (`click`)
-13. `startGame` (`click`)
+11. Wait for the guest-joined report.
+12. `hostReady` (`click`) to finalize custom lobby files and release any required transfer.
+13. Wait for the guest-ready report.
+14. `startGame` (`click`)
 
 The first three transitions are verified from stable points on AoE2's rendered
 window surface. If the expected next screen is not present, that step is
@@ -52,9 +53,10 @@ wrong screen.
 2. Open the URI through Steam/AoE2.
 3. Wait for the lobby screen to settle.
 4. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), the shared grid, and `confirmCivilization`.
-5. `guestReady` (`click`). The guest and host lobby layouts intentionally use different ready points.
-6. Report guest readiness to the matchmaker.
-7. Wait for the host to start the match.
+5. Report that the guest joined so the host can ready and release custom lobby files.
+6. After the host-ready report, poll `guestReady` until AoE2 enables and verifies the control or the transfer timeout expires. The guest and host lobby layouts intentionally use different ready points.
+7. Report guest readiness to the matchmaker.
+8. Wait for the host to start the match.
 
 ## Civilization grid
 

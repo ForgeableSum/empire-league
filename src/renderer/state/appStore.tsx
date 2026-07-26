@@ -582,16 +582,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   if (!selected.sent) throw new Error(selected.message);
                   log(`${selection} selected in AoE2`);
                 }
-                log("Guest lobby opened; clicking Ready");
-                const ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
-                if (!ready.sent) throw new Error(ready.message);
-                log("Guest Ready click sent; reporting readiness to the host");
-                await services.matchmaking.reportGuestLobbyReady(event.matchId);
-                log("Guest readied and notified the host");
-                clearRoomSetupWatchdog();
+                log("Guest lobby opened; reporting join to the host");
+                await services.matchmaking.reportGuestLobbyJoined(event.matchId);
+                log("Guest joined; waiting for the host to finalize custom map transfer");
                 setState((previous) => ({
                   ...previous,
-                  roomSetupMilestone: "Ready — waiting for the host to start"
+                  roomSetupMilestone: "Waiting for host to finalize lobby files"
                 }));
               } else {
                 notify("The host lobby could not be opened", "danger");
@@ -602,6 +598,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             });
           }
         }
+        if (event.type === "guest_lobby_joined" && window.electronApi) {
+          setState((previous) => ({
+            ...previous,
+            roomSetupMilestone: "Opponent joined — finalizing lobby files"
+          }));
+          void (async () => {
+            try {
+              log("Guest joined; waiting for the host lobby state to settle");
+              await delayForLobbyInput(lobbySetupTiming.hostReadySettleMs);
+              log("Guest joined; clicking Ready for the host");
+              const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
+              if (!ready.sent) throw new Error(ready.message);
+              await services.matchmaking.reportHostLobbyReady(event.matchId);
+              log("Host readied; guest notified to wait for custom map transfer");
+              setState((previous) => ({
+                ...previous,
+                roomSetupMilestone: "Waiting for opponent file transfer"
+              }));
+            } catch (error) {
+              log(`Automated host Ready failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+              notify("The host could not finalize the lobby", "danger");
+            }
+          })();
+        }
+        if (event.type === "host_lobby_ready" && window.electronApi) {
+          setState((previous) => ({
+            ...previous,
+            roomSetupMilestone: "Receiving lobby files"
+          }));
+          void (async () => {
+            try {
+              const deadline = Date.now() + lobbySetupTiming.customMapTransferTimeoutMs;
+              let ready: { sent: boolean; message: string };
+              do {
+                await delayForLobbyInput(lobbySetupTiming.customMapTransferPollMs);
+                ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
+                if (!ready.sent) log("Guest Ready remains unavailable; waiting for lobby file transfer");
+              } while (!ready.sent && Date.now() < deadline);
+              if (!ready.sent) throw new Error("The guest Ready button remained unavailable after the file-transfer timeout.");
+              log("Guest Ready verified; reporting readiness to the host");
+              await services.matchmaking.reportGuestLobbyReady(event.matchId);
+              clearRoomSetupWatchdog();
+              setState((previous) => ({
+                ...previous,
+                roomSetupMilestone: "Ready — waiting for the host to start"
+              }));
+            } catch (error) {
+              log(`Guest file transfer or Ready failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+              notify("Lobby file transfer did not complete", "danger");
+            }
+          })();
+        }
         if (event.type === "guest_lobby_ready" && window.electronApi) {
           setState((previous) => ({
             ...previous,
@@ -609,12 +657,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }));
           void (async () => {
             try {
-              log("Guest reported ready; waiting for the host lobby state to settle");
-              await delayForLobbyInput(lobbySetupTiming.hostReadySettleMs);
-              log("Guest reported ready; clicking Ready for the host");
-              const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
-              if (!ready.sent) throw new Error(ready.message);
-              log("Host Ready click sent; waiting for the Start button state to settle");
+              log("Guest reported ready; waiting for the Start button state to settle");
               await delayForLobbyInput(lobbySetupTiming.hostReadyToStartMs);
               await delayForLobbyInput(lobbySetupTiming.startGameSettleMs);
               log("Host readied; clicking Start Game");

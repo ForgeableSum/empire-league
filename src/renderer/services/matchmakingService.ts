@@ -20,6 +20,8 @@ export interface MatchmakingService {
   acceptMatch(matchId: string): Promise<void>;
   declineMatch(matchId: string): Promise<void>;
   publishLobby(matchId: string, lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void>;
+  reportGuestLobbyJoined(matchId: string): Promise<void>;
+  reportHostLobbyReady(matchId: string): Promise<void>;
   reportGuestLobbyReady(matchId: string): Promise<void>;
   reportGameStarted(matchId: string): Promise<void>;
   reportMatchResult(report: MatchResultReport): Promise<void>;
@@ -102,9 +104,24 @@ export class LocalMatchmakingService implements MatchmakingService {
     }));
   }
 
+  async reportGuestLobbyJoined(matchId: string): Promise<void> {
+    await this.reportLobbyMilestone(matchId, "guest-joined");
+  }
+
+  async reportHostLobbyReady(matchId: string): Promise<void> {
+    await this.reportLobbyMilestone(matchId, "host-ready");
+  }
+
   async reportGuestLobbyReady(matchId: string): Promise<void> {
+    await this.reportLobbyMilestone(matchId, "guest-ready");
+  }
+
+  private async reportLobbyMilestone(
+    matchId: string,
+    milestone: "guest-joined" | "host-ready" | "guest-ready"
+  ): Promise<void> {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
-    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/guest-ready`, {
+    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/${milestone}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authorizationHeaders() },
       body: JSON.stringify({ ticketId: this.activeTicketId })
@@ -262,6 +279,14 @@ export class MockMatchmakingService implements MatchmakingService {
   }
 
   async publishLobby(_matchId: string, _lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void> {
+    await delay(100);
+  }
+
+  async reportGuestLobbyJoined(_matchId: string): Promise<void> {
+    await delay(100);
+  }
+
+  async reportHostLobbyReady(_matchId: string): Promise<void> {
     await delay(100);
   }
 
