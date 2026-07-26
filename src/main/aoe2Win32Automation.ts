@@ -144,7 +144,9 @@ export function closeAoe2NativeWindow(processId: number): boolean {
 export function minimizeAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
-  return Boolean(window) && Boolean(ShowWindow!(window, 6));
+  // SW_SHOWMINNOACTIVE avoids Windows activating the next top-level window.
+  // SW_MINIMIZE would reactivate Electron while it is also being minimized.
+  return Boolean(window) && Boolean(ShowWindow!(window, 7));
 }
 
 export function restoreAoe2NativeWindowBehind(processId: number): boolean {

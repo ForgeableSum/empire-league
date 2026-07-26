@@ -1,4 +1,5 @@
 import { app, BrowserWindow, clipboard, globalShortcut, screen } from "electron";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -15,7 +16,6 @@ let mainCoverManuallyVisible = true;
 let coveredMainWindow: BrowserWindow | null = null;
 let taskbarMinimizedWindow: BrowserWindow | null = null;
 let taskbarMinimizeCompletedWindow: BrowserWindow | null = null;
-let taskbarMinimizeTimer: NodeJS.Timeout | undefined;
 let coveredMainWindowState: {
   alwaysOnTop: boolean;
   focusable: boolean;
@@ -27,6 +27,24 @@ let latestPointer: {
 } | undefined;
 const copyCoordinatesAccelerator = "CommandOrControl+Shift+C";
 const toggleCoverAccelerator = "CommandOrControl+Shift+H";
+const lifecycleEvents = [
+  "show", "hide", "focus", "blur", "minimize", "restore",
+  "enter-full-screen", "leave-full-screen", "always-on-top-changed"
+] as const;
+
+function logWindowLifecycle(window: BrowserWindow, event: string): void {
+  try {
+    appendFileSync(
+      join(app.getPath("userData"), "window-lifecycle.log"),
+      `${new Date().toISOString()} ${event}`
+      + ` visible=${window.isVisible()} focused=${window.isFocused()}`
+      + ` minimized=${window.isMinimized()} fullscreen=${window.isFullScreen()}`
+      + ` kiosk=${window.isKiosk()} alwaysOnTop=${window.isAlwaysOnTop()}\n`
+    );
+  } catch {
+    // Diagnostics must never interfere with window behavior.
+  }
+}
 
 function appIconPath(): string {
   return app.isPackaged
@@ -45,51 +63,28 @@ function loadRenderer(window: BrowserWindow, route = ""): void {
 
 function restoreFromTaskbar(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
+  logWindowLifecycle(window, "CALL restoreFromTaskbar");
   if (process.platform === "win32") {
     const game = detectAoe2NativeProcess();
     if (game.pid && game.windowReady) restoreAoe2NativeWindowBehind(game.pid);
   }
   taskbarMinimizedWindow = null;
   taskbarMinimizeCompletedWindow = null;
-  if (taskbarMinimizeTimer) clearTimeout(taskbarMinimizeTimer);
-  taskbarMinimizeTimer = undefined;
-  window.setKiosk(true);
+  window.setFullScreen(true);
   window.show();
   window.focus();
 }
 
 export function minimizeMainWindowToTaskbar(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
+  logWindowLifecycle(window, "CALL minimizeMainWindowToTaskbar");
   if (process.platform === "win32") {
     const game = detectAoe2NativeProcess();
     if (game.pid && game.windowReady) minimizeAoe2NativeWindow(game.pid);
   }
   taskbarMinimizedWindow = window;
   taskbarMinimizeCompletedWindow = null;
-  if (taskbarMinimizeTimer) clearTimeout(taskbarMinimizeTimer);
-
-  const finishMinimize = (): void => {
-    window.removeListener("leave-full-screen", finishMinimize);
-    if (taskbarMinimizeTimer) clearTimeout(taskbarMinimizeTimer);
-    taskbarMinimizeTimer = undefined;
-    if (
-      window.isDestroyed()
-      || taskbarMinimizedWindow !== window
-      || window.isMinimized()
-    ) {
-      return;
-    }
-    window.minimize();
-  };
-
-  const exitingFullScreen = window.isKiosk() || window.isFullScreen();
-  window.setKiosk(false);
-  if (exitingFullScreen) {
-    window.once("leave-full-screen", finishMinimize);
-    taskbarMinimizeTimer = setTimeout(finishMinimize, 250);
-  } else {
-    finishMinimize();
-  }
+  window.minimize();
 }
 
 export function createMainWindow(): BrowserWindow {
@@ -106,7 +101,7 @@ export function createMainWindow(): BrowserWindow {
     icon: appIconPath(),
     frame: false,
     fullscreen: true,
-    kiosk: true,
+    kiosk: false,
     resizable: false,
     minimizable: true,
     maximizable: false,
@@ -119,8 +114,19 @@ export function createMainWindow(): BrowserWindow {
       sandbox: true
     }
   });
+  try {
+    writeFileSync(
+      join(app.getPath("userData"), "window-lifecycle.log"),
+      `${new Date().toISOString()} CREATE mainWindow\n`
+    );
+  } catch {
+    // Diagnostics must never interfere with startup.
+  }
+  for (const event of lifecycleEvents) {
+    mainWindow.on(event as "show", () => logWindowLifecycle(mainWindow, `EVENT ${event}`));
+  }
 
-  const fitKioskToDisplay = (): void => {
+  const fitFullScreenToDisplay = (): void => {
     if (mainWindow.isDestroyed()) return;
     const display = screen.getAllDisplays().find((item) => item.id === displayId) ?? screen.getPrimaryDisplay();
     const currentBounds = mainWindow.getBounds();
@@ -135,14 +141,15 @@ export function createMainWindow(): BrowserWindow {
     }
   };
   const handleDisplayMetricsChanged = (): void => {
-    setImmediate(fitKioskToDisplay);
+    setImmediate(fitFullScreenToDisplay);
   };
 
   mainWindow.setMenuBarVisibility(false);
   mainWindow.once("ready-to-show", () => {
     if (mainWindow.isDestroyed()) return;
-    mainWindow.setKiosk(true);
-    fitKioskToDisplay();
+    logWindowLifecycle(mainWindow, "CALL ready-to-show");
+    mainWindow.setFullScreen(true);
+    fitFullScreenToDisplay();
     mainWindow.show();
     mainWindow.focus();
   });
@@ -150,14 +157,12 @@ export function createMainWindow(): BrowserWindow {
     if (mainWindow.isDestroyed() || taskbarMinimizedWindow === mainWindow) return;
     setImmediate(() => {
       if (mainWindow.isDestroyed() || taskbarMinimizedWindow === mainWindow) return;
-      mainWindow.setKiosk(true);
-      fitKioskToDisplay();
+      mainWindow.setFullScreen(true);
+      fitFullScreenToDisplay();
     });
   });
   mainWindow.on("minimize", () => {
     if (taskbarMinimizedWindow === mainWindow) {
-      if (taskbarMinimizeTimer) clearTimeout(taskbarMinimizeTimer);
-      taskbarMinimizeTimer = undefined;
       taskbarMinimizeCompletedWindow = mainWindow;
     }
   });
@@ -174,8 +179,6 @@ export function createMainWindow(): BrowserWindow {
     screen.off("display-metrics-changed", handleDisplayMetricsChanged);
     if (taskbarMinimizedWindow === mainWindow) taskbarMinimizedWindow = null;
     if (taskbarMinimizeCompletedWindow === mainWindow) taskbarMinimizeCompletedWindow = null;
-    if (taskbarMinimizeTimer) clearTimeout(taskbarMinimizeTimer);
-    taskbarMinimizeTimer = undefined;
   });
 
   if (isDev) {
@@ -189,6 +192,7 @@ export function createMainWindow(): BrowserWindow {
 
 export function showMainWindowAsGameCover(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
+  logWindowLifecycle(window, "CALL showMainWindowAsGameCover");
   if (coveredMainWindow !== window || !coveredMainWindowState) {
     coveredMainWindow = window;
     coveredMainWindowState = {
@@ -200,7 +204,7 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   mainCoverManuallyVisible = true;
   window.setIgnoreMouseEvents(false);
   window.setOpacity(1);
-  window.setKiosk(true);
+  window.setFullScreen(true);
   window.setAlwaysOnTop(true, "screen-saver");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.showInactive();
@@ -214,7 +218,7 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
     if (!coveredMainWindow || coveredMainWindow.isDestroyed()) return;
     mainCoverManuallyVisible = !mainCoverManuallyVisible;
     if (mainCoverManuallyVisible) {
-      coveredMainWindow.showInactive();
+      if (taskbarMinimizedWindow !== coveredMainWindow) coveredMainWindow.showInactive();
     } else {
       coveredMainWindow.hide();
     }
@@ -229,12 +233,17 @@ export function restoreMainWindowFromGameCover(): void {
   mainCoverManuallyVisible = true;
   globalShortcut.unregister(toggleCoverAccelerator);
   if (!window || window.isDestroyed() || !state) return;
+  logWindowLifecycle(window, "CALL restoreMainWindowFromGameCover");
   window.setIgnoreMouseEvents(false);
   window.setOpacity(state.opacity);
   window.setAlwaysOnTop(state.alwaysOnTop);
   window.setVisibleOnAllWorkspaces(false);
   window.setFocusable(state.focusable);
-  window.setKiosk(true);
+  if (taskbarMinimizedWindow === window) {
+    window.webContents.send("overlay:mouse-test-active", false);
+    return;
+  }
+  window.setFullScreen(true);
   window.show();
   window.focus();
   window.webContents.send("overlay:mouse-test-active", false);
@@ -242,16 +251,15 @@ export function restoreMainWindowFromGameCover(): void {
 
 export function focusMainWindow(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
+  logWindowLifecycle(window, "CALL focusMainWindow");
   if (coveredMainWindow === window && coveredMainWindowState) {
     restoreMainWindowFromGameCover();
     return;
   }
   taskbarMinimizedWindow = null;
   taskbarMinimizeCompletedWindow = null;
-  if (taskbarMinimizeTimer) clearTimeout(taskbarMinimizeTimer);
-  taskbarMinimizeTimer = undefined;
   if (window.isMinimized()) window.restore();
-  window.setKiosk(true);
+  window.setFullScreen(true);
   window.setAlwaysOnTop(true, "screen-saver");
   window.show();
   window.focus();
@@ -264,6 +272,7 @@ export function setMainWindowGameCoverOverAoe(active: boolean): void {
   const window = coveredMainWindow;
   if (!window || window.isDestroyed()) return;
   if (active) {
+    if (taskbarMinimizedWindow === window) return;
     window.setAlwaysOnTop(true, "screen-saver");
     if (mainCoverManuallyVisible) window.showInactive();
   } else {
@@ -275,6 +284,7 @@ export function setMainWindowGameCoverClickThrough(clickThrough: boolean): void 
   const window = coveredMainWindow;
   if (!window || window.isDestroyed()) return;
   if (clickThrough) {
+    if (taskbarMinimizedWindow === window) return;
     window.setAlwaysOnTop(true, "screen-saver");
     if (mainCoverManuallyVisible) window.showInactive();
   }
