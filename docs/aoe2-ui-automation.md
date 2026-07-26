@@ -23,9 +23,10 @@ lobby message loop can be throttled while AoE2 is in the background.
 4. Apply the standard lobby settings.
 5. Select the matchmaker's map:
    1. Open the lobby's Location picker.
-   2. Focus the picker search field and send the selected map name with window-local `WM_CHAR` messages.
-   3. Resolve the exact map's filtered-result index from the manifest and click that tile. This matters for substring collisions such as Aquarena/Arena and Land Nomad/Nomad.
-   4. Verify that the lobby screen is present again before continuing.
+   2. For a map listed in `customMapNames`, open Map Style and select Custom.
+   3. Focus the picker search field and send the selected map name with window-local `WM_CHAR` messages.
+   4. Resolve the exact map's filtered-result index from the manifest and click that tile. This matters for substring collisions such as Aquarena/Arena and Land Nomad/Nomad.
+   5. Verify that the lobby screen is present again before continuing.
 6. Optionally select a civilization:
    1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
    2. For a named civilization, enter its exact name in the picker search field.
