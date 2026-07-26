@@ -9,6 +9,7 @@ import type {
 import type { MockServiceConfig } from "../state/types";
 import { currentUser, maps, matchmakingOpponents } from "../mocks/mockPlayers";
 import { mapCatalog, selectMapFromQueues } from "../../shared/mapCatalog";
+import { matchmakerEventPollMs } from "../../shared/runtimeConfig";
 import { delay } from "./timing";
 import { authorizationHeaders, matchmakerUrl } from "./authService";
 
@@ -81,7 +82,7 @@ export class LocalMatchmakingService implements MatchmakingService {
       }
     };
     void poll();
-    const timer = window.setInterval(() => void poll(), 400);
+    const timer = window.setInterval(() => void poll(), matchmakerEventPollMs);
     return () => {
       stopped = true;
       window.clearInterval(timer);

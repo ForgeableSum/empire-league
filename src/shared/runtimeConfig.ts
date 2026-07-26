@@ -1,4 +1,8 @@
+import { aoe2UiManifest } from "./aoe2UiManifest.js";
+
 export const cursorAutomationEnabled = true;
+export const matchmakerEventPollMs = 400;
+export const aoe2PhysicalClickSettleMs = 500;
 
 export const lobbySetupTiming = {
   hostLobbyAutomationSettleMs: 2000,
@@ -37,7 +41,21 @@ export const lobbySetupCountdownMs = [
   lobbySetupTiming.hostReadyToStartMs,
   lobbySetupTiming.startGameSettleMs,
   lobbySetupTiming.revealAfterStartMs
-].reduce((total, milliseconds) => total + milliseconds, 5_000);
+].reduce((total, milliseconds) => total + milliseconds, 0);
+
+const customMapFlowAdditionalMs =
+  aoe2UiManifest.mapPicker.styleMenuSettleMs
+  + aoe2UiManifest.mapPicker.styleSelectionSettleMs
+  + (lobbySetupTiming.customMapTransferPollMs * 2)
+  + (aoe2UiManifest.actions.guestReady.settleMs * 2)
+  + aoe2UiManifest.actions.confirmGuestContent.settleMs
+  + aoe2PhysicalClickSettleMs
+  + lobbySetupTiming.hostReadySettleMs
+  + aoe2UiManifest.actions.hostReady.settleMs
+  + matchmakerEventPollMs;
+
+export const customMapLobbySetupCountdownMs =
+  lobbySetupCountdownMs + customMapFlowAdditionalMs;
 
 export const lobbySetupRetryTiming = {
   beforeClipboardRetryMs: 1000,

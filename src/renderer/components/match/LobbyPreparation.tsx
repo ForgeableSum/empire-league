@@ -1,18 +1,25 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import civBonuses from "../../../shared/civBonuses.json";
+import { aoe2UiManifest } from "../../../shared/aoe2UiManifest";
 import type { CivilizationPreference } from "../../../shared/contracts/matchmaking";
-import { lobbySetupCountdownMs } from "../../../shared/runtimeConfig";
+import {
+  customMapLobbySetupCountdownMs,
+  lobbySetupCountdownMs
+} from "../../../shared/runtimeConfig";
 import { useAppStore } from "../../state/appStore";
 import { YouTubeShorts } from "./YouTubeShorts";
 
-const setupCountdownSeconds = Math.ceil(lobbySetupCountdownMs / 1000);
 type CivilizationName = keyof typeof civBonuses;
 
 export function LobbyPreparation() {
   const { state, prepareLobby } = useAppStore();
-  const [remaining, setRemaining] = useState(() => getRemaining(state.roomSetupStartedAt));
   const match = state.activeMatch;
+  const countdownMs = (aoe2UiManifest.mapPicker.customMapNames as readonly string[])
+    .includes(match?.selectedMap?.name ?? "")
+    ? customMapLobbySetupCountdownMs
+    : lobbySetupCountdownMs;
+  const [remaining, setRemaining] = useState(() => getRemaining(state.roomSetupStartedAt, countdownMs));
   const playerCivilization = resolveCivilization(
     match?.queue.civilizationPreference,
     match?.opponentCivilizationPreference
@@ -23,11 +30,11 @@ export function LobbyPreparation() {
   );
 
   useEffect(() => {
-    const update = () => setRemaining(getRemaining(state.roomSetupStartedAt));
+    const update = () => setRemaining(getRemaining(state.roomSetupStartedAt, countdownMs));
     update();
     const timer = window.setInterval(update, 250);
     return () => window.clearInterval(timer);
-  }, [state.roomSetupStartedAt]);
+  }, [countdownMs, state.roomSetupStartedAt]);
 
   return (
     <section className="search-waiting-layout">
@@ -92,8 +99,9 @@ function CivilizationBonuses({
   );
 }
 
-function getRemaining(startedAt: string | null): number {
-  if (!startedAt) return setupCountdownSeconds;
+function getRemaining(startedAt: string | null, countdownMs: number): number {
+  const countdownSeconds = Math.ceil(countdownMs / 1000);
+  if (!startedAt) return countdownSeconds;
   const elapsedSeconds = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
-  return Math.max(0, setupCountdownSeconds - elapsedSeconds);
+  return Math.max(0, countdownSeconds - elapsedSeconds);
 }

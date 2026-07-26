@@ -1,4 +1,5 @@
 import koffi from "koffi";
+import { aoe2PhysicalClickSettleMs } from "../shared/runtimeConfig.js";
 
 const user32 = process.platform === "win32" ? koffi.load("user32.dll") : null;
 const kernel32 = process.platform === "win32" ? koffi.load("kernel32.dll") : null;
@@ -226,7 +227,7 @@ export async function clickAoe2DesignPoint(
     restored = Boolean(SetCursorPos!(original.x, original.y));
   }
 
-  await delay(500);
+  await delay(aoe2PhysicalClickSettleMs);
 
   return {
     sent: true,
