@@ -1044,6 +1044,237 @@
   padding: 15px 7px 6px;
 }
 
+.grouped-map-pool {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+}
+
+.map-group {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) + 2px);
+  background: rgba(13, 12, 11, 0.48);
+  transition: border-color 160ms ease, opacity 160ms ease;
+}
+
+.map-group.enabled {
+  border-color: rgba(197, 141, 69, 0.38);
+}
+
+.map-group:not(.enabled) .map-group-grid {
+  opacity: 0.42;
+  filter: grayscale(0.65);
+}
+
+.map-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.map-group-header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.map-group-header strong {
+  font-size: 15px;
+}
+
+.map-group-header > div span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.group-switch {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 3px 8px;
+  cursor: pointer;
+}
+
+.group-switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.group-switch > span {
+  position: relative;
+  width: 38px;
+  height: 21px;
+  grid-row: 1 / span 2;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #24211e;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.group-switch > span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.group-switch input:checked + span {
+  border-color: var(--accent);
+  background: rgba(197, 141, 69, 0.25);
+}
+
+.group-switch input:checked + span::after {
+  transform: translateX(17px);
+  background: var(--accent);
+}
+
+.group-switch input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.group-switch small {
+  min-width: 45px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.map-group-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(88px, 1fr));
+  gap: 8px;
+  transition: opacity 160ms ease, filter 160ms ease;
+}
+
+.group-map {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #171513;
+}
+
+.group-map.primary {
+  grid-column: span 2;
+  grid-row: span 2;
+  aspect-ratio: 1;
+}
+
+.group-map.selected {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(197, 141, 69, 0.18);
+}
+
+.group-map-select {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 88px;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+.group-map-select img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transition: transform 180ms ease, filter 180ms ease, opacity 180ms ease;
+}
+
+.group-map:not(.selected) .group-map-select img {
+  opacity: 0.48;
+  filter: grayscale(0.7);
+}
+
+.group-map-select:not(:disabled):hover img {
+  transform: scale(1.035);
+}
+
+.group-map-shade {
+  position: absolute;
+  inset: 38% 0 0;
+  background: linear-gradient(transparent, rgba(8, 7, 6, 0.94));
+}
+
+.group-map-name {
+  position: absolute;
+  inset: auto 9px 8px;
+  display: grid;
+  gap: 3px;
+  color: #fff;
+  text-align: left;
+  text-shadow: 0 1px 3px #000;
+}
+
+.group-map-name strong {
+  font-size: 12px;
+}
+
+.group-map.primary .group-map-name {
+  inset: auto 13px 12px;
+}
+
+.group-map.primary .group-map-name strong {
+  font-size: 17px;
+}
+
+.group-map-name small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.group-map .map-favorite {
+  top: 7px;
+  left: auto;
+  right: 7px;
+}
+
+.map-off-label {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.78);
+  background: rgba(8, 7, 6, 0.76);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.group-map-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.group-map-select:disabled {
+  cursor: default;
+}
+
 .queue-action-panel {
   position: sticky;
   top: 0;

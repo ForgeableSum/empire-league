@@ -31,10 +31,12 @@ export async function saveMatch(match) {
     await connection.beginTransaction();
     await connection.execute(
       `INSERT INTO matches
-        (id, queue_id, host_player_id, guest_player_id, selected_map_id, selected_map_name, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'found', ?)`,
+        (id, queue_id, host_player_id, guest_player_id, selected_map_id, selected_map_name,
+         map_catalog_version, map_group_id, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'found', ?)`,
       [match.id, match.host.queueId, match.host.player.id, match.guest.player.id,
-        match.selectedMap.id, match.selectedMap.name, new Date(match.createdAt)]
+        match.selectedMap.id, match.selectedMap.name, match.mapCatalogVersion, match.mapGroupId,
+        new Date(match.createdAt)]
     );
     await connection.commit();
   } catch (error) {

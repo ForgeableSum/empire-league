@@ -1,12 +1,14 @@
 import { Clock, Copy, Dices, Search, Shuffle, Swords, Users, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { CivilizationMode } from "../../shared/contracts/matchmaking";
+import type { CivilizationMode, MapGroupId } from "../../shared/contracts/matchmaking";
+import { mapCatalog } from "../../shared/mapCatalog";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { LobbyPreparation } from "../components/match/LobbyPreparation";
 import { ActiveMatch } from "../components/match/ActiveMatch";
 import { ResultScreen } from "../components/match/ResultScreen";
 import { YouTubeShorts } from "../components/match/YouTubeShorts";
-import { MapPool } from "../components/common/MapPool";
+import { GroupedMapPool } from "../components/common/GroupedMapPool";
+import { mapGroups } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
 
 const favoriteMapsKey = "empire-league-favorite-maps";
@@ -47,9 +49,16 @@ export function QueuePage() {
   const [selectedMaps, setSelectedMaps] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(queues.map((queue) => [queue.id, queue.mapPool.map((map) => map.id)]))
   );
-  const [favoriteMaps, setFavoriteMaps] = useState<Record<string, string>>(() => {
+  const [enabledGroups, setEnabledGroups] = useState<Record<string, MapGroupId[]>>(() =>
+    Object.fromEntries(queues.map((queue) => [queue.id, mapGroups.map((group) => group.id)]))
+  );
+  const [favoriteMaps, setFavoriteMaps] = useState<Record<string, Partial<Record<MapGroupId, string>>>>(() => {
     try {
-      return JSON.parse(window.localStorage.getItem(favoriteMapsKey) ?? "{}");
+      const saved = JSON.parse(window.localStorage.getItem(favoriteMapsKey) ?? "{}") as Record<string, unknown>;
+      return Object.fromEntries(Object.entries(saved).map(([queueId, value]) => [
+        queueId,
+        value && typeof value === "object" ? value as Partial<Record<MapGroupId, string>> : {}
+      ]));
     } catch {
       return {};
     }
@@ -80,24 +89,28 @@ export function QueuePage() {
     window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({ mode: civilizationMode, civilization: value }));
   };
 
-  const toggleFavorite = (queueId: string, mapId: string) => {
+  const toggleFavorite = (queueId: string, groupId: MapGroupId, mapId: string) => {
     setFavoriteMaps((current) => {
-      const next = { ...current };
-      if (next[queueId] === mapId) delete next[queueId];
-      else next[queueId] = mapId;
+      const queueFavorites = { ...(current[queueId] ?? {}) };
+      if (queueFavorites[groupId] === mapId) delete queueFavorites[groupId];
+      else queueFavorites[groupId] = mapId;
+      const next = { ...current, [queueId]: queueFavorites };
       window.localStorage.setItem(favoriteMapsKey, JSON.stringify(next));
       return next;
     });
+    setSelectedMaps((current) => ({
+      ...current,
+      [queueId]: current[queueId]?.includes(mapId) ? current[queueId] : [...(current[queueId] ?? []), mapId]
+    }));
   };
 
-  const toggleMap = (queueId: string, mapId: string) => {
-    if (selectedMaps[queueId]?.includes(mapId) && favoriteMaps[queueId] === mapId) {
-      toggleFavorite(queueId, mapId);
+  const toggleMap = (queueId: string, groupId: MapGroupId, mapId: string) => {
+    if (selectedMaps[queueId]?.includes(mapId) && favoriteMaps[queueId]?.[groupId] === mapId) {
+      toggleFavorite(queueId, groupId, mapId);
     }
     setSelectedMaps((current) => {
       const queueMaps = current[queueId] ?? [];
       const removing = queueMaps.includes(mapId);
-      if (removing && queueMaps.length === 1) return current;
       return {
         ...current,
         [queueId]: removing
@@ -106,6 +119,42 @@ export function QueuePage() {
       };
     });
   };
+
+  const toggleGroup = (queueId: string, groupId: MapGroupId) => {
+    setEnabledGroups((current) => {
+      const queueGroups = current[queueId] ?? [];
+      return {
+        ...current,
+        [queueId]: queueGroups.includes(groupId)
+          ? queueGroups.filter((id) => id !== groupId)
+          : [...queueGroups, groupId]
+      };
+    });
+  };
+
+  const activeMapIds = selectedQueue
+    ? selectedQueue.mapPool
+      .filter((map) => {
+        const group = mapGroups.find((candidate) => candidate.maps.some((candidateMap) => candidateMap.id === map.id));
+        return group
+          && enabledGroups[selectedQueue.id]?.includes(group.id)
+          && selectedMaps[selectedQueue.id]?.includes(map.id);
+      })
+      .map((map) => map.id)
+    : [];
+  const activeFavoriteEntries = selectedQueue
+    ? Object.entries(favoriteMaps[selectedQueue.id] ?? {})
+      .filter(([groupId, mapId]) =>
+        enabledGroups[selectedQueue.id]?.includes(groupId as MapGroupId) && activeMapIds.includes(mapId))
+    : [];
+  const activeFavoriteMapIds = Object.fromEntries(activeFavoriteEntries) as Partial<Record<MapGroupId, string>>;
+  const activeFavoriteIds = Object.values(activeFavoriteMapIds);
+  const favoriteNames = selectedQueue
+    ? activeFavoriteIds
+      .map((id) => selectedQueue.mapPool.find((map) => map.id === id)?.name)
+      .filter(Boolean)
+      .join(", ")
+    : "";
 
   useEffect(() => {
     if (!state.queueStartedAt || state.queueStatus !== "searching") return;
@@ -120,8 +169,13 @@ export function QueuePage() {
     const timer = window.setTimeout(() => {
       void updateActiveQueue({
         ...selectedQueue,
-        mapPool: selectedQueue.mapPool.filter((map) => selectedMaps[selectedQueue.id]?.includes(map.id)),
-        favoriteMapId: favoriteMaps[selectedQueue.id],
+        mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
+        mapPreferences: {
+          enabledGroupIds: enabledGroups[selectedQueue.id] ?? [],
+          favoriteMapIds: activeFavoriteMapIds
+        },
+        mapCatalogVersion: mapCatalog.version,
+        favoriteMapId: activeFavoriteIds[0],
         civilizationPreference: {
           mode: civilizationMode,
           civilization: civilizationMode === "pick" ? civilization : undefined
@@ -129,7 +183,7 @@ export function QueuePage() {
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [civilization, civilizationMode, favoriteMaps, isSearching, selectedMaps, selectedQueue]);
+  }, [civilization, civilizationMode, enabledGroups, favoriteMaps, isSearching, selectedMaps, selectedQueue]);
 
   if (["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus)) {
     return <LobbyPreparation />;
@@ -179,17 +233,22 @@ export function QueuePage() {
                   <div><span>Civilization</span><strong>{civilizationMode === "pick"
                     ? civilization
                     : civilizationModes.find((mode) => mode.id === civilizationMode)?.label}</strong></div>
-                  <div><span>Maps enabled</span><strong>{selectedMaps[selectedQueue.id]?.length ?? 0}</strong></div>
-                  <div><span>Preferred map</span><strong>{selectedQueue.mapPool.find((map) => map.id === favoriteMaps[selectedQueue.id])?.name ?? "None"}</strong></div>
+                  <div><span>Maps enabled</span><strong>{activeMapIds.length}</strong></div>
+                  <div><span>Favorites</span><strong>{favoriteNames || "None"}</strong></div>
                 </div>
                 <button
                   className="queue-search-button"
                   type="button"
-                  disabled={!canStartQueue || (selectedMaps[selectedQueue.id]?.length ?? 0) === 0}
+                  disabled={!canStartQueue || activeMapIds.length === 0}
                   onClick={() => void startQueue({
                     ...selectedQueue,
-                    mapPool: selectedQueue.mapPool.filter((map) => selectedMaps[selectedQueue.id]?.includes(map.id)),
-                    favoriteMapId: favoriteMaps[selectedQueue.id],
+                    mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
+                    mapPreferences: {
+                      enabledGroupIds: enabledGroups[selectedQueue.id] ?? [],
+                      favoriteMapIds: activeFavoriteMapIds
+                    },
+                    mapCatalogVersion: mapCatalog.version,
+                    favoriteMapId: activeFavoriteIds[0],
                     civilizationPreference: {
                       mode: civilizationMode,
                       civilization: civilizationMode === "pick" ? civilization : undefined
@@ -283,15 +342,17 @@ export function QueuePage() {
                     <span className="eyebrow">Map pool</span>
                   </div>
                   <span className="selection-count">
-                    {selectedMaps[selectedQueue.id]?.length ?? 0} of {selectedQueue.mapPool.length} enabled
+                    {activeMapIds.length} maps across {enabledGroups[selectedQueue.id]?.length ?? 0} groups
                   </span>
                 </div>
-                <MapPool
-                  maps={selectedQueue.mapPool}
+                <GroupedMapPool
+                  groups={mapGroups}
+                  enabledGroupIds={enabledGroups[selectedQueue.id] ?? []}
                   selectedMapIds={selectedMaps[selectedQueue.id] ?? []}
-                  onToggle={(mapId) => toggleMap(selectedQueue.id, mapId)}
-                  favoriteMapId={favoriteMaps[selectedQueue.id]}
-                  onFavorite={(mapId) => toggleFavorite(selectedQueue.id, mapId)}
+                  favoriteMapIds={favoriteMaps[selectedQueue.id] ?? {}}
+                  onToggleGroup={(groupId) => toggleGroup(selectedQueue.id, groupId)}
+                  onToggleMap={(groupId, mapId) => toggleMap(selectedQueue.id, groupId, mapId)}
+                  onFavorite={(groupId, mapId) => toggleFavorite(selectedQueue.id, groupId, mapId)}
                   disabled={preferencesLocked}
                 />
               </div>
@@ -311,17 +372,22 @@ export function QueuePage() {
                       : civilizationModes.find((mode) => mode.id === civilizationMode)?.label}
                   </strong>
                 </div>
-                <div><span>Maps enabled</span><strong>{selectedMaps[selectedQueue.id]?.length ?? 0}</strong></div>
-                <div><span>Preferred map</span><strong>{selectedQueue.mapPool.find((map) => map.id === favoriteMaps[selectedQueue.id])?.name ?? "None"}</strong></div>
+                <div><span>Maps enabled</span><strong>{activeMapIds.length}</strong></div>
+                <div><span>Favorites</span><strong>{favoriteNames || "None"}</strong></div>
               </div>
               <button
                   className="queue-search-button"
                   type="button"
-                  disabled={!canStartQueue || (selectedMaps[selectedQueue.id]?.length ?? 0) === 0}
+                  disabled={!canStartQueue || activeMapIds.length === 0}
                   onClick={() => void startQueue({
                     ...selectedQueue,
-                    mapPool: selectedQueue.mapPool.filter((map) => selectedMaps[selectedQueue.id]?.includes(map.id)),
-                    favoriteMapId: favoriteMaps[selectedQueue.id],
+                    mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
+                    mapPreferences: {
+                      enabledGroupIds: enabledGroups[selectedQueue.id] ?? [],
+                      favoriteMapIds: activeFavoriteMapIds
+                    },
+                    mapCatalogVersion: mapCatalog.version,
+                    favoriteMapId: activeFavoriteIds[0],
                     civilizationPreference: {
                       mode: civilizationMode,
                       civilization: civilizationMode === "pick"

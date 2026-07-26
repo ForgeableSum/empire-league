@@ -1,0 +1,94 @@
+import { Star } from "lucide-react";
+import type { MapGroupId } from "../../../shared/contracts/matchmaking";
+import type { RenderedMapGroupDefinition } from "../../mocks/mockPlayers";
+
+interface GroupedMapPoolProps {
+  groups: RenderedMapGroupDefinition[];
+  enabledGroupIds: MapGroupId[];
+  selectedMapIds: string[];
+  favoriteMapIds: Partial<Record<MapGroupId, string>>;
+  onToggleGroup: (groupId: MapGroupId) => void;
+  onToggleMap: (groupId: MapGroupId, mapId: string) => void;
+  onFavorite: (groupId: MapGroupId, mapId: string) => void;
+  disabled?: boolean;
+}
+
+export function GroupedMapPool({
+  groups,
+  enabledGroupIds,
+  selectedMapIds,
+  favoriteMapIds,
+  onToggleGroup,
+  onToggleMap,
+  onFavorite,
+  disabled = false
+}: GroupedMapPoolProps) {
+  return (
+    <div className="grouped-map-pool">
+      {groups.map((group) => {
+        const groupEnabled = enabledGroupIds.includes(group.id);
+        return (
+          <section className={groupEnabled ? "map-group enabled" : "map-group"} key={group.id}>
+            <header className="map-group-header">
+              <div>
+                <strong>{group.name}</strong>
+                <span>{group.description}</span>
+              </div>
+              <label className="group-switch">
+                <input
+                  type="checkbox"
+                  checked={groupEnabled}
+                  disabled={disabled}
+                  onChange={() => onToggleGroup(group.id)}
+                />
+                <span aria-hidden="true" />
+                <small>{groupEnabled ? "Enabled" : "Disabled"}</small>
+              </label>
+            </header>
+            <div className="map-group-grid">
+              {group.maps.map((map, index) => {
+                const primary = map.id === group.primaryMapId;
+                const selected = groupEnabled && selectedMapIds.includes(map.id);
+                const favorite = favoriteMapIds[group.id] === map.id;
+                return (
+                  <article
+                    className={`group-map ${primary ? "primary" : ""} ${selected ? "selected" : ""}`}
+                    key={map.id}
+                  >
+                    <button
+                      className="group-map-select"
+                      type="button"
+                      aria-pressed={selected}
+                      aria-label={`${selected ? "Exclude" : "Include"} ${map.name}`}
+                      disabled={disabled || !groupEnabled}
+                      onClick={() => onToggleMap(group.id, map.id)}
+                    >
+                      <img src={map.thumbnailUrl} alt="" />
+                      <span className="group-map-shade" />
+                      <span className="group-map-name">
+                        <strong>{map.name}</strong>
+                        {primary && <small>Primary map</small>}
+                      </span>
+                      {!selected && <span className="map-off-label">{groupEnabled ? "Off" : "Group off"}</span>}
+                    </button>
+                    <button
+                      className={favorite ? "map-favorite active" : "map-favorite"}
+                      type="button"
+                      disabled={disabled || !groupEnabled}
+                      aria-pressed={favorite}
+                      aria-label={`${favorite ? "Remove" : "Favorite"} ${map.name}`}
+                      title={favorite ? "Remove favorite" : `Favorite ${map.name}`}
+                      onClick={() => onFavorite(group.id, map.id)}
+                    >
+                      <Star size={index === 0 ? 18 : 15} fill={favorite ? "currentColor" : "none"} />
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}

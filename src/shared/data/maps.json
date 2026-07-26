@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "id": "land-open",
+      "name": "Land Open",
+      "description": "Fast starts, exposed resources, and room to raid.",
+      "primaryMapId": "arabia"
+    },
+    {
+      "id": "land-closed",
+      "name": "Land Closed",
+      "description": "Defensible starts with time to build and boom.",
+      "primaryMapId": "arena"
+    },
+    {
+      "id": "water",
+      "name": "Water",
+      "description": "Dock play, contested shorelines, and mixed armies.",
+      "primaryMapId": "four-lakes"
+    }
+  ],
+  "maps": [
+    {
+      "id": "arabia",
+      "name": "Arabia",
+      "gameMapName": "Arabia",
+      "style": "open",
+      "groupId": "land-open",
+      "imageAsset": "arabia.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Arabia"
+    },
+    {
+      "id": "land-madness",
+      "name": "Land Madness",
+      "gameMapName": "Land Madness",
+      "style": "open",
+      "groupId": "land-open",
+      "imageAsset": "land-madness.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Land_Madness"
+    },
+    {
+      "id": "acropolis",
+      "name": "Acropolis",
+      "gameMapName": "Acropolis",
+      "style": "open",
+      "groupId": "land-open",
+      "imageAsset": "acropolis.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Acropolis"
+    },
+    {
+      "id": "atacama",
+      "name": "Atacama",
+      "gameMapName": "Atacama",
+      "style": "open",
+      "groupId": "land-open",
+      "imageAsset": "atacama.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Atacama"
+    },
+    {
+      "id": "gold-rush",
+      "name": "Gold Rush",
+      "gameMapName": "Gold Rush",
+      "style": "open",
+      "groupId": "land-open",
+      "imageAsset": "gold-rush.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Gold_Rush"
+    },
+    {
+      "id": "arena",
+      "name": "Arena",
+      "gameMapName": "Arena",
+      "style": "closed",
+      "groupId": "land-closed",
+      "imageAsset": "arena.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Arena_(map)"
+    },
+    {
+      "id": "fortified-clearing",
+      "name": "Fortified Clearing",
+      "gameMapName": "Fortified Clearing",
+      "style": "closed",
+      "groupId": "land-closed",
+      "imageAsset": "fortified-clearing.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Fortified_Clearing"
+    },
+    {
+      "id": "hideout",
+      "name": "Hideout",
+      "gameMapName": "Hideout",
+      "style": "closed",
+      "groupId": "land-closed",
+      "imageAsset": "hideout.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Hideout"
+    },
+    {
+      "id": "black-forest",
+      "name": "Black Forest",
+      "gameMapName": "Black Forest",
+      "style": "closed",
+      "groupId": "land-closed",
+      "imageAsset": "black-forest.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Black_Forest"
+    },
+    {
+      "id": "michi",
+      "name": "Michi",
+      "gameMapName": "Michi",
+      "style": "closed",
+      "groupId": "land-closed",
+      "imageAsset": "michi.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Michi"
+    },
+    {
+      "id": "four-lakes",
+      "name": "Four Lakes",
+      "gameMapName": "Four Lakes",
+      "style": "hybrid",
+      "groupId": "water",
+      "imageAsset": "four-lakes.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Four_Lakes"
+    },
+    {
+      "id": "baltic",
+      "name": "Baltic",
+      "gameMapName": "Baltic",
+      "style": "water",
+      "groupId": "water",
+      "imageAsset": "baltic.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Baltic"
+    },
+    {
+      "id": "islands",
+      "name": "Islands",
+      "gameMapName": "Islands",
+      "style": "water",
+      "groupId": "water",
+      "imageAsset": "islands.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Islands"
+    },
+    {
+      "id": "mediterranean",
+      "name": "Mediterranean",
+      "gameMapName": "Mediterranean",
+      "style": "water",
+      "groupId": "water",
+      "imageAsset": "mediterranean.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Mediterranean"
+    },
+    {
+      "id": "golden-swamp",
+      "name": "Golden Swamp",
+      "gameMapName": "Golden Swamp",
+      "style": "hybrid",
+      "groupId": "water",
+      "imageAsset": "golden-swamp.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Golden_Swamp"
+    }
+  ]
+}

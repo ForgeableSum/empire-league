@@ -13,7 +13,8 @@
     "build": "tsc -p tsconfig.json && npm run build:electron && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "package": "npm run build && electron-builder --dir",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test:maps": "node --test src/map-catalog.test.mjs"
   },
   "dependencies": {
     "aoe2rec-js": "^0.1.22",

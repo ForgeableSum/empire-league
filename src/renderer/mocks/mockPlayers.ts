@@ -1,20 +1,55 @@
-import { getDivisionForRating, type MapDefinition, type MatchOutcome } from "../../shared/contracts/matchmaking";
+import { getDivisionForRating, type MapDefinition, type MapGroupDefinition, type MatchOutcome } from "../../shared/contracts/matchmaking";
+import { mapCatalog } from "../../shared/mapCatalog";
 import type { PlayerProfile } from "../../shared/contracts/players";
 import acropolisThumbnail from "../assets/maps/acropolis.png";
 import arabiaThumbnail from "../assets/maps/arabia.png";
 import arenaThumbnail from "../assets/maps/arena.png";
+import atacamaThumbnail from "../assets/maps/atacama.png";
+import balticThumbnail from "../assets/maps/baltic.png";
+import blackForestThumbnail from "../assets/maps/black-forest.png";
+import fortifiedClearingThumbnail from "../assets/maps/fortified-clearing.png";
+import fourLakesThumbnail from "../assets/maps/four-lakes.png";
+import goldenSwampThumbnail from "../assets/maps/golden-swamp.png";
 import goldRushThumbnail from "../assets/maps/gold-rush.png";
-import megaRandomThumbnail from "../assets/maps/megarandom.png";
-import nomadThumbnail from "../assets/maps/nomad.png";
+import hideoutThumbnail from "../assets/maps/hideout.png";
+import islandsThumbnail from "../assets/maps/islands.png";
+import landMadnessThumbnail from "../assets/maps/land-madness.png";
+import mediterraneanThumbnail from "../assets/maps/mediterranean.png";
+import michiThumbnail from "../assets/maps/michi.png";
 
-export const maps: MapDefinition[] = [
-  { id: "arabia", name: "Arabia", style: "open", thumbnailUrl: arabiaThumbnail },
-  { id: "arena", name: "Arena", style: "closed", thumbnailUrl: arenaThumbnail },
-  { id: "acropolis", name: "Acropolis", style: "open", thumbnailUrl: acropolisThumbnail },
-  { id: "gold-rush", name: "Gold Rush", style: "open", thumbnailUrl: goldRushThumbnail },
-  { id: "nomad", name: "Nomad", style: "nomad", thumbnailUrl: nomadThumbnail },
-  { id: "megarandom", name: "MegaRandom", style: "hybrid", thumbnailUrl: megaRandomThumbnail }
-];
+export interface RenderedMapGroupDefinition extends MapGroupDefinition {
+  maps: MapDefinition[];
+}
+
+const thumbnailByAsset: Record<string, string> = {
+  "arabia.png": arabiaThumbnail,
+  "land-madness.png": landMadnessThumbnail,
+  "acropolis.png": acropolisThumbnail,
+  "atacama.png": atacamaThumbnail,
+  "gold-rush.png": goldRushThumbnail,
+  "arena.png": arenaThumbnail,
+  "fortified-clearing.png": fortifiedClearingThumbnail,
+  "hideout.png": hideoutThumbnail,
+  "black-forest.png": blackForestThumbnail,
+  "michi.png": michiThumbnail,
+  "four-lakes.png": fourLakesThumbnail,
+  "baltic.png": balticThumbnail,
+  "islands.png": islandsThumbnail,
+  "mediterranean.png": mediterraneanThumbnail,
+  "golden-swamp.png": goldenSwampThumbnail
+};
+
+export const maps: MapDefinition[] = mapCatalog.maps.map((map) => ({
+  id: map.id,
+  name: map.name,
+  style: map.style,
+  thumbnailUrl: thumbnailByAsset[map.imageAsset]
+}));
+
+export const mapGroups: RenderedMapGroupDefinition[] = mapCatalog.groups.map((group) => ({
+  ...group,
+  maps: maps.filter((map) => mapCatalog.maps.find((entry) => entry.id === map.id)?.groupId === group.id)
+}));
 
 export const civilizations = [
   "Britons",

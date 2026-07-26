@@ -12,6 +12,7 @@ import {
   updateMatchStatus
 } from "./database.mjs";
 import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
+import { normalizeQueueMapPreferences, publicMapCatalog, selectMapForMatch } from "./map-catalog.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -212,19 +213,22 @@ async function tryMatch(ticket) {
     ? (opponent.joinedAt <= ticket.joinedAt ? opponent : ticket)
     : (opponent.canHost ? opponent : ticket);
   const guest = host.id === opponent.id ? ticket : opponent;
-  const availableMaps = sharedMapPool(host.queue, guest.queue);
+  const selectedMap = selectMapForMatch(host.queue, guest.queue);
+  if (!selectedMap) return;
   const match = {
     id: `match-${randomUUID().slice(0, 8)}`,
     host,
     guest,
     accepted: new Set(),
-    selectedMap: availableMaps[Math.floor(Math.random() * availableMaps.length)],
+    selectedMap,
     createdAt: new Date().toISOString(),
     acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
     lobby: null,
     guestLobbyReady: false,
     resultReports: new Map(),
-    resultResolved: false
+    resultResolved: false,
+    mapCatalogVersion: publicMapCatalog.version,
+    mapGroupId: publicMapCatalog.maps.find((map) => map.id === selectedMap.id)?.groupId ?? null
   };
   host.matchId = match.id;
   guest.matchId = match.id;
@@ -263,6 +267,10 @@ const server = createServer(async (request, response) => {
         },
         queued: [...tickets.values()].filter((ticket) => !ticket.matchId).length
       });
+    }
+
+    if (request.method === "GET" && url.pathname === "/maps") {
+      return send(response, 200, publicMapCatalog);
     }
 
     if (request.method === "POST" && url.pathname === "/auth/steam/start") {
@@ -309,8 +317,10 @@ const server = createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/queue") {
       const body = await readJson(request);
       if (!body.queue?.id) return send(response, 400, { error: "queue is required" });
-      if (!Array.isArray(body.queue.mapPool) || body.queue.mapPool.length === 0) {
-        return send(response, 400, { error: "at least one selected map is required" });
+      try {
+        body.queue = normalizeQueueMapPreferences(body.queue);
+      } catch (error) {
+        return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });
       }
       for (const [ticketId, ticket] of tickets) {
         if (ticket.player.id === authenticatedPlayer.id && ticket.matchId && matches.get(ticket.matchId)?.resultResolved) {
@@ -363,8 +373,10 @@ const server = createServer(async (request, response) => {
       if (!body.queue?.id || body.queue.id !== ticket.queueId) {
         return send(response, 400, { error: "the active queue cannot be changed" });
       }
-      if (!Array.isArray(body.queue.mapPool) || body.queue.mapPool.length === 0) {
-        return send(response, 400, { error: "at least one selected map is required" });
+      try {
+        body.queue = normalizeQueueMapPreferences(body.queue);
+      } catch (error) {
+        return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });
       }
       ticket.queue = body.queue;
       await tryMatch(ticket);

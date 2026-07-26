@@ -84,6 +84,20 @@ export interface MapDefinition {
   thumbnailUrl: string;
 }
 
+export type MapGroupId = "land-open" | "land-closed" | "water";
+
+export interface MapGroupDefinition {
+  id: MapGroupId;
+  name: string;
+  description: string;
+  primaryMapId: string;
+}
+
+export interface MapPreferences {
+  enabledGroupIds: MapGroupId[];
+  favoriteMapIds: Partial<Record<MapGroupId, string>>;
+}
+
 export type CivilizationMode = "pick" | "random" | "mirror" | "full-random";
 
 export interface CivilizationPreference {
@@ -98,6 +112,8 @@ export interface QueueDefinition {
   format: "1v1";
   ruleset: "Random Map" | "Empire Wars";
   mapPool: MapDefinition[];
+  mapPreferences?: MapPreferences;
+  mapCatalogVersion?: number;
   favoriteMapId?: string;
   civilizationPreference?: CivilizationPreference;
   ranked: boolean;

@@ -4,6 +4,7 @@ import { lobbySetupTiming } from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
+import { mapCatalog } from "../../shared/mapCatalog";
 import { maps, currentUser } from "../mocks/mockPlayers";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
 import { MockGameIntegrationService } from "../services/gameIntegrationService";
@@ -83,6 +84,11 @@ export const queueDefinitions: QueueDefinition[] = [
     format: "1v1",
     ruleset: "Random Map",
     mapPool: maps,
+    mapPreferences: {
+      enabledGroupIds: mapCatalog.groups.map((group) => group.id),
+      favoriteMapIds: {}
+    },
+    mapCatalogVersion: mapCatalog.version,
     ranked: true,
     estimatedWaitSeconds: 65,
     playersSearching: 128
@@ -94,6 +100,11 @@ export const queueDefinitions: QueueDefinition[] = [
     format: "1v1",
     ruleset: "Random Map",
     mapPool: maps,
+    mapPreferences: {
+      enabledGroupIds: mapCatalog.groups.map((group) => group.id),
+      favoriteMapIds: {}
+    },
+    mapCatalogVersion: mapCatalog.version,
     ranked: false,
     estimatedWaitSeconds: 90,
     playersSearching: 42

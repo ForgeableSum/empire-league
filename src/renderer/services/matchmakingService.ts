@@ -8,6 +8,7 @@ import type {
 } from "../../shared/contracts/matchmaking";
 import type { MockServiceConfig } from "../state/types";
 import { currentUser, maps, matchmakingOpponents } from "../mocks/mockPlayers";
+import { mapCatalog, selectMapFromQueues } from "../../shared/mapCatalog";
 import { delay } from "./timing";
 import { authorizationHeaders, matchmakerUrl } from "./authService";
 
@@ -191,6 +192,12 @@ export class MockMatchmakingService implements MatchmakingService {
       window.setTimeout(() => {
         const currentDefinition = this.queuedDefinitions.get(ticketId) ?? queuedDefinition;
         const selectedMaps = currentDefinition?.mapPool ?? maps;
+        const opponentDefinition = {
+          mapPool: maps,
+          mapPreferences: {
+            favoriteMapIds: {}
+          }
+        };
         const opponent = matchmakingOpponents[Math.floor(Math.random() * matchmakingOpponents.length)];
         const match: MatchSession = {
           id: `match-${crypto.randomUUID().slice(0, 8)}`,
@@ -202,6 +209,11 @@ export class MockMatchmakingService implements MatchmakingService {
             format: "1v1",
             ruleset: "Random Map",
             mapPool: maps,
+            mapPreferences: {
+              enabledGroupIds: mapCatalog.groups.map((group) => group.id),
+              favoriteMapIds: {}
+            },
+            mapCatalogVersion: mapCatalog.version,
             ranked: true,
             estimatedWaitSeconds: 65,
             playersSearching: 128
@@ -215,7 +227,10 @@ export class MockMatchmakingService implements MatchmakingService {
           acceptedByPlayer: false,
           acceptedByOpponent: false,
           acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
-          selectedMap: selectedMaps[Math.floor(Math.random() * selectedMaps.length)],
+          selectedMap: selectMapFromQueues(
+            currentDefinition ?? { mapPool: selectedMaps },
+            opponentDefinition
+          ),
           createdAt: new Date().toISOString()
         };
         listener({ type: "match_found", match });
