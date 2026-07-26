@@ -51,6 +51,10 @@
       {
         "from": "src/renderer/assets/el-2.png",
         "to": "icon.png"
+      },
+      {
+        "from": "assets/aoe2-maps",
+        "to": "aoe2-maps"
       }
     ],
     "mac": {

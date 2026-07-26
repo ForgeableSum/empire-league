@@ -23,8 +23,8 @@
   "maps": [
     {
       "id": "arabia",
-      "name": "Arabia",
-      "gameMapName": "Arabia",
+      "name": "KotD6 Arabia EL",
+      "gameMapName": "KotD6 Arabia EL",
       "style": "open",
       "groupId": "land-open",
       "imageAsset": "arabia.png",

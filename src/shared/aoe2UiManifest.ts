@@ -97,6 +97,7 @@ export const aoe2UiManifest = {
       Arabia: 0,
       Arena: 1,
       "Gold Rush": 0,
+      "KotD6 Arabia EL": 0,
       MegaRandom: 0,
       Nomad: 1
     } satisfies Record<string, number>,

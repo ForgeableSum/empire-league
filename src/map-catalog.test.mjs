@@ -17,7 +17,7 @@ test("canonicalizes client map metadata against the catalog", () => {
   const normalized = queue(["arabia"]);
   assert.deepEqual(normalized.mapPool[0], {
     id: "arabia",
-    name: "Arabia",
+    name: "KotD6 Arabia EL",
     style: "open",
     thumbnailUrl: ""
   });
