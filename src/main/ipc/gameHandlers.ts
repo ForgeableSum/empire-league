@@ -30,7 +30,6 @@ import {
   showMainWindowAsGameCover
 } from "../window.js";
 import {
-  clickAoe2DesignPoint,
   closeAoe2NativeWindow,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
@@ -1754,7 +1753,16 @@ export function registerGameHandlers(): void {
       if (!slotResult.sent) throw new Error(`Lobby slot ${slot} civilization button could not be opened.`);
       await delay(aoe2UiManifest.civilizationSlotButtons.settleMs);
 
-      const tileResult = await clickAoe2DesignPoint(gameProcess.pid, civilizationX, civilizationY);
+      const tileResult = await postAoe2DesignClick(
+        gameProcess.pid,
+        civilizationX,
+        civilizationY,
+        {
+          synchronous: true,
+          hoverMs: aoe2UiManifest.civilizationGrid.hoverMs,
+          holdMs: aoe2UiManifest.civilizationGrid.holdMs
+        }
+      );
       emitLog(`CIV_SELECT|Step=Tile|Selection=${selection}|DesignPoint=${civilizationX},${civilizationY}|${tileResult.detail}`);
       if (!tileResult.sent) throw new Error(`${selection} could not be selected.`);
       await delay(aoe2UiManifest.civilizationGrid.selectionSettleMs);
