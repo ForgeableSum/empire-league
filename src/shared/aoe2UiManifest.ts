@@ -79,13 +79,7 @@ export const aoe2UiManifest = {
     x: 1778,
     rowCenters: [555, 645, 735, 825, 915, 1005, 1095, 1185],
     activation: "click",
-    settleMs: 500
-  },
-  civilizationPicker: {
-    searchPoint: [375, 300] as const,
-    filteredCivilizationPoint: [1259, 515] as const,
-    searchSettleMs: 3_000,
-    tileSettleMs: 500
+    settleMs: 1_500
   },
   mapPicker: {
     openPoint: [3049, 725] as const,
@@ -108,6 +102,9 @@ export const aoe2UiManifest = {
     columns: 9,
     columnCenters: [248, 501, 755, 1007, 1259, 1512, 1764, 2018, 2271],
     rowCenters: [515, 767, 1020, 1272, 1524, 1776],
+    hoverMs: 250,
+    holdMs: 250,
+    selectionSettleMs: 1_000,
     selectorEntries: {
       Random: [0, 0],
       "Full Random": [1, 0],
