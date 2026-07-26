@@ -25,30 +25,26 @@ export async function checkDatabase() {
   return { ...serverRows[0], schemaVersion: migrationRows[0]?.version ?? null };
 }
 
-export async function saveMatch(match) {
-  const connection = await database.getConnection();
-  try {
-    await connection.beginTransaction();
-    await connection.execute(
-      `INSERT INTO matches
-        (id, queue_id, host_player_id, guest_player_id, selected_map_id, selected_map_name,
-         map_catalog_version, map_group_id, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'found', ?)`,
-      [match.id, match.host.queueId, match.host.player.id, match.guest.player.id,
-        match.selectedMap.id, match.selectedMap.name, match.mapCatalogVersion, match.mapGroupId,
-        new Date(match.createdAt)]
-    );
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-}
-
-export async function updateMatchStatus(matchId, status) {
-  await database.execute("UPDATE matches SET status = ? WHERE id = ?", [status, matchId]);
+async function insertDurableMatch(connection, match, status, completedAt = null) {
+  await connection.execute(
+    `INSERT INTO matches
+      (id, queue_id, host_player_id, guest_player_id, selected_map_id, selected_map_name,
+       map_catalog_version, map_group_id, status, created_at, completed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      match.id,
+      match.host.queueId,
+      match.host.player.id,
+      match.guest.player.id,
+      match.selectedMap.id,
+      match.selectedMap.name,
+      match.mapCatalogVersion,
+      match.mapGroupId,
+      status,
+      new Date(match.createdAt),
+      completedAt
+    ]
+  );
 }
 
 export async function linkPlayerAoeProfile(playerId, profileId) {
@@ -93,15 +89,12 @@ export async function recordVerifiedMatchResult(match, winnerProfileId) {
     const result = winner.id === match.host.player.id ? "host_win" : "guest_win";
     const completedAt = new Date();
 
+    await insertDurableMatch(connection, match, "completed", completedAt);
     await connection.execute(
       `INSERT INTO match_results
         (match_id, winner_player_id, result, verification_status, verified_at)
-       VALUES (?, ?, ?, 'verified', ?)`,
+      VALUES (?, ?, ?, 'verified', ?)`,
       [match.id, winner.id, result, completedAt]
-    );
-    await connection.execute(
-      "UPDATE matches SET status = 'completed', completed_at = ? WHERE id = ?",
-      [completedAt, match.id]
     );
     await connection.execute(
       `UPDATE players
@@ -142,6 +135,7 @@ export async function recordMatchResultConflict(match, { reason, implicatedTicke
   const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
+    await insertDurableMatch(connection, match, "cancelled");
     for (const ticketId of implicatedTicketIds) {
       const ticket = ticketId === match.host.id ? match.host : ticketId === match.guest.id ? match.guest : null;
       if (!ticket) continue;
@@ -165,10 +159,6 @@ export async function recordMatchResultConflict(match, { reason, implicatedTicke
         );
       }
     }
-    await connection.execute(
-      "UPDATE matches SET status = 'cancelled' WHERE id = ?",
-      [match.id]
-    );
     await connection.commit();
   } catch (error) {
     await connection.rollback();

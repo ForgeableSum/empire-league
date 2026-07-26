@@ -7,9 +7,7 @@ import {
   getPlayerMatchHistory,
   linkPlayerAoeProfile,
   recordMatchResultConflict,
-  recordVerifiedMatchResult,
-  saveMatch,
-  updateMatchStatus
+  recordVerifiedMatchResult
 } from "./database.mjs";
 import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
 import { normalizeQueueMapPreferences, publicMapCatalog, selectMapForMatch } from "./map-catalog.mjs";
@@ -259,7 +257,6 @@ async function tryMatch(ticket) {
   clearTimeout(host.matchSearchTimer);
   clearTimeout(guest.matchSearchTimer);
   matches.set(match.id, match);
-  await saveMatch(match);
   emit(host, { type: "match_found", match: sessionFor(match, host) });
   emit(guest, { type: "match_found", match: sessionFor(match, guest) });
   match.expirationTimer = setTimeout(() => {
@@ -271,7 +268,6 @@ async function tryMatch(ticket) {
 async function expireMatch(match) {
   if (match.accepted.size === 2 || !matches.has(match.id)) return;
   matches.delete(match.id);
-  await updateMatchStatus(match.id, "cancelled");
   emit(match.host, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
   emit(match.guest, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
 }
@@ -438,7 +434,6 @@ const server = createServer(async (request, response) => {
       match.accepted.add(body.ticketId);
       if (match.accepted.size === 2) {
         clearTimeout(match.expirationTimer);
-        await updateMatchStatus(match.id, "accepted");
         emit(match.host, { type: "opponent_accepted", matchId: match.id, role: "host" });
         emit(match.guest, { type: "opponent_accepted", matchId: match.id, role: "guest" });
       }
@@ -455,7 +450,6 @@ const server = createServer(async (request, response) => {
       }
       clearTimeout(match.expirationTimer);
       matches.delete(match.id);
-      await updateMatchStatus(match.id, "declined");
       emit(match.host, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
       emit(match.guest, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
       return send(response, 200, { declined: true });
@@ -469,7 +463,6 @@ const server = createServer(async (request, response) => {
         return send(response, 403, { error: "only the host may publish a lobby" });
       }
       match.lobby = body.lobby;
-      await updateMatchStatus(match.id, "lobby_ready");
       emit(match.guest, { type: "lobby_ready", matchId: match.id, lobby: match.lobby });
       return send(response, 200, { published: true });
     }
@@ -496,7 +489,6 @@ const server = createServer(async (request, response) => {
       if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
         return send(response, 403, { error: "only the host may report game start" });
       }
-      await updateMatchStatus(match.id, "in_game");
       emit(match.guest, { type: "game_started", matchId: match.id });
       return send(response, 200, { started: true });
     }
