@@ -1747,11 +1747,31 @@ export function registerGameHandlers(): void {
         return { sent: false, message: "The AoE2 process was not found." };
       }
       const [slotX, slotY] = civilizationSlotDesignPoint(slot);
-      const [civilizationX, civilizationY] = civilizationDesignPoint(selection);
       const slotResult = await postAoe2DesignClick(gameProcess.pid, slotX, slotY, { synchronous: true });
       emitLog(`CIV_SELECT|Step=Open|Slot=${slot}|DesignPoint=${slotX},${slotY}|${slotResult.detail}`);
       if (!slotResult.sent) throw new Error(`Lobby slot ${slot} civilization button could not be opened.`);
       await delay(aoe2UiManifest.civilizationSlotButtons.settleMs);
+
+      let civilizationX: number;
+      let civilizationY: number;
+      if (selection in aoe2UiManifest.civilizationGrid.entries) {
+        const searchPoint = aoe2UiManifest.civilizationPicker.searchPoint;
+        const searchFocus = await postAoe2DesignClick(
+          gameProcess.pid,
+          searchPoint[0],
+          searchPoint[1],
+          { synchronous: true }
+        );
+        emitLog(`CIV_SELECT|Step=SearchFocus|Selection=${selection}|${searchFocus.detail}`);
+        if (!searchFocus.sent) throw new Error("The civilization search field could not be focused.");
+        const searchText = await sendAoe2Text(gameProcess.pid, selection);
+        emitLog(`CIV_SELECT|Step=SearchText|Selection=${selection}|${searchText.detail}`);
+        if (!searchText.sent) throw new Error(`${selection} could not be entered in the civilization search.`);
+        await delay(aoe2UiManifest.civilizationPicker.searchSettleMs);
+        [civilizationX, civilizationY] = aoe2UiManifest.civilizationPicker.filteredCivilizationPoint;
+      } else {
+        [civilizationX, civilizationY] = civilizationDesignPoint(selection);
+      }
 
       const tileResult = await postAoe2DesignClick(
         gameProcess.pid,
@@ -1765,24 +1785,18 @@ export function registerGameHandlers(): void {
       );
       emitLog(`CIV_SELECT|Step=Tile|Selection=${selection}|DesignPoint=${civilizationX},${civilizationY}|${tileResult.detail}`);
       if (!tileResult.sent) throw new Error(`${selection} could not be selected.`);
-      await delay(aoe2UiManifest.civilizationGrid.selectionSettleMs);
+      await delay(aoe2UiManifest.civilizationPicker.selectionSettleMs);
 
-      const confirm = aoe2UiManifest.actions.confirmCivilization;
-      const confirmResult = await postAoe2DesignClick(
-        gameProcess.pid,
-        confirm.point[0],
-        confirm.point[1],
-        { synchronous: true }
-      );
-      emitLog(`CIV_SELECT|Step=Confirm|Selection=${selection}|${confirmResult.detail}`);
-      if (!confirmResult.sent) throw new Error("Civilization selection could not be confirmed.");
-      if (confirm.activation === "clickEnter") {
-        await delay(500);
-        const enter = await sendAoe2Enter(gameProcess.pid);
-        emitLog(`CIV_SELECT|Step=ConfirmEnter|${enter.detail}`);
-        if (!enter.sent) throw new Error("Civilization confirmation Enter could not be sent.");
+      const enter = await sendAoe2Enter(gameProcess.pid);
+      emitLog(`CIV_SELECT|Step=ConfirmEnter|Selection=${selection}|${enter.detail}`);
+      if (!enter.sent) throw new Error("Civilization confirmation Enter could not be sent.");
+      await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+
+      const lobbyState = readAoe2HostSetupState(gameProcess.pid);
+      emitLog(`CIV_SELECT|Step=VerifyReturn|Selection=${selection}|${lobbyState.detail}`);
+      if (lobbyState.state !== "lobby-room") {
+        throw new Error(`${selection} selection did not return to the lobby room.`);
       }
-      await delay(confirm.settleMs);
       emitLog(`CIV_SELECT|Complete=True|Selection=${selection}|Slot=${slot}`);
       return { sent: true, message: `${selection} selected for AoE2 lobby slot ${slot}.` };
     } catch (error) {

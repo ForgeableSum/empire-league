@@ -9,7 +9,7 @@ The checked-in source of truth is `src/shared/aoe2UiManifest.ts`. Coordinates ar
 - `click`: send `WM_MOUSEMOVE`, `WM_LBUTTONDOWN`, and `WM_LBUTTONUP` using the action's configured delivery mode.
 - `clickEnter`: post the click above, wait for AoE2 to select the widget, then synchronously dispatch Enter with a bounded timeout.
 
-Legacy buttons such as Multiplayer, Host Game, and Confirm Civilization require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, civilization tiles, and Copy respond to `click`.
+Legacy buttons such as Multiplayer and Host Game require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, civilization tiles, and Copy respond to `click`.
 
 Click timing is action-specific. General navigation uses a 100 ms hover and
 120 ms press. Ready and Start use a 250 ms hover and 250 ms press because the
@@ -28,9 +28,10 @@ lobby message loop can be throttled while AoE2 is in the background.
    4. Verify that the lobby screen is present again before continuing.
 6. Optionally select a civilization:
    1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
-   2. Wait for the picker to settle, then resolve the civilization name through `civilizationDesignPoint`.
-   3. Click the resulting grid point with the longer civilization-specific hover and hold timing.
-   4. `confirmCivilization` (`clickEnter`)
+   2. For a named civilization, enter its exact name in the picker search field.
+   3. Click the fixed first civilization result after the four generic selector options.
+   4. Dispatch Enter once to confirm the selected result and close the picker.
+   5. Verify that AoE2 returned to the lobby room.
 7. `copyLobbyUri` (`click`)
 8. Verify the clipboard matches `aoe2de://0/<digits>`.
 9. Publish that URI to the guest. This URI is the normal automated invitation path.
