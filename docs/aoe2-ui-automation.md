@@ -55,8 +55,8 @@ wrong screen.
 3. Wait for the lobby screen to settle.
 4. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), the shared grid, and `confirmCivilization`.
 5. Report that the guest joined so the host can ready and release custom lobby files.
-6. After the host-ready report, poll `guestReady`. When Ready is unavailable, attempt AoE2's unverified user-generated-content warning before polling Ready again.
-7. After a successful confirmation click, report content acceptance once so the host can verify and, if AoE2 cleared it, reapply Ready. The guest continues polling during this handshake.
+6. After the host-ready report, poll `guestReady`.
+7. Only when the selected map is listed in `customMapNames`, an unavailable Ready control triggers an attempt at AoE2's unverified user-generated-content warning. After a successful confirmation click, report content acceptance once so the host can verify and, if AoE2 cleared it, reapply Ready. The guest continues polling during this handshake.
 8. Continue until AoE2 enables and verifies the guest Ready control or the transfer timeout expires. The guest and host lobby layouts intentionally use different ready points.
 9. Report guest readiness to the matchmaker.
 10. Wait for the host to start the match.

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { aoe2UiManifest } from "../../shared/aoe2UiManifest";
 import type { MatchResult } from "../../shared/contracts/matches";
 import { lobbySetupTiming } from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
@@ -635,9 +636,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })();
         }
         if (event.type === "host_lobby_ready" && window.electronApi) {
+          const customContentFlow = isCustomLobbyMap(matchedSessionRef.current?.selectedMap?.name);
           setState((previous) => ({
             ...previous,
-            roomSetupMilestone: "Receiving lobby files"
+            roomSetupMilestone: customContentFlow ? "Receiving lobby files" : "Waiting for Ready"
           }));
           void (async () => {
             try {
@@ -647,7 +649,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               do {
                 await delayForLobbyInput(lobbySetupTiming.customMapTransferPollMs);
                 ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
-                if (!ready.sent) {
+                if (!ready.sent && customContentFlow) {
                   log("Guest Ready remains unavailable; checking for the unverified-content confirmation");
                   const confirmation = await window.electronApi!.runAoe2LobbyCursorAction("content-confirm");
                   if (!confirmation.sent) {
@@ -673,7 +675,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
           })();
         }
-        if (event.type === "guest_content_accepted" && window.electronApi) {
+        if (
+          event.type === "guest_content_accepted"
+          && window.electronApi
+          && isCustomLobbyMap(matchedSessionRef.current?.selectedMap?.name)
+        ) {
           setState((previous) => ({
             ...previous,
             roomSetupMilestone: "Opponent accepted lobby files — confirming host Ready"
@@ -1149,6 +1155,11 @@ function delayForStartup(milliseconds: number): Promise<void> {
 
 function delayForLobbyInput(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function isCustomLobbyMap(mapName?: string): boolean {
+  return mapName !== undefined
+    && (aoe2UiManifest.mapPicker.customMapNames as readonly string[]).includes(mapName);
 }
 
 function aoe2SelectionForPreference(
