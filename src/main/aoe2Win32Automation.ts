@@ -491,7 +491,12 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
   const [buttonRed, buttonGreen] = lowerButton;
   const hasReadyButton = (buttonRed > buttonGreen * 2 && buttonRed > 80)
     || (buttonGreen > buttonRed * 2 && buttonGreen > 80);
-  const state = hasReadyButton
+  // The host and guest Ready buttons sit at different heights. The lower
+  // sample therefore misses the guest button, but the lobby's parchment
+  // panels are stable in both layouts and distinct from the picker/dialog.
+  const hasLobbyParchment = leftRed > 150 && leftGreen > 110 && leftBlue > 70
+    && centerRed > 140 && centerGreen > 110 && centerBlue > 70;
+  const state = hasReadyButton || hasLobbyParchment
     ? "lobby-room"
     : centerRed < 50 && centerGreen < 50 && centerBlue < 50
       && leftRed > 100 && leftGreen > 50 && leftBlue < 30
