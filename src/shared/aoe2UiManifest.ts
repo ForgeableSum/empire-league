@@ -102,8 +102,6 @@ export const aoe2UiManifest = {
     columns: 9,
     columnCenters: [248, 501, 755, 1007, 1259, 1512, 1764, 2018, 2271],
     rowCenters: [515, 767, 1020, 1272, 1524, 1776],
-    hoverMs: 250,
-    holdMs: 250,
     selectionSettleMs: 1_000,
     selectorEntries: {
       Random: [0, 0],
