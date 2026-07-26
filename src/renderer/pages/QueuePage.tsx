@@ -37,7 +37,7 @@ const civilizationModes: Array<{
 ];
 
 export function QueuePage() {
-  const { state, queues, startQueue, updateActiveQueue, cancelQueue, clearError } = useAppStore();
+  const { state, queues, startQueue, updateActiveQueue, cancelQueue } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
   const [selectedQueueId, setSelectedQueueId] = useState(() => queues[0]?.id ?? "");
   const selectedQueue = queues.find((queue) => queue.id === selectedQueueId) ?? queues[0];
@@ -197,13 +197,6 @@ export function QueuePage() {
 
   return (
     <section className="stack queue-page">
-      {state.error && (
-        <div className="error-panel">
-          <strong>{state.error.message}</strong>
-          <span>{state.error.technicalDetails}</span>
-          <button type="button" onClick={clearError}>Dismiss</button>
-        </div>
-      )}
       {selectedQueue && (
         <div className="search-waiting-layout matchmaking-overview">
           <div className="search-state">

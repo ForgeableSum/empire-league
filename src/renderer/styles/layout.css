@@ -2077,7 +2077,7 @@
   min-height: 64px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   gap: 12px;
   padding: 14px 14px 16px;
   overflow: hidden;
@@ -2166,12 +2166,23 @@
 }
 
 .toast button {
+  flex: 0 0 32px;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
   background: transparent;
   color: var(--muted);
+}
+
+.toast button:hover {
+  border-color: var(--line);
+  color: var(--text);
 }
 
 .toast-progress {

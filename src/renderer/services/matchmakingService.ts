@@ -69,7 +69,9 @@ export class LocalMatchmakingService implements MatchmakingService {
           listener(item.event);
         }
       } catch (error) {
-        listener({ type: "error", code: "MATCHMAKER_UNAVAILABLE", message: error instanceof Error ? error.message : "Local matchmaker unavailable." });
+        if (!stopped) {
+          listener({ type: "error", code: "MATCHMAKER_UNAVAILABLE", message: error instanceof Error ? error.message : "Local matchmaker unavailable." });
+        }
         stopped = true;
       } finally {
         polling = false;

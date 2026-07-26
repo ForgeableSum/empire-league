@@ -8,6 +8,7 @@ export interface AppError {
   message: string;
   technicalDetails?: string;
   retryable: boolean;
+  notificationId?: string;
 }
 
 export interface MockServiceConfig {

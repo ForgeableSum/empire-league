@@ -432,7 +432,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   function dismissNotificationById(id: string): void {
     setState((previous) => ({
       ...previous,
-      notifications: previous.notifications.filter((item) => item.id !== id)
+      notifications: previous.notifications.filter((item) => item.id !== id),
+      error: previous.error?.notificationId === id ? null : previous.error,
+      queueStatus: previous.error?.notificationId === id && previous.queueStatus === "error"
+        ? "idle"
+        : previous.queueStatus
     }));
   }
 
@@ -444,8 +448,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   function setError(error: AppError): void {
-    setState((previous) => ({ ...previous, error, queueStatus: "error" }));
-    notify(error.message, "danger");
+    const notificationId = notify(error.message, "danger", {
+      detail: error.technicalDetails,
+      durationMs: null
+    });
+    setState((previous) => ({
+      ...previous,
+      error: { ...error, notificationId },
+      queueStatus: "error"
+    }));
   }
 
   async function startQueue(queue: QueueDefinition): Promise<void> {
@@ -674,12 +685,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function cancelQueue(): Promise<void> {
     clearRoomSetupWatchdog();
-    if (ticketRef.current) {
-      await services.matchmaking.leaveQueue(ticketRef.current);
-    }
     unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    const ticketId = ticketRef.current;
     ticketRef.current = null;
     queueJoinInFlightRef.current = false;
+    if (ticketId) {
+      await services.matchmaking.leaveQueue(ticketId).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : "";
+        if (message.toLowerCase().includes("ticket not found")) return;
+        log(`Queue cancellation could not be confirmed: ${message || "Unknown error"}`);
+        notify("The matchmaking server could not confirm cancellation", "danger", {
+          detail: message || undefined,
+          durationMs: null
+        });
+      });
+    }
     setState((previous) => ({
       ...previous,
       queueStatus: "cancelled",
@@ -991,7 +1012,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateSettings,
     notify,
     dismissNotification: dismissNotificationById,
-    clearError: () => setState((previous) => ({ ...previous, error: null, queueStatus: "idle" })),
+    clearError: () => setState((previous) => ({
+      ...previous,
+      error: null,
+      queueStatus: "idle",
+      notifications: previous.error?.notificationId
+        ? previous.notifications.filter((item) => item.id !== previous.error?.notificationId)
+        : previous.notifications
+    })),
     authStatus,
     authError,
     signInWithSteam,
