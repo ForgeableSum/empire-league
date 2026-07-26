@@ -450,7 +450,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }));
       setPage("play");
       log(`Joined queue ${queue.id}`);
-      notify("Queue started", "success");
       unsubscribeRef.current = services.matchmaking.subscribeToQueue(ticket.id, (event) => {
         if (event.type === "range") {
           setState((previous) => ({ ...previous, searchRange: { min: event.minRating, max: event.maxRating } }));
@@ -470,7 +469,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             activeMatch: matchedSession
           }));
           log(`Match found: ${event.match.id}`);
-          notify("Match found", "warning");
           if (state.settings.matchNotifications) {
             void window.electronApi?.alertMatchFound();
           }
@@ -785,7 +783,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState((previous) => ({ ...previous, queueStatus: "verifying_lobby" }));
       await services.game.verifyLobby(lobbyResult.lobby.platformLobbyId ?? match.id);
       log("Lobby verified");
-      notify("Lobby created and verified", "success");
       setState((previous) => ({
         ...previous,
         queueStatus: "ready",
@@ -889,7 +886,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notify("Result contested — no rating change", "warning");
     } else {
       log("Match result verified");
-      notify("Match result verified", "success");
     }
   }
 
