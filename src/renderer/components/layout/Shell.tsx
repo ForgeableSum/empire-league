@@ -1,6 +1,7 @@
 import { BarChart3, History, Home, LogOut, Play, Settings, User } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import appIcon from "../../assets/el-2.png";
+import { presenceService } from "../../services/presenceService";
 import { useAppStore, type AppPage } from "../../state/appStore";
 import { WindowControls } from "./WindowControls";
 
@@ -16,6 +17,26 @@ const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
 export function Shell({ children }: { children: ReactNode }) {
   const { page, setPage, state, signOut } = useAppStore();
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
+  const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      void presenceService.getOnlinePlayerCount()
+        .then((count) => {
+          if (!cancelled) setOnlinePlayers(count);
+        })
+        .catch(() => {
+          if (!cancelled) setOnlinePlayers(null);
+        });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   return (
     <div className="app-shell">
@@ -40,7 +61,12 @@ export function Shell({ children }: { children: ReactNode }) {
         </nav>
         <div className="sidebar-meta">
           <div><span>Season</span><strong>1</strong></div>
-          <div><span>Online</span><strong>8,314 players</strong></div>
+          {onlinePlayers !== null && onlinePlayers >= 300 && (
+            <div>
+              <span>Online</span>
+              <strong>{onlinePlayers.toLocaleString()} players</strong>
+            </div>
+          )}
           <div><span>Connection</span><strong className={`status-${state.connectionStatus}`}>{state.connectionStatus}</strong></div>
           <div><span>Version</span><strong>0.1.0</strong></div>
         </div>

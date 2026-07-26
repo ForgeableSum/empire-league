@@ -25,6 +25,18 @@ export async function checkDatabase() {
   return { ...serverRows[0], schemaVersion: migrationRows[0]?.version ?? null };
 }
 
+export async function getOnlinePlayerCount(activeWithinSeconds = 90) {
+  const safeSeconds = Math.max(1, Math.min(3600, Math.floor(Number(activeWithinSeconds) || 90)));
+  const [rows] = await database.query(
+    `SELECT COUNT(DISTINCT player_id) AS online_player_count
+     FROM auth_sessions
+     WHERE revoked_at IS NULL
+       AND expires_at > NOW(3)
+       AND last_used_at >= DATE_SUB(NOW(3), INTERVAL ${safeSeconds} SECOND)`
+  );
+  return Number(rows[0]?.online_player_count ?? 0);
+}
+
 async function insertDurableMatch(connection, match, status, completedAt = null) {
   await connection.execute(
     `INSERT INTO matches

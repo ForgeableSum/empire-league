@@ -4,6 +4,7 @@ import {
   database,
   checkDatabase,
   getLeaderboard,
+  getOnlinePlayerCount,
   getPlayerMatchHistory,
   linkPlayerAoeProfile,
   recordMatchResultConflict,
@@ -327,6 +328,10 @@ const server = createServer(async (request, response) => {
 
     const authenticatedPlayer = await authenticate(request);
     if (!authenticatedPlayer) return send(response, 401, { error: "authentication required" });
+
+    if (request.method === "GET" && url.pathname === "/online") {
+      return send(response, 200, { onlinePlayers: await getOnlinePlayerCount() });
+    }
 
     if (request.method === "GET" && url.pathname === "/matches/history") {
       return send(response, 200, { matches: await getPlayerMatchHistory(authenticatedPlayer.id) });
