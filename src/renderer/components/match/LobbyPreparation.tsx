@@ -1,12 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import civBonuses from "../../../shared/civBonuses.json";
-import { aoe2UiManifest } from "../../../shared/aoe2UiManifest";
 import type { CivilizationPreference } from "../../../shared/contracts/matchmaking";
-import {
-  customMapLobbySetupCountdownMs,
-  lobbySetupCountdownMs
-} from "../../../shared/runtimeConfig";
 import { useAppStore } from "../../state/appStore";
 import { YouTubeShorts } from "./YouTubeShorts";
 
@@ -15,10 +10,7 @@ type CivilizationName = keyof typeof civBonuses;
 export function LobbyPreparation() {
   const { state, prepareLobby } = useAppStore();
   const match = state.activeMatch;
-  const countdownMs = (aoe2UiManifest.mapPicker.customMapNames as readonly string[])
-    .includes(match?.selectedMap?.name ?? "")
-    ? customMapLobbySetupCountdownMs
-    : lobbySetupCountdownMs;
+  const countdownMs = state.roomSetupEstimateMs ?? 60_000;
   const [remaining, setRemaining] = useState(() => getRemaining(state.roomSetupStartedAt, countdownMs));
   const playerCivilization = resolveCivilization(
     match?.queue.civilizationPreference,

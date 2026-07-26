@@ -15,6 +15,7 @@ import { nowLog } from "../services/timing";
 import { authService } from "../services/authService";
 import { matchHistoryService } from "../services/matchHistoryService";
 import { parseReplayMetadata } from "../services/replayMetadataService";
+import { estimateLobbySetupMs, recordLobbySetupDuration } from "../services/lobbyTimingService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
 
@@ -125,6 +126,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     selectedQueue: null,
     queueStartedAt: null,
     roomSetupStartedAt: null,
+    roomSetupEstimateMs: null,
     roomSetupMilestone: null,
     activeMatch: null,
     recentMatches: [],
@@ -503,6 +505,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         selectedQueue: queue,
         queueStartedAt: ticket.joinedAt,
         roomSetupStartedAt: null,
+        roomSetupEstimateMs: null,
         roomSetupMilestone: null,
         queueStatus: "searching",
         activeMatch: null,
@@ -525,6 +528,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ...previous,
             queueStatus: "match_found",
             roomSetupStartedAt: null,
+            roomSetupEstimateMs: null,
             roomSetupMilestone: null,
             activeMatch: matchedSession
           }));
@@ -549,6 +553,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ...previous,
             queueStatus: event.role === "host" ? "creating_lobby" : "waiting_for_opponent",
             roomSetupStartedAt: new Date().toISOString(),
+            roomSetupEstimateMs: estimateLobbySetupMs(acceptedSession),
             roomSetupMilestone: event.role === "host"
               ? "Setting up lobby room"
               : "Waiting for the host to set up the lobby room",
@@ -802,6 +807,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       selectedQueue: null,
       queueStartedAt: null,
       roomSetupStartedAt: null,
+      roomSetupEstimateMs: null,
       roomSetupMilestone: null
     }));
     log("Queue cancelled");
@@ -1074,6 +1080,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     await stopYouTubeShorts();
     await window.electronApi.focusAoe2();
+    const completedState = stateRef.current;
+    if (completedState.activeMatch && completedState.roomSetupStartedAt) {
+      recordLobbySetupDuration(
+        completedState.activeMatch,
+        Date.now() - new Date(completedState.roomSetupStartedAt).getTime()
+      );
+    }
     setState((previous) => ({
       ...previous,
       queueStatus: "in_game",

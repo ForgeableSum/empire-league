@@ -65,6 +65,7 @@ export interface AppState {
   selectedQueue: QueueDefinition | null;
   queueStartedAt: string | null;
   roomSetupStartedAt: string | null;
+  roomSetupEstimateMs: number | null;
   roomSetupMilestone: string | null;
   activeMatch: MatchSession | null;
   recentMatches: MatchSummary[];
