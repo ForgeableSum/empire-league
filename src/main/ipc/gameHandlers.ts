@@ -34,6 +34,7 @@ import {
   closeAoe2NativeWindow,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
+  setWindowsInputBlocked,
   isAoe2NativeWindowForeground,
   postAoe2DesignClick,
   readAoe2HostSetupState,
@@ -50,6 +51,7 @@ let launchRequested = false;
 let ownedAoe2Pid: number | undefined;
 let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
+let inputGuardProcess: ChildProcess | undefined;
 let offscreenWindowProcess: ChildProcess | undefined;
 let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
@@ -546,7 +548,7 @@ public static class AoeInputGuard {
         && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
       if (emergency) {
         PostThreadMessage(guardThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
-      } else if (GetForegroundWindow() == targetWindow) {
+      } else {
         return new IntPtr(1);
       }
     }
@@ -555,11 +557,7 @@ public static class AoeInputGuard {
 
   private static IntPtr OnMouse(int code, IntPtr wParam, IntPtr lParam) {
     if (code >= 0) {
-      MouseHookData data = Marshal.PtrToStructure<MouseHookData>(lParam);
-      IntPtr pointedWindow = GetAncestor(WindowFromPoint(data.Point), GA_ROOT);
-      if (GetForegroundWindow() == targetWindow || pointedWindow == targetWindow) {
-        return new IntPtr(1);
-      }
+      return new IntPtr(1);
     }
     return CallNextHookEx(mouseHook, code, wParam, lParam);
   }
@@ -578,6 +576,46 @@ if (-not $game) { Write-Output 'GUARD_ERROR|AoE2 process not found'; exit 2 }
 $exitCode = [AoeInputGuard]::Run([uint32]$game.Id)
 exit $exitCode
 `;
+
+function stopInputGuard(): void {
+  const guard = inputGuardProcess;
+  inputGuardProcess = undefined;
+  guard?.kill();
+}
+
+async function startInputGuard(): Promise<boolean> {
+  if (inputGuardProcess && !inputGuardProcess.killed) return true;
+  const encodedScript = Buffer.from(inputGuardScript, "utf16le").toString("base64");
+  const child = spawn("powershell.exe", [
+    "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
+  ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+  inputGuardProcess = child;
+  child.stderr?.on("data", (chunk: Buffer) => {
+    console.error(`[AoE2 automation] INPUT_GUARD_ERROR|${chunk.toString().trim()}`);
+  });
+  child.once("exit", (code) => {
+    if (inputGuardProcess === child) inputGuardProcess = undefined;
+    console.info(`[AoE2 automation] INPUT_GUARD_EXIT|Code=${code ?? "null"}`);
+  });
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(ready);
+    };
+    child.stdout?.on("data", (chunk: Buffer) => {
+      const output = chunk.toString();
+      output.split(/\r?\n/).filter(Boolean).forEach((message) => {
+        console.info(`[AoE2 automation] INPUT_GUARD|${message}`);
+        if (message.includes("GUARD_READY")) finish(true);
+        if (message.includes("GUARD_ERROR")) finish(false);
+      });
+    });
+    child.once("exit", () => finish(false));
+    setTimeout(() => finish(false), 5_000);
+  });
+}
 
 const createLobbySequenceScript = String.raw`
 $ProgressPreference = 'SilentlyContinue'
@@ -1314,6 +1352,20 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 }
 
 export function registerGameHandlers(): void {
+  ipcMain.handle("game:set-lobby-input-lock", async (event, locked: boolean) => {
+    const requested = locked === true;
+    const applied = setWindowsInputBlocked(requested);
+    const guardApplied = requested ? await startInputGuard() : (stopInputGuard(), false);
+    console.info(`[AoE2 automation] INPUT_LOCK|Requested=${requested}|BlockInput=${applied}|Guard=${guardApplied}|Source=Renderer`);
+    if (requested && (applied || guardApplied)) {
+      event.sender.once("destroyed", () => {
+        setWindowsInputBlocked(false);
+        stopInputGuard();
+      });
+    }
+    return { locked: requested && (applied || guardApplied) };
+  });
+
   app.on("before-quit", (event) => {
     stopReplayEndDetection();
     if ((!ownedAoe2Pid && !launchRequested) || quittingAfterGameCleanup) return;
@@ -1526,6 +1578,7 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:run-create-lobby-sequence", async (event, mapName: string) => {
     stopTabTest();
+    setMouseCoordinateOverlayEnabled(false);
     const normalizedMapName = typeof mapName === "string" ? mapName.trim() : "";
     if (process.platform !== "win32") {
       return { sent: false, message: "Lobby automation is only supported on Windows." };
@@ -1542,6 +1595,9 @@ export function registerGameHandlers(): void {
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
+      const inputBlocked = setWindowsInputBlocked(true);
+      const inputGuardStarted = await startInputGuard();
+      emitLog(`INPUT_LOCK|Requested=True|BlockInput=${inputBlocked}|Guard=${inputGuardStarted}|Source=CreateLobby`);
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
@@ -1596,10 +1652,23 @@ export function registerGameHandlers(): void {
         await performAction(1);
         if (!expectedState) return;
         let verification = readAoe2HostSetupState(process.pid as number);
+        const verificationDeadline = Date.now() + 15_000;
+        while (verification.state !== expectedState && Date.now() < verificationDeadline) {
+          await delay(250);
+          verification = readAoe2HostSetupState(process.pid as number);
+        }
         emitLog(`STEP_VERIFY|${action.label}|Attempt=1|Expected=${expectedState}|${verification.detail}`);
+        if (verification.state === "unknown") {
+          throw new Error(`${action.label} could not be verified after waiting for AoE2; no retry input was sent.`);
+        }
         if (verification.state !== expectedState) {
           await performAction(2);
           verification = readAoe2HostSetupState(process.pid as number);
+          const retryVerificationDeadline = Date.now() + 15_000;
+          while (verification.state !== expectedState && Date.now() < retryVerificationDeadline) {
+            await delay(250);
+            verification = readAoe2HostSetupState(process.pid as number);
+          }
           emitLog(`STEP_VERIFY|${action.label}|Attempt=2|Expected=${expectedState}|${verification.detail}`);
         }
         if (verification.state !== expectedState) {
@@ -1685,6 +1754,8 @@ export function registerGameHandlers(): void {
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
+      const inputGuardStarted = await startInputGuard();
+      console.info(`[AoE2 automation] INPUT_LOCK|Requested=True|Guard=${inputGuardStarted}|Source=LobbyAction|Target=${target}`);
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
         return { sent: false, message: "The AoE2 process was not found." };
@@ -1749,10 +1820,6 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
       const sent = result.sent && (!verifiesReady || readyState?.state === "ready");
-      if (target === "start" && sent) {
-        hideMainWindowGameCover();
-        focusAoe2NativeWindow(process.pid);
-      }
       return {
         sent,
         message: sent
@@ -1973,6 +2040,8 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    const inputGuardStarted = await startInputGuard();
+    console.info(`[AoE2 automation] INPUT_LOCK|Requested=True|Guard=${inputGuardStarted}|Source=GuestOpenLobby`);
     await shell.openExternal(lobbyId);
     // Steam hands the URI to AoE2 asynchronously. Give the game time to
     // navigate to and finish joining the lobby before Ready automation.

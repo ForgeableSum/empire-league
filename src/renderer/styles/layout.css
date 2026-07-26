@@ -1934,6 +1934,25 @@
   color: var(--accent-2);
 }
 
+.lobby-input-lock-notice {
+  width: fit-content;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border: 1px solid rgba(198, 159, 86, 0.35);
+  border-radius: 999px;
+  background: rgba(198, 159, 86, 0.09);
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.game-transition-input-locked,
+.game-transition-input-locked * {
+  cursor: none !important;
+}
+
 .spin {
   animation: spin 1s linear infinite;
 }

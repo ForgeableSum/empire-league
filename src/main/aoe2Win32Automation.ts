@@ -149,6 +149,11 @@ export function minimizeAoe2NativeWindow(processId: number): boolean {
   return Boolean(window) && Boolean(ShowWindow!(window, 7));
 }
 
+export function setWindowsInputBlocked(blocked: boolean): boolean {
+  if (process.platform !== "win32" || !BlockInput) return false;
+  return Boolean(BlockInput(blocked));
+}
+
 export function restoreAoe2NativeWindowBehind(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);

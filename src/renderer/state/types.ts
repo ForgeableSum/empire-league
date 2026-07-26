@@ -68,6 +68,7 @@ export interface AppState {
   roomSetupStartedAt: string | null;
   roomSetupEstimateMs: number | null;
   roomSetupMilestone: string | null;
+  transitionInputLocked: boolean;
   activeMatch: MatchSession | null;
   recentMatches: MatchSummary[];
   connectionStatus: "online" | "degraded" | "offline";

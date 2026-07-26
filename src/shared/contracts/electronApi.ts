@@ -20,6 +20,7 @@ export interface ElectronGameApi {
   closeAoe2(force: boolean): Promise<GameCloseResult>;
   launchAoe2(): Promise<GameLaunchResult>;
   focusAoe2(): Promise<GameFocusResult>;
+  setLobbyInputLock(locked: boolean): Promise<{ locked: boolean }>;
   startReplayEndDetection(replayFolder?: string): Promise<{ started: boolean; message?: string }>;
   stopReplayEndDetection(): Promise<void>;
   onReplayEnded(listener: (filePath: string) => void): () => void;

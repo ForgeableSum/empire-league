@@ -7,6 +7,7 @@ const electronApi: ElectronGameApi = {
   closeAoe2: (force) => ipcRenderer.invoke("game:close", force),
   launchAoe2: () => ipcRenderer.invoke("game:launch"),
   focusAoe2: () => ipcRenderer.invoke("game:focus"),
+  setLobbyInputLock: (locked) => ipcRenderer.invoke("game:set-lobby-input-lock", locked),
   startReplayEndDetection: (replayFolder) => ipcRenderer.invoke("game:start-replay-end-detection", replayFolder),
   stopReplayEndDetection: () => ipcRenderer.invoke("game:stop-replay-end-detection"),
   onReplayEnded: (listener) => {

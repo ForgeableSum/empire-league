@@ -128,6 +128,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     roomSetupStartedAt: null,
     roomSetupEstimateMs: null,
     roomSetupMilestone: null,
+    transitionInputLocked: false,
     activeMatch: null,
     recentMatches: [],
     connectionStatus: "online",
@@ -726,6 +727,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 queueStatus: "ready",
                 gameStatus: "in_match",
                 roomSetupMilestone: "Starting game",
+                transitionInputLocked: true,
                 activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "ready" } : null
               }));
               await services.matchmaking.reportGameStarted(event.matchId);
@@ -743,6 +745,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             queueStatus: "ready",
             gameStatus: "in_match",
             roomSetupMilestone: "Starting game",
+            transitionInputLocked: true,
             activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "ready" } : null
           }));
           log("Host started the game");
@@ -1114,6 +1117,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...previous,
       queueStatus: "in_game",
       roomSetupMilestone: null,
+      transitionInputLocked: false,
       activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
     }));
     log("Showing AoE2 after game start");
