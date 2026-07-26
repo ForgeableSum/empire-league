@@ -184,6 +184,7 @@ function sessionFor(match, ticket) {
     id: match.id,
     status: "match_found",
     queue: ticket.queue,
+    opponentCivilizationPreference: opponent.queue.civilizationPreference,
     player: ticket.player,
     opponent: opponent.player,
     role: match.host.id === ticket.id ? "host" : "guest",

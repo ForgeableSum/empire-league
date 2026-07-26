@@ -206,6 +206,10 @@ export class MockMatchmakingService implements MatchmakingService {
             estimatedWaitSeconds: 65,
             playersSearching: 128
           },
+          opponentCivilizationPreference: {
+            mode: "pick",
+            civilization: "Franks"
+          },
           player: currentUser,
           opponent,
           acceptedByPlayer: false,

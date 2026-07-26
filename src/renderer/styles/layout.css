@@ -1175,6 +1175,107 @@
   min-width: 0;
 }
 
+.civilization-matchup {
+  display: grid;
+  grid-column: 1;
+  grid-row: 2;
+  grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+}
+
+.civilization-versus {
+  display: grid;
+  place-items: center;
+  color: var(--accent-2);
+  font-size: 1.45rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.civ-bonus-card {
+  min-width: 0;
+  padding: 28px 24px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 44%),
+    var(--panel);
+  text-align: left;
+}
+
+.civ-bonus-card.opponent {
+  background:
+    linear-gradient(210deg, color-mix(in srgb, var(--danger) 9%, transparent), transparent 44%),
+    var(--panel);
+}
+
+.civ-bonus-card h3 {
+  margin: 7px 0 20px;
+  color: var(--text);
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+}
+
+.civ-bonus-card ul {
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.civ-bonus-card li {
+  position: relative;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.civ-bonus-card li::before {
+  content: "";
+  position: absolute;
+  top: 0.55em;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.civ-bonus-card.opponent li::before {
+  background: var(--danger);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--danger) 65%, transparent);
+}
+
+.team-bonus {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.team-bonus span {
+  color: var(--accent-2);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.team-bonus p,
+.civ-bonus-unavailable {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
 .matchmaking-overview .search-state,
 .matchmaking-overview .shorts-panel {
   min-height: 440px;
@@ -1946,6 +2047,15 @@
 
   .search-waiting-layout {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .civilization-matchup {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .search-waiting-layout .shorts-panel {
+    grid-row: 3;
   }
 
   .shorts-panel {

@@ -144,6 +144,7 @@ export interface MatchSession {
   id: string;
   status: QueueStatus;
   queue: QueueDefinition;
+  opponentCivilizationPreference?: CivilizationPreference;
   player: PlayerProfile;
   opponent: PlayerProfile;
   role?: "host" | "guest";
