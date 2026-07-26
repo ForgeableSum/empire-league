@@ -73,6 +73,12 @@ export const aoe2UiManifest = {
       point: [1316, 2019],
       activation: "clickEnter",
       settleMs: 1_000
+    },
+    confirmGuestContent: {
+      label: "Accept Unverified Lobby Content",
+      point: [1600, 1400],
+      activation: "click",
+      settleMs: 750
     }
   } satisfies Record<string, Aoe2UiAction>,
   civilizationSlotButtons: {

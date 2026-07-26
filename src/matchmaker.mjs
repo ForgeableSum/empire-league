@@ -247,6 +247,7 @@ async function tryMatch(ticket) {
     createdAt: new Date().toISOString(),
     acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
     lobby: null,
+    guestContentAccepted: false,
     guestLobbyReady: false,
     resultReports: new Map(),
     resultResolved: false,
@@ -500,6 +501,21 @@ const server = createServer(async (request, response) => {
         emit(match.guest, { type: "host_lobby_ready", matchId: match.id });
       }
       return send(response, 200, { ready: true });
+    }
+
+    const guestContentAcceptedMatch = url.pathname.match(/^\/matches\/([^/]+)\/guest-content-accepted$/);
+    if (request.method === "POST" && guestContentAcceptedMatch) {
+      const match = matches.get(decodeURIComponent(guestContentAcceptedMatch[1]));
+      const body = await readJson(request);
+      if (!match || body.ticketId !== match.guest.id || match.guest.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only the guest may report accepting lobby content" });
+      }
+      if (!match.hostLobbyReady) return send(response, 409, { error: "the host has not readied the lobby" });
+      if (!match.guestContentAccepted) {
+        match.guestContentAccepted = true;
+        emit(match.host, { type: "guest_content_accepted", matchId: match.id });
+      }
+      return send(response, 200, { accepted: true });
     }
 
     const guestReadyMatch = url.pathname.match(/^\/matches\/([^/]+)\/guest-ready$/);

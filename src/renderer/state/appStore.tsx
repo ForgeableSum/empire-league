@@ -630,11 +630,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           void (async () => {
             try {
               const deadline = Date.now() + lobbySetupTiming.customMapTransferTimeoutMs;
+              let contentAcceptanceReported = false;
               let ready: { sent: boolean; message: string };
               do {
                 await delayForLobbyInput(lobbySetupTiming.customMapTransferPollMs);
                 ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
-                if (!ready.sent) log("Guest Ready remains unavailable; waiting for lobby file transfer");
+                if (!ready.sent) {
+                  log("Guest Ready remains unavailable; checking for the unverified-content confirmation");
+                  const confirmation = await window.electronApi!.runAoe2LobbyCursorAction("content-confirm");
+                  if (!confirmation.sent) {
+                    log("Unverified-content confirmation click could not be sent");
+                  } else if (!contentAcceptanceReported) {
+                    await services.matchmaking.reportGuestContentAccepted(event.matchId);
+                    contentAcceptanceReported = true;
+                    log("Content accepted; asked the host to verify Ready again");
+                  }
+                }
               } while (!ready.sent && Date.now() < deadline);
               if (!ready.sent) throw new Error("The guest Ready button remained unavailable after the file-transfer timeout.");
               log("Guest Ready verified; reporting readiness to the host");
@@ -647,6 +658,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             } catch (error) {
               log(`Guest file transfer or Ready failed: ${error instanceof Error ? error.message : "Unknown error"}`);
               notify("Lobby file transfer did not complete", "danger");
+            }
+          })();
+        }
+        if (event.type === "guest_content_accepted" && window.electronApi) {
+          setState((previous) => ({
+            ...previous,
+            roomSetupMilestone: "Opponent accepted lobby files — confirming host Ready"
+          }));
+          void (async () => {
+            try {
+              log("Guest accepted custom content; waiting for the lobby state to settle");
+              await delayForLobbyInput(lobbySetupTiming.hostReadySettleMs);
+              const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
+              if (!ready.sent) throw new Error(ready.message);
+              log("Host Ready verified again after guest content acceptance");
+              setState((previous) => ({
+                ...previous,
+                roomSetupMilestone: "Waiting for opponent file transfer"
+              }));
+            } catch (error) {
+              log(`Second host Ready failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+              notify("The host could not resume the lobby file transfer", "danger");
             }
           })();
         }

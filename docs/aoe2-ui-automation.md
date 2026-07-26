@@ -1,6 +1,6 @@
 # AoE2 UI automation
 
-Empire League automates AoE2 with window-local messages. It does not move, clip, or block the user's physical cursor.
+Empire League normally automates AoE2 with window-local messages. The unverified-content confirmation is the exception: AoE2 ignores window messages for that modal, so EL briefly focuses the game and performs a guarded physical click before restoring the cursor.
 
 The checked-in source of truth is `src/shared/aoe2UiManifest.ts`. Coordinates are stored in AoE2's 3840×2160 design space and scaled to the live client rectangle immediately before each action.
 
@@ -39,8 +39,9 @@ lobby message loop can be throttled while AoE2 is in the background.
 10. If an explicit in-game invite is needed, use `hostInvite`.
 11. Wait for the guest-joined report.
 12. `hostReady` (`click`) to finalize custom lobby files and release any required transfer.
-13. Wait for the guest-ready report.
-14. `startGame` (`click`)
+13. If the guest reports accepting unverified content, verify `hostReady` again because AoE2 may automatically clear the host's Ready state.
+14. Wait for the guest-ready report.
+15. `startGame` (`click`)
 
 The first three transitions are verified from stable points on AoE2's rendered
 window surface. If the expected next screen is not present, that step is
@@ -54,9 +55,13 @@ wrong screen.
 3. Wait for the lobby screen to settle.
 4. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), the shared grid, and `confirmCivilization`.
 5. Report that the guest joined so the host can ready and release custom lobby files.
-6. After the host-ready report, poll `guestReady` until AoE2 enables and verifies the control or the transfer timeout expires. The guest and host lobby layouts intentionally use different ready points.
-7. Report guest readiness to the matchmaker.
-8. Wait for the host to start the match.
+6. After the host-ready report, poll `guestReady`. When Ready is unavailable, attempt AoE2's unverified user-generated-content warning before polling Ready again.
+7. After a successful confirmation click, report content acceptance once so the host can verify and, if AoE2 cleared it, reapply Ready. The guest continues polling during this handshake.
+8. Continue until AoE2 enables and verifies the guest Ready control or the transfer timeout expires. The guest and host lobby layouts intentionally use different ready points.
+9. Report guest readiness to the matchmaker.
+10. Wait for the host to start the match.
+
+The normal lobby controls accept window-local messages. AoE2's unverified-content modal does not: its `Yes` control requires a foreground physical click, so the client briefly hides its game cover for that action and restores it immediately afterward.
 
 ## Civilization grid
 

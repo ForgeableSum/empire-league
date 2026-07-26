@@ -30,6 +30,7 @@ import {
   showMainWindowAsGameCover
 } from "../window.js";
 import {
+  clickAoe2DesignPoint,
   closeAoe2NativeWindow,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
@@ -918,8 +919,10 @@ Write-Output 'SEQUENCE|Complete=True|Mode=Cursor'
 exit 0
 `);
 
-function createLobbyCursorActionScript(target: "guest-ready" | "host-ready" | "start"): string {
-  const action = target === "guest-ready"
+function createLobbyCursorActionScript(target: "content-confirm" | "guest-ready" | "host-ready" | "start"): string {
+  const action = target === "content-confirm"
+    ? { label: "Accept Unverified Lobby Content", x: 1600, y: 1400 }
+    : target === "guest-ready"
     ? { label: "Guest Ready", x: 1413, y: 1875 }
     : target === "host-ready"
       ? { label: "Host Ready", x: 1388, y: 1979 }
@@ -1673,9 +1676,9 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:run-lobby-cursor-action", async (
     event,
-    target: "guest-ready" | "host-ready" | "start"
+    target: "content-confirm" | "guest-ready" | "host-ready" | "start"
   ) => {
-    if (process.platform !== "win32" || !["guest-ready", "host-ready", "start"].includes(target)) {
+    if (process.platform !== "win32" || !["content-confirm", "guest-ready", "host-ready", "start"].includes(target)) {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
     const appWindow = BrowserWindow.fromWebContents(event.sender);
@@ -1689,8 +1692,10 @@ export function registerGameHandlers(): void {
       const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`;
       console.info(`[AoE2 automation] ${visibilityMessage}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", visibilityMessage);
-      const actionName = target === "guest-ready"
-        ? "guestReady"
+      const actionName = target === "content-confirm"
+        ? "confirmGuestContent"
+        : target === "guest-ready"
+          ? "guestReady"
         : target === "host-ready"
           ? "hostReady"
           : "startGame";
@@ -1708,11 +1713,20 @@ export function registerGameHandlers(): void {
         ? { sent: true, detail: "SKIPPED_ALREADY_READY" }
         : readyState?.state === "unknown"
           ? { sent: false, detail: "READY_STATE_UNKNOWN_BEFORE_INPUT" }
-          : await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
-              hoverMs: action.hoverMs,
-              holdMs: action.holdMs,
-              synchronous: true
-            });
+          : target === "content-confirm"
+            ? await (async () => {
+                hideMainWindowGameCover();
+                try {
+                  return await clickAoe2DesignPoint(process.pid as number, action.point[0], action.point[1]);
+                } finally {
+                  if (appWindow) showMainWindowAsGameCover(appWindow);
+                }
+              })()
+            : await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
+                hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
+                holdMs: "holdMs" in action ? action.holdMs : undefined,
+                synchronous: true
+              });
 
       if (result.detail !== "SKIPPED_ALREADY_READY") await delay(action.settleMs);
       if (verifiesReady) {
@@ -1720,8 +1734,8 @@ export function registerGameHandlers(): void {
         emitVerification("1", readyState.detail);
         if (readyState.state === "not-ready") {
           result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
-            hoverMs: action.hoverMs,
-            holdMs: action.holdMs,
+            hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
+            holdMs: "holdMs" in action ? action.holdMs : undefined,
             synchronous: true
           });
           await delay(action.settleMs);
