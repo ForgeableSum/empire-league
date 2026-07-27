@@ -1,4 +1,5 @@
 export const cursorAutomationEnabled = true;
+export const matchmakerEventDeliveryDelayMs = 400;
 export const aoe2PhysicalClickSettleMs = 500;
 export const contentConfirmationKeyDelayMs = 150;
 
