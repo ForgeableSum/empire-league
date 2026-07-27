@@ -71,6 +71,15 @@ AoE2's unverified-content modal is accepted with one window-local Tab followed b
 
 After a successful setup, the client stores the difference between that match's calculated baseline and its measured end-to-end duration. Standard and custom-map histories are kept separately. Future estimates add the rolling median of the latest successful residuals to the match-specific baseline, so the countdown adapts to real Steam, AoE2, machine, and network overhead without losing the deterministic workflow model.
 
+## Replay completion
+
+Replay file inactivity is only a signal to inspect the recording. During the
+first minute, the file must be quiet for six seconds; afterward it must be
+quiet for three seconds. The client declares the game complete only after the
+parsed operation stream contains AoE2's `PostGame` marker. A quiet or
+temporarily unparseable recording without that marker remains under
+observation. The final `Resign` action, when present, identifies a resignation.
+
 ## Civilization grid
 
 The manifest contains every currently visible Age of Empires II civilization in game build `101.103.48987.0`. Entries map names to grid column/row positions; grid centers are stored once. This avoids maintaining fifty independent pixel coordinates.

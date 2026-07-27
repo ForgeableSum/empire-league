@@ -24,6 +24,7 @@ export interface ElectronGameApi {
   onLobbyGuardPointer(listener: (point: { x: number; y: number }) => void): () => void;
   startReplayEndDetection(replayFolder?: string): Promise<{ started: boolean; message?: string }>;
   stopReplayEndDetection(): Promise<void>;
+  confirmReplayEnded(): Promise<void>;
   onReplayEnded(listener: (filePath: string) => void): () => void;
   onReplayDetectionFailed(listener: (message: string) => void): () => void;
   readReplayFile(filePath: string): Promise<Uint8Array>;

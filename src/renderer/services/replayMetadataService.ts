@@ -1,10 +1,26 @@
 import type { ReplayMatchMetadata, ReplayPlayerMetadata } from "../../shared/contracts/matches";
 
+export class ReplayNotFinishedError extends Error {
+  constructor() {
+    super("The replay does not contain its PostGame marker yet.");
+    this.name = "ReplayNotFinishedError";
+  }
+}
+
 export async function parseReplayMetadata(filePath: string): Promise<ReplayMatchMetadata> {
   if (!window.electronApi) throw new Error("Replay files are only available in the desktop app.");
-  const { parse_rec_summary } = await import("aoe2rec-js");
+  const { parse_rec, parse_rec_summary } = await import("aoe2rec-js");
   const bytes = await window.electronApi.readReplayFile(filePath);
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  let replay: { operations?: Array<Record<string, unknown>> };
+  try {
+    replay = parse_rec(buffer) as { operations?: Array<Record<string, unknown>> };
+  } catch {
+    throw new ReplayNotFinishedError();
+  }
+  if (!replay.operations?.some((operation) => "PostGame" in operation)) {
+    throw new ReplayNotFinishedError();
+  }
   const summary = parse_rec_summary(buffer);
   const players: ReplayPlayerMetadata[] = summary.teams.flatMap((team) =>
     team.players

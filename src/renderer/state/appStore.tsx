@@ -14,7 +14,7 @@ import { MockMatchResultService } from "../services/matchResultService";
 import { nowLog } from "../services/timing";
 import { authService } from "../services/authService";
 import { matchHistoryService } from "../services/matchHistoryService";
-import { parseReplayMetadata } from "../services/replayMetadataService";
+import { parseReplayMetadata, ReplayNotFinishedError } from "../services/replayMetadataService";
 import { estimateLobbySetupMs, recordLobbySetupDuration } from "../services/lobbyTimingService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
@@ -196,14 +196,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const match = stateRef.current.activeMatch;
       if (!match || replayResultInFlightRef.current) return;
       replayResultInFlightRef.current = true;
-      setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
-      log(`Replay stopped updating: ${filePath}`);
       void (async () => {
         let replay: Awaited<ReturnType<typeof parseReplayMetadata>>;
         try {
           replay = await parseReplayMetadata(filePath);
         } catch (error) {
+          if (error instanceof ReplayNotFinishedError) {
+            replayResultInFlightRef.current = false;
+            log("Replay is quiet but has no PostGame marker; continuing to watch");
+            return;
+          }
           const message = error instanceof Error ? error.message : "Replay parsing failed.";
+          setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
           try {
             await services.matchmaking.reportMatchResult({ matchId: match.id, error: message });
             log("Replay could not be parsed; result reported as contested");
@@ -220,6 +224,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        await window.electronApi?.confirmReplayEnded();
+        setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
+        log(`Replay ended with PostGame marker: ${filePath}`);
         try {
           await services.matchmaking.reportMatchResult({ matchId: match.id, replay });
           log("Replay result reported; waiting for opponent report");

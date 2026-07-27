@@ -62,7 +62,9 @@ let replayEndPoller: NodeJS.Timeout | undefined;
 let replayDetectionGeneration = 0;
 
 const replayPollIntervalMs = 1500;
-const replayStableForMs = 3_000;
+const replayStartupWindowMs = 60_000;
+const replayStartupStableForMs = 6_000;
+const replayRunningStableForMs = 3_000;
 const replayStartTimeoutMs = 30_000;
 
 interface ReplaySnapshot {
@@ -118,6 +120,7 @@ async function startReplayEndDetection(
   let active: ReplaySnapshot | undefined;
   let lastGrowthAt = startedAt;
   let observedGrowth = false;
+  let lastCandidateKey: string | undefined;
 
   const initialFiles = await findReplayFiles(configuredFolder);
   if (configuredFolder?.trim() && initialFiles.length === 0) {
@@ -155,12 +158,20 @@ async function startReplayEndDetection(
           observedGrowth = true;
           lastGrowthAt = Date.now();
           active = current;
-        } else if (current && observedGrowth && Date.now() - lastGrowthAt >= replayStableForMs) {
-          stopReplayEndDetection();
-          focusMainWindow(window);
-          if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
-          console.info(`[AoE2 replay] END|File=${current.path}|StableMs=${replayStableForMs}`);
-          return;
+        } else if (current && observedGrowth) {
+          const now = Date.now();
+          const elapsedMs = now - startedAt;
+          const stableForMs = elapsedMs < replayStartupWindowMs
+            ? replayStartupStableForMs
+            : replayRunningStableForMs;
+          const candidateKey = `${current.path}|${current.size}|${current.modifiedMs}`;
+          if (now - lastGrowthAt >= stableForMs && candidateKey !== lastCandidateKey) {
+            lastCandidateKey = candidateKey;
+            if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
+            console.info(
+              `[AoE2 replay] CANDIDATE|File=${current.path}|StableMs=${stableForMs}|ElapsedMs=${elapsedMs}`
+            );
+          }
         }
       }
 
@@ -1600,6 +1611,12 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:stop-replay-end-detection", async () => {
     stopReplayEndDetection();
+  });
+
+  ipcMain.handle("game:confirm-replay-ended", async (event) => {
+    stopReplayEndDetection();
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (window) focusMainWindow(window);
   });
 
   ipcMain.handle("game:read-replay-file", async (_event, filePath: string) => {
