@@ -34,12 +34,12 @@ endif
 
 if THEME_SELECTION
 	start_random
-		percent_chance 0 #define AFROTROPICAL_TROPICAL
+		percent_chance 50 #define AFROTROPICAL_TROPICAL
 		percent_chance 0 #define NEOTROPICAL_TROPICAL
 		percent_chance 0 #define NEARCTIC_TEMPERATE
 		percent_chance 0 #define INDOMALAYAN_TROPICAL
 		percent_chance 0 #define PALAEARCTIC_ASIA_TEMPERATE
-		percent_chance 100 #define PALAEARCTIC_MIDDLE_EAST_DESERT
+		percent_chance 50 #define PALAEARCTIC_MIDDLE_EAST_DESERT
 		percent_chance 0 #define PALAEARCTIC_EUROPE_TEMPERATE
 	end_random
 endif
@@ -1950,30 +1950,6 @@ endif
 					set_scaling_to_map_size
 					temp_min_distance_group_placement 8
 					actor_area_to_place_in 560 /* Solid Object */
-
-					max_distance_to_other_zones 1
-					avoid_forest_zone 1
-					avoid_cliff_zone 1
-					min_distance_to_map_edge 1
-
-					actor_area 8011
-					actor_area_radius 2
-
-					avoid_actor_area 8001 /* Aesthetic Objects A */
-					avoid_actor_area 8002 /* Aesthetic Objects B */
-					avoid_actor_area 8003 /* Aesthetic Objects C */
-					avoid_actor_area 8011 /* Solid Surround */
-				}
-				
-				create_object RUGS
-				{
-					set_place_for_every_player
-					set_gaia_object_only
-					number_of_objects 6
-					min_distance_to_players 5
-					max_distance_to_players 8
-					set_circular_placement
-					temp_min_distance_group_placement 2
 
 					max_distance_to_other_zones 1
 					avoid_forest_zone 1
