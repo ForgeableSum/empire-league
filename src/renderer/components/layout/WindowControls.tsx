@@ -13,12 +13,13 @@ const minimizeLockedStatuses = new Set<QueueStatus>([
   "in_game",
   "verifying_result"
 ]);
+const independentWindowMinimize = import.meta.env.VITE_INDEPENDENT_WINDOW_MINIMIZE === "true";
 
 export function WindowControls() {
   const { state, notify } = useAppStore();
 
   async function minimizeToTaskbar(): Promise<void> {
-    if (minimizeLockedStatuses.has(state.queueStatus)) {
+    if (!independentWindowMinimize && minimizeLockedStatuses.has(state.queueStatus)) {
       notify(
         "Empire League cannot be minimized during an active match.",
         "danger",

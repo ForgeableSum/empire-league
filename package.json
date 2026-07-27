@@ -7,6 +7,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs",
+    "dev:independent-minimize": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --independent-minimize",
+    "dev:opacity": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --opacity",
+    "dev:independent-minimize:opacity": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --independent-minimize --opacity",
     "dev:no-aoe": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --no-aoe",
     "dev:client": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --client-only",
     "dev:client:no-aoe": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --client-only --no-aoe",

@@ -3,11 +3,14 @@ import { request } from "node:http";
 
 const clientOnly = process.argv.includes("--client-only");
 const skipAoeAutoLaunch = process.argv.includes("--no-aoe");
+const independentMinimize = process.argv.includes("--independent-minimize");
+const opacityMode = process.argv.includes("--opacity");
 const vite = spawn(process.execPath, ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1"], {
   stdio: "inherit",
   env: {
     ...process.env,
-    VITE_SKIP_AOE_AUTO_LAUNCH: skipAoeAutoLaunch ? "true" : process.env.VITE_SKIP_AOE_AUTO_LAUNCH
+    VITE_SKIP_AOE_AUTO_LAUNCH: skipAoeAutoLaunch ? "true" : process.env.VITE_SKIP_AOE_AUTO_LAUNCH,
+    VITE_INDEPENDENT_WINDOW_MINIMIZE: independentMinimize ? "true" : "false"
   }
 });
 const matchmaker = clientOnly
@@ -35,7 +38,12 @@ function waitForVite(attempts = 60) {
     response.resume();
     electron = spawn(process.execPath, ["node_modules/electron/cli.js", "."], {
       stdio: "inherit",
-      env: { ...process.env, NODE_ENV: "development" }
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+        EMPIRE_INDEPENDENT_WINDOW_MINIMIZE: independentMinimize ? "true" : "false",
+        EMPIRE_OPACITY_MODE: opacityMode ? "true" : "false"
+      }
     });
     electron.on("exit", (code) => stop(code ?? 0));
   });

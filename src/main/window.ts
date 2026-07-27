@@ -27,6 +27,8 @@ let latestPointer: {
 } | undefined;
 const copyCoordinatesAccelerator = "CommandOrControl+Shift+C";
 const toggleCoverAccelerator = "CommandOrControl+Shift+H";
+const independentWindowMinimize = process.env.EMPIRE_INDEPENDENT_WINDOW_MINIMIZE === "true";
+const opacityMode = process.env.EMPIRE_OPACITY_MODE === "true";
 const lifecycleEvents = [
   "show", "hide", "focus", "blur", "minimize", "restore",
   "enter-full-screen", "leave-full-screen", "always-on-top-changed"
@@ -64,7 +66,7 @@ function loadRenderer(window: BrowserWindow, route = ""): void {
 function restoreFromTaskbar(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   logWindowLifecycle(window, "CALL restoreFromTaskbar");
-  if (process.platform === "win32") {
+  if (process.platform === "win32" && !independentWindowMinimize) {
     const game = detectAoe2NativeProcess();
     if (game.pid && game.windowReady) restoreAoe2NativeWindowBehind(game.pid);
   }
@@ -78,7 +80,7 @@ function restoreFromTaskbar(window: BrowserWindow): void {
 export function minimizeMainWindowToTaskbar(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   logWindowLifecycle(window, "CALL minimizeMainWindowToTaskbar");
-  if (process.platform === "win32") {
+  if (process.platform === "win32" && !independentWindowMinimize) {
     const game = detectAoe2NativeProcess();
     if (game.pid && game.windowReady) minimizeAoe2NativeWindow(game.pid);
   }
@@ -107,6 +109,7 @@ export function createMainWindow(): BrowserWindow {
     maximizable: false,
     autoHideMenuBar: true,
     backgroundColor: "#141312",
+    opacity: opacityMode ? 0.8 : 1,
     webPreferences: {
       preload: join(currentDir, "../preload/preload.cjs"),
       contextIsolation: true,
@@ -203,7 +206,7 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   }
   mainCoverManuallyVisible = true;
   window.setIgnoreMouseEvents(false);
-  window.setOpacity(1);
+  window.setOpacity(opacityMode ? 0.8 : 1);
   window.setFullScreen(true);
   window.setAlwaysOnTop(true, "screen-saver");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
