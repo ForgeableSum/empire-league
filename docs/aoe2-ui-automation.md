@@ -23,7 +23,9 @@ lobby message loop can be throttled while AoE2 is in the background.
 4. Apply the standard lobby settings.
 5. Select the matchmaker's map:
    1. Open the lobby's Location picker.
-   2. For a map listed in `customMapNames`, open Map Style and select Custom.
+   2. Open Map Style and explicitly select Custom for a map listed in
+      `customMapNames`, or Standard for every other map. AoE2 remembers this
+      filter between visits, so both branches must set it.
    3. Focus the picker search field and send the selected map name with window-local `WM_CHAR` messages.
    4. Resolve the exact map's filtered-result index from the manifest and click that tile. This matters for substring collisions such as Aquarena/Arena and Land Nomad/Nomad.
    5. Verify that the lobby screen is present again before continuing.

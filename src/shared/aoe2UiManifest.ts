@@ -107,6 +107,7 @@ export const aoe2UiManifest = {
     openPoint: [3049, 725] as const,
     searchPoint: [1040, 431] as const,
     mapStylePoint: [2755, 429] as const,
+    standardStylePoint: [2609, 487] as const,
     customStylePoint: [2609, 613] as const,
     customMapNames,
     resultColumnCenters: [738, 1064, 1390, 1715, 2040, 2365] as const,

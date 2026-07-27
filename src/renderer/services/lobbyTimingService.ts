@@ -48,10 +48,8 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
   total += actionDuration(actions.createLobby);
   total += defaultClickDurationMs() + lobbySetupTiming.resetFocusMs + lobbySetupTiming.resetConfirmationMs;
   total += defaultClickDurationMs() + mapPicker.openSettleMs;
-  if (custom) {
-    total += defaultClickDurationMs() + mapPicker.styleMenuSettleMs;
-    total += defaultClickDurationMs() + mapPicker.styleSelectionSettleMs;
-  }
+  total += defaultClickDurationMs() + mapPicker.styleMenuSettleMs;
+  total += defaultClickDurationMs() + mapPicker.styleSelectionSettleMs;
   total += defaultClickDurationMs() + mapPicker.searchSettleMs;
   total += defaultClickDurationMs() + mapPicker.selectionSettleMs;
   total += actionDuration(actions.copyLobbyUri) + lobbySetupTiming.clipboardReadMs;

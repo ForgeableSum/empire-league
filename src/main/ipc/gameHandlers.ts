@@ -1815,23 +1815,24 @@ export function registerGameHandlers(): void {
       const mapPoint = mapDesignPoint(normalizedMapName as Aoe2MapSelection);
       await clickStep("Open Map Picker", mapPicker.openPoint[0], mapPicker.openPoint[1], { synchronous: true });
       await delay(mapPicker.openSettleMs);
-      if ((mapPicker.customMapNames as readonly string[]).includes(normalizedMapName)) {
-        await clickStep(
-          "Open Map Style",
-          mapPicker.mapStylePoint[0],
-          mapPicker.mapStylePoint[1],
-          { synchronous: true }
-        );
-        await delay(mapPicker.styleMenuSettleMs);
-        await clickStep(
-          "Select Custom Map Style",
-          mapPicker.customStylePoint[0],
-          mapPicker.customStylePoint[1],
-          { synchronous: true }
-        );
-        await delay(mapPicker.styleSelectionSettleMs);
-        emitLog(`MAP_SELECT|Step=MapStyle|Style=Custom|Map=${normalizedMapName}`);
-      }
+      const isCustomMap = (mapPicker.customMapNames as readonly string[]).includes(normalizedMapName);
+      const mapStyle = isCustomMap ? "Custom" : "Standard";
+      const mapStylePoint = isCustomMap ? mapPicker.customStylePoint : mapPicker.standardStylePoint;
+      await clickStep(
+        "Open Map Style",
+        mapPicker.mapStylePoint[0],
+        mapPicker.mapStylePoint[1],
+        { synchronous: true }
+      );
+      await delay(mapPicker.styleMenuSettleMs);
+      await clickStep(
+        `Select ${mapStyle} Map Style`,
+        mapStylePoint[0],
+        mapStylePoint[1],
+        { synchronous: true }
+      );
+      await delay(mapPicker.styleSelectionSettleMs);
+      emitLog(`MAP_SELECT|Step=MapStyle|Style=${mapStyle}|Map=${normalizedMapName}`);
       await clickStep("Focus Map Search", mapPicker.searchPoint[0], mapPicker.searchPoint[1], { synchronous: true });
       const mapSearch = await sendAoe2Text(process.pid, normalizedMapName);
       emitLog(`MAP_SELECT|Step=Search|Map=${normalizedMapName}|${mapSearch.detail}`);
