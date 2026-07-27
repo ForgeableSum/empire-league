@@ -203,7 +203,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } catch (error) {
           if (error instanceof ReplayNotFinishedError) {
             replayResultInFlightRef.current = false;
-            log("Replay is quiet but has no PostGame marker; continuing to watch");
+            log("Replay has no terminal operation yet; continuing to watch");
             return;
           }
           const message = error instanceof Error ? error.message : "Replay parsing failed.";
@@ -226,7 +226,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         await window.electronApi?.confirmReplayEnded();
         setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
-        log(`Replay ended with PostGame marker: ${filePath}`);
+        log(`Replay ended with terminal operation (${replay.reason}): ${filePath}`);
         try {
           await services.matchmaking.reportMatchResult({ matchId: match.id, replay });
           log("Replay result reported; waiting for opponent report");

@@ -2,7 +2,7 @@ import type { ReplayMatchMetadata, ReplayPlayerMetadata } from "../../shared/con
 
 export class ReplayNotFinishedError extends Error {
   constructor() {
-    super("The replay does not contain its PostGame marker yet.");
+    super("The replay does not contain a PostGame or Resign operation yet.");
     this.name = "ReplayNotFinishedError";
   }
 }
@@ -18,7 +18,19 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
   } catch {
     throw new ReplayNotFinishedError();
   }
-  if (!replay.operations?.some((operation) => "PostGame" in operation)) {
+  const hasPostGame = replay.operations?.some((operation) => "PostGame" in operation) ?? false;
+  const resignPlayerNumber = replay.operations
+    ?.map((operation) => operation.Action)
+    .filter((action): action is Record<string, unknown> => typeof action === "object" && action !== null)
+    .map((action) => action.action_data)
+    .filter((actionData): actionData is Record<string, unknown> =>
+      typeof actionData === "object" && actionData !== null
+    )
+    .map((actionData) => actionData.Resign)
+    .filter((resign): resign is Record<string, unknown> => typeof resign === "object" && resign !== null)
+    .map((resign) => resign.player_id)
+    .find((playerId): playerId is number => typeof playerId === "number");
+  if (!hasPostGame && resignPlayerNumber === undefined) {
     throw new ReplayNotFinishedError();
   }
   const summary = parse_rec_summary(buffer);
@@ -34,8 +46,14 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
   );
   const winningPlayers = summary.teams.filter((team) => team.winner).flatMap((team) => team.players);
   const losingPlayers = summary.teams.filter((team) => !team.winner).flatMap((team) => team.players);
-  const winner = winningPlayers.find((player) => player.profile_id > 0);
-  const loser = losingPlayers.find((player) => player.profile_id > 0);
+  const allPlayers = summary.teams.flatMap((team) => team.players).filter((player) => player.profile_id > 0);
+  const resignedPlayer = resignPlayerNumber === undefined
+    ? undefined
+    : allPlayers.find((player) => player.player_number === resignPlayerNumber);
+  const winner = resignedPlayer
+    ? allPlayers.find((player) => player.player_number !== resignPlayerNumber)
+    : winningPlayers.find((player) => player.profile_id > 0);
+  const loser = resignedPlayer ?? losingPlayers.find((player) => player.profile_id > 0);
   const reporter = players.find((player) => player.playerNumber === summary.header.replay.rec_player);
   if (players.length !== 2 || !winner || !loser || !reporter) {
     throw new Error("The replay does not contain one identifiable winner and loser.");
@@ -49,6 +67,6 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
     reporterProfileId: reporter.profileId,
     winnerProfileId: winner.profile_id,
     loserProfileId: loser.profile_id,
-    reason: loser.resigned ? "resignation" : "defeat"
+    reason: resignPlayerNumber !== undefined || loser.resigned ? "resignation" : "defeat"
   };
 }

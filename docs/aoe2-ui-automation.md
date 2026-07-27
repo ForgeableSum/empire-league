@@ -73,12 +73,12 @@ After a successful setup, the client stores the difference between that match's 
 
 ## Replay completion
 
-Replay file inactivity is only a signal to inspect the recording. During the
-first minute, the file must be quiet for six seconds; afterward it must be
-quiet for three seconds. The client declares the game complete only after the
-parsed operation stream contains AoE2's `PostGame` marker. A quiet or
-temporarily unparseable recording without that marker remains under
-observation. The final `Resign` action, when present, identifies a resignation.
+Every detected replay write prompts an immediate operation-stream inspection.
+The client declares the automated 1v1 complete as soon as it sees AoE2's
+`PostGame` marker or a player's `Resign` action. During the first minute, six
+seconds of file inactivity prompts a fallback recheck; afterward, three
+seconds does. A temporarily unparseable recording without a terminal operation
+remains under observation.
 
 ## Civilization grid
 

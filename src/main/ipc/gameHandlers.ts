@@ -158,6 +158,8 @@ async function startReplayEndDetection(
           observedGrowth = true;
           lastGrowthAt = Date.now();
           active = current;
+          if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
+          console.info(`[AoE2 replay] INSPECT|Reason=Growth|File=${current.path}|Size=${current.size}`);
         } else if (current && observedGrowth) {
           const now = Date.now();
           const elapsedMs = now - startedAt;
@@ -169,7 +171,7 @@ async function startReplayEndDetection(
             lastCandidateKey = candidateKey;
             if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
             console.info(
-              `[AoE2 replay] CANDIDATE|File=${current.path}|StableMs=${stableForMs}|ElapsedMs=${elapsedMs}`
+              `[AoE2 replay] INSPECT|Reason=QuietFallback|File=${current.path}|StableMs=${stableForMs}|ElapsedMs=${elapsedMs}`
             );
           }
         }
