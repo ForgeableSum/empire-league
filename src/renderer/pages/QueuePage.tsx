@@ -14,6 +14,16 @@ import { useAppStore } from "../state/appStore";
 
 const favoriteMapsKey = "empire-league-favorite-maps";
 const civilizationPreferenceKey = "empire-league-civilization-preference";
+const mapPreferencesKey = "empire-league-map-preferences";
+
+interface PersistedMapPreferences {
+  version: 1;
+  selectedQueueId?: string;
+  queues?: Record<string, {
+    deselectedMapIds?: string[];
+    disabledGroupIds?: string[];
+  }>;
+}
 
 const civilizationModes: Array<{
   id: CivilizationMode;
@@ -29,19 +39,30 @@ const civilizationModes: Array<{
 export function QueuePage() {
   const { state, queues, startQueue, updateActiveQueue, cancelQueue } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
-  const [selectedQueueId, setSelectedQueueId] = useState(() => queues[0]?.id ?? "");
+  const [selectedQueueId, setSelectedQueueId] = useState(() => {
+    const savedQueueId = loadMapPreferences().selectedQueueId;
+    return queues.some((queue) => queue.id === savedQueueId) ? savedQueueId! : queues[0]?.id ?? "";
+  });
   const selectedQueue = queues.find((queue) => queue.id === selectedQueueId) ?? queues[0];
   const canStartQueue = ["idle", "cancelled", "completed"].includes(state.queueStatus)
     && (!state.activeMatch || state.queueStatus === "completed")
     && state.gameStatus !== "loading";
   const isSearching = state.queueStatus === "searching";
   const preferencesLocked = !["idle", "cancelled", "completed", "searching"].includes(state.queueStatus);
-  const [selectedMaps, setSelectedMaps] = useState<Record<string, string[]>>(() =>
-    Object.fromEntries(queues.map((queue) => [queue.id, queue.mapPool.map((map) => map.id)]))
-  );
-  const [enabledGroups, setEnabledGroups] = useState<Record<string, MapGroupId[]>>(() =>
-    Object.fromEntries(queues.map((queue) => [queue.id, mapGroups.map((group) => group.id)]))
-  );
+  const [selectedMaps, setSelectedMaps] = useState<Record<string, string[]>>(() => {
+    const saved = loadMapPreferences();
+    return Object.fromEntries(queues.map((queue) => {
+      const deselected = new Set(saved.queues?.[queue.id]?.deselectedMapIds ?? []);
+      return [queue.id, queue.mapPool.map((map) => map.id).filter((mapId) => !deselected.has(mapId))];
+    }));
+  });
+  const [enabledGroups, setEnabledGroups] = useState<Record<string, MapGroupId[]>>(() => {
+    const saved = loadMapPreferences();
+    return Object.fromEntries(queues.map((queue) => {
+      const disabled = new Set(saved.queues?.[queue.id]?.disabledGroupIds ?? []);
+      return [queue.id, mapGroups.map((group) => group.id).filter((groupId) => !disabled.has(groupId))];
+    }));
+  });
   const [favoriteMaps, setFavoriteMaps] = useState<Record<string, Partial<Record<MapGroupId, string>>>>(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(favoriteMapsKey) ?? "{}") as Record<string, unknown>;
@@ -206,6 +227,10 @@ export function QueuePage() {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [state.queueStartedAt, state.queueStatus]);
+
+  useEffect(() => {
+    persistMapPreferences(queues, selectedQueueId, selectedMaps, enabledGroups);
+  }, [enabledGroups, queues, selectedMaps, selectedQueueId]);
 
   useEffect(() => {
     if (!isSearching || !selectedQueue) return;
@@ -584,4 +609,58 @@ function CivilizationBanList({ title, selected, onToggle }: {
 
 function formatTime(seconds: number): string {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function loadMapPreferences(): PersistedMapPreferences {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(mapPreferencesKey) ?? "{}") as PersistedMapPreferences;
+    return parsed && typeof parsed === "object" ? parsed : { version: 1 };
+  } catch {
+    return { version: 1 };
+  }
+}
+
+function persistMapPreferences(
+  queues: ReturnType<typeof useAppStore>["queues"],
+  selectedQueueId: string,
+  selectedMaps: Record<string, string[]>,
+  enabledGroups: Record<string, MapGroupId[]>
+) {
+  const previous = loadMapPreferences();
+  const persistedQueues = { ...(previous.queues ?? {}) };
+
+  for (const queue of queues) {
+    const currentMapIds = new Set(queue.mapPool.map((map) => map.id));
+    const currentGroupIds = new Set<MapGroupId>(mapGroups.map((group) => group.id));
+    const previousQueue = previous.queues?.[queue.id];
+    const dormantDeselectedMapIds = (previousQueue?.deselectedMapIds ?? [])
+      .filter((mapId) => !currentMapIds.has(mapId));
+    const dormantDisabledGroupIds = (previousQueue?.disabledGroupIds ?? [])
+      .filter((groupId) => !currentGroupIds.has(groupId as MapGroupId));
+
+    persistedQueues[queue.id] = {
+      deselectedMapIds: [
+        ...new Set([
+          ...dormantDeselectedMapIds,
+          ...queue.mapPool
+            .map((map) => map.id)
+            .filter((mapId) => !(selectedMaps[queue.id] ?? []).includes(mapId))
+        ])
+      ],
+      disabledGroupIds: [
+        ...new Set([
+          ...dormantDisabledGroupIds,
+          ...mapGroups
+            .map((group) => group.id)
+            .filter((groupId) => !(enabledGroups[queue.id] ?? []).includes(groupId))
+        ])
+      ]
+    };
+  }
+
+  window.localStorage.setItem(mapPreferencesKey, JSON.stringify({
+    version: 1,
+    selectedQueueId,
+    queues: persistedQueues
+  } satisfies PersistedMapPreferences));
 }
