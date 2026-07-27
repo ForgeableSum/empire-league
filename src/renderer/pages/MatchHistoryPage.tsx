@@ -9,7 +9,9 @@ export function MatchHistoryPage() {
   const matches = useMemo(
     () =>
       state.recentMatches.filter((match) => {
-        const matchesQuery = `${match.opponent} ${match.map} ${match.civilization}`.toLowerCase().includes(query.toLowerCase());
+        const matchesQuery = `${match.opponent} ${match.map} ${match.civilization} ${match.opponentCivilization}`
+          .toLowerCase()
+          .includes(query.toLowerCase());
         const matchesFilter = filter === "all" || match.outcome === filter;
         return matchesQuery && matchesFilter;
       }),
@@ -51,7 +53,9 @@ export function MatchHistoryPage() {
               <strong className={match.outcome}>{match.outcome}</strong>
               <span>{match.opponent} ({match.opponentRating})</span>
               <span>{match.map}</span>
-              <span>{match.civilization && match.opponentCivilization ? `${match.civilization} vs ${match.opponentCivilization}` : "—"}</span>
+              <span>{match.civilization && match.opponentCivilization
+                ? `${match.civilization} vs. ${match.opponentCivilization}`
+                : "—"}</span>
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
               <span>{match.durationMinutes}m</span>
               <span>{new Date(match.timestamp).toLocaleDateString()}</span>

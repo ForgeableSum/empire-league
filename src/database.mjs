@@ -1,4 +1,5 @@
 import mysql from "mysql2/promise";
+import { civilizationNameFromId } from "./civilization-roll.mjs";
 
 const databaseName = process.env.DB_NAME ?? "empire_league";
 
@@ -37,12 +38,13 @@ export async function getOnlinePlayerCount(activeWithinSeconds = 90) {
   return Number(rows[0]?.online_player_count ?? 0);
 }
 
-async function insertDurableMatch(connection, match, status, completedAt = null) {
+async function insertDurableMatch(connection, match, status, completedAt = null, civilizations = {}) {
   await connection.execute(
     `INSERT INTO matches
       (id, queue_id, host_player_id, guest_player_id, selected_map_id, selected_map_name,
-       map_catalog_version, map_group_id, status, created_at, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       host_civilization, guest_civilization, map_catalog_version, map_group_id, status,
+       created_at, completed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       match.id,
       match.host.queueId,
@@ -50,6 +52,8 @@ async function insertDurableMatch(connection, match, status, completedAt = null)
       match.guest.player.id,
       match.selectedMap.id,
       match.selectedMap.name,
+      civilizations.host || null,
+      civilizations.guest || null,
       match.mapCatalogVersion,
       match.mapGroupId,
       status,
@@ -77,7 +81,7 @@ export async function linkPlayerAoeProfile(playerId, profileId) {
   return Number(players[0]?.aoe_profile_id) === profileId;
 }
 
-export async function recordVerifiedMatchResult(match, winnerProfileId) {
+export async function recordVerifiedMatchResult(match, replay) {
   const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
@@ -89,8 +93,8 @@ export async function recordVerifiedMatchResult(match, winnerProfileId) {
       [match.host.player.id, match.guest.player.id]
     );
     if (players.length !== 2) throw new Error("Both matched players must exist before recording a result.");
-    const winner = players.find((player) => Number(player.aoe_profile_id) === winnerProfileId);
-    const loser = players.find((player) => Number(player.aoe_profile_id) !== winnerProfileId);
+    const winner = players.find((player) => Number(player.aoe_profile_id) === replay.winnerProfileId);
+    const loser = players.find((player) => Number(player.aoe_profile_id) !== replay.winnerProfileId);
     if (!winner || !loser) throw new Error("The reported winner is not a player in this match.");
 
     const expectedWinner = 1 / (1 + 10 ** ((Number(loser.rating) - Number(winner.rating)) / 400));
@@ -101,7 +105,13 @@ export async function recordVerifiedMatchResult(match, winnerProfileId) {
     const result = winner.id === match.host.player.id ? "host_win" : "guest_win";
     const completedAt = new Date();
 
-    await insertDurableMatch(connection, match, "completed", completedAt);
+    const civilizationFor = (ticket) => civilizationNameFromId(
+      replay.players.find((player) => player.profileId === ticket.player.aoeProfileId)?.civilizationId
+    );
+    await insertDurableMatch(connection, match, "completed", completedAt, {
+      host: civilizationFor(match.host),
+      guest: civilizationFor(match.guest)
+    });
     await connection.execute(
       `INSERT INTO match_results
         (match_id, winner_player_id, result, verification_status, verified_at)
@@ -184,6 +194,8 @@ export async function getPlayerMatchHistory(playerId) {
   const [rows] = await database.execute(
     `SELECT m.id, opponent.display_name AS opponent, opponent.rating AS opponent_rating,
        m.selected_map_name AS map_name, m.queue_id AS queue_type,
+       CASE WHEN m.host_player_id = ? THEN m.host_civilization ELSE m.guest_civilization END AS civilization,
+       CASE WHEN m.host_player_id = ? THEN m.guest_civilization ELSE m.host_civilization END AS opponent_civilization,
        CASE
          WHEN mr.result = 'no_contest' THEN 'no_contest'
          WHEN mr.winner_player_id = ? THEN 'win'
@@ -199,7 +211,7 @@ export async function getPlayerMatchHistory(playerId) {
      WHERE (m.host_player_id = ? OR m.guest_player_id = ?) AND m.status = 'completed'
      ORDER BY m.completed_at DESC
      LIMIT 100`,
-    [playerId, playerId, playerId, playerId, playerId]
+    [playerId, playerId, playerId, playerId, playerId, playerId, playerId]
   );
   return rows.map((row) => ({
     id: row.id,
@@ -207,8 +219,8 @@ export async function getPlayerMatchHistory(playerId) {
     opponentRating: Number(row.opponent_rating),
     outcome: row.outcome,
     map: row.map_name,
-    civilization: "",
-    opponentCivilization: "",
+    civilization: row.civilization ?? "",
+    opponentCivilization: row.opponent_civilization ?? "",
     ratingChange: Number(row.rating_change),
     durationMinutes: Number(row.duration_minutes ?? 0),
     timestamp: new Date(row.completed_at).toISOString(),

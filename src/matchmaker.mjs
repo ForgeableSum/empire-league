@@ -636,7 +636,7 @@ async function handleRequest(request, response) {
         return send(response, 200, { accepted: true, resolved: true, contested: true });
       }
 
-      const ratings = await recordVerifiedMatchResult(match, hostReplay.winnerProfileId);
+      const ratings = await recordVerifiedMatchResult(match, hostReplay);
       match.resultResolved = true;
       emit(match.host, {
         type: "result_verified",

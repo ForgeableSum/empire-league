@@ -44,6 +44,9 @@ export function ProfilePage() {
               <div className="table-row" key={match.id}>
                 <span>{new Date(match.timestamp).toLocaleDateString()}</span>
                 <span>{match.opponent}</span>
+                <span>{match.civilization && match.opponentCivilization
+                  ? `${match.civilization} vs. ${match.opponentCivilization}`
+                  : "—"}</span>
                 <strong className={match.ratingChange >= 0 ? "win" : "loss"}>
                   {match.ratingChange > 0 ? "+" : ""}{match.ratingChange}
                 </strong>

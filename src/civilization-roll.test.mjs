@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { civilizations, normalizeCivilizationPreference, rollCivilizationPreference } from "./civilization-roll.mjs";
+import {
+  civilizationNameFromId,
+  civilizations,
+  normalizeCivilizationPreference,
+  rollCivilizationPreference
+} from "./civilization-roll.mjs";
+
+test("replay civilization ids resolve to display names", () => {
+  assert.equal(civilizationNameFromId(19), "Italians");
+  assert.equal(civilizationNameFromId(46), "Jurchens");
+  assert.equal(civilizationNameFromId(47), "Khitans");
+  assert.equal(civilizationNameFromId(999), "");
+});
 
 test("random civilization excludes bans for the selected land-map group", () => {
   const preference = {

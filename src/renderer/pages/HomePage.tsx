@@ -47,7 +47,9 @@ export function HomePage() {
               <strong className={match.outcome}>{match.outcome === "win" ? "Victory" : match.outcome === "loss" ? "Defeat" : "No Contest"}</strong>
               <span>{match.opponent}</span>
               <span>{match.map}</span>
-              <span>{match.civilization || "—"}</span>
+              <span>{match.civilization && match.opponentCivilization
+                ? `${match.civilization} vs. ${match.opponentCivilization}`
+                : "—"}</span>
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
               <span>{match.durationMinutes}m</span>
             </div>
