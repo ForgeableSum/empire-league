@@ -29,25 +29,6 @@ export function LobbyPreparation() {
     return () => window.clearInterval(timer);
   }, [countdownMs, state.roomSetupStartedAt]);
 
-  useEffect(() => {
-    if (!inputLocked) return;
-    void window.electronApi?.setLobbyInputLock(true);
-    const preventInput = (event: Event) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    };
-    const options = { capture: true, passive: false } as const;
-    const events = ["keydown", "keyup", "mousedown", "mouseup", "click", "dblclick", "wheel", "contextmenu", "touchstart", "touchend"] as const;
-    events.forEach((eventName) => window.addEventListener(eventName, preventInput, options));
-    document.documentElement.classList.add("game-transition-input-locked");
-    (document.activeElement as HTMLElement | null)?.blur?.();
-    return () => {
-      void window.electronApi?.setLobbyInputLock(false);
-      events.forEach((eventName) => window.removeEventListener(eventName, preventInput, options));
-      document.documentElement.classList.remove("game-transition-input-locked");
-    };
-  }, [inputLocked]);
-
   return (
     <section className="search-waiting-layout" aria-busy={inputLocked}>
       <div className="search-state">
@@ -58,11 +39,6 @@ export function LobbyPreparation() {
           <Loader2 size={18} className="spin" aria-hidden="true" />
           <span>{state.roomSetupMilestone ?? "Preparing game"}</span>
         </div>
-        {inputLocked && (
-          <div className="lobby-input-lock-notice" role="status">
-            Inputs are locked until the game is ready
-          </div>
-        )}
         {state.error && (
           <div className="error-panel">
             <strong>{state.error.message}</strong>

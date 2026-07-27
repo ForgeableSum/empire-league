@@ -8,6 +8,11 @@ const electronApi: ElectronGameApi = {
   launchAoe2: () => ipcRenderer.invoke("game:launch"),
   focusAoe2: () => ipcRenderer.invoke("game:focus"),
   setLobbyInputLock: (locked) => ipcRenderer.invoke("game:set-lobby-input-lock", locked),
+  onLobbyGuardPointer: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, point: { x: number; y: number }) => listener(point);
+    ipcRenderer.on("game:lobby-guard-pointer", handler);
+    return () => ipcRenderer.removeListener("game:lobby-guard-pointer", handler);
+  },
   startReplayEndDetection: (replayFolder) => ipcRenderer.invoke("game:start-replay-end-detection", replayFolder),
   stopReplayEndDetection: () => ipcRenderer.invoke("game:stop-replay-end-detection"),
   onReplayEnded: (listener) => {

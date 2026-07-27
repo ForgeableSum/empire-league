@@ -1934,23 +1934,20 @@
   color: var(--accent-2);
 }
 
-.lobby-input-lock-notice {
-  width: fit-content;
-  margin-top: 14px;
-  padding: 8px 12px;
-  border: 1px solid rgba(198, 159, 86, 0.35);
-  border-radius: 999px;
-  background: rgba(198, 159, 86, 0.09);
-  color: var(--accent);
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.game-transition-input-forwarded,
+.game-transition-input-forwarded * {
+  cursor: none !important;
 }
 
-.game-transition-input-locked,
-.game-transition-input-locked * {
-  cursor: none !important;
+.lobby-guard-pointer {
+  position: fixed;
+  z-index: 10000;
+  width: 12px;
+  height: 18px;
+  pointer-events: none;
+  background: white;
+  clip-path: polygon(0 0, 0 100%, 30% 72%, 52% 100%, 68% 91%, 47% 65%, 100% 65%);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.9));
 }
 
 .spin {

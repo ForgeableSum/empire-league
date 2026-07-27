@@ -73,6 +73,7 @@ export function App() {
 
   return (
     <>
+      <LobbyInputForwarding locked={["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error} />
       <Shell>
         {page === "home" && <HomePage />}
         {page === "play" && <QueuePage />}
@@ -87,6 +88,35 @@ export function App() {
       <RoomSetupRecoveryPrompt />
       {mouseTestActive && <TestOverlay />}
     </>
+  );
+}
+
+function LobbyInputForwarding({ locked }: { locked: boolean }) {
+  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!locked) {
+      setPointer(null);
+      return;
+    }
+    void window.electronApi?.setLobbyInputLock(true);
+    const removePointerListener = window.electronApi?.onLobbyGuardPointer(setPointer);
+    document.documentElement.classList.add("game-transition-input-forwarded");
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    return () => {
+      void window.electronApi?.setLobbyInputLock(false);
+      removePointerListener?.();
+      document.documentElement.classList.remove("game-transition-input-forwarded");
+    };
+  }, [locked]);
+
+  if (!locked || !pointer) return null;
+  return (
+    <span
+      className="lobby-guard-pointer"
+      style={{ left: pointer.x, top: pointer.y }}
+      aria-hidden="true"
+    />
   );
 }
 

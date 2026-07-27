@@ -52,6 +52,9 @@ let ownedAoe2Pid: number | undefined;
 let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
 let inputGuardProcess: ChildProcess | undefined;
+let inputGuardWindow: BrowserWindow | undefined;
+let inputGuardStopTimer: NodeJS.Timeout | undefined;
+const guardedSenders = new WeakSet<object>();
 let offscreenWindowProcess: ChildProcess | undefined;
 let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
@@ -457,6 +460,7 @@ public static class AoeInputGuard {
   private const int VK_SHIFT = 0x10;
   private const int VK_F12 = 0x7B;
   private const uint GA_ROOT = 2;
+  private const uint LLMHF_INJECTED = 0x00000001;
 
   private delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
   private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
@@ -488,6 +492,9 @@ public static class AoeInputGuard {
   [DllImport("user32.dll")] private static extern bool UnhookWindowsHookEx(IntPtr hook);
   [DllImport("user32.dll")] private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
   [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
+  [DllImport("user32.dll")] private static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
   [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
   [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point point);
   [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr window, uint flags);
@@ -505,10 +512,24 @@ public static class AoeInputGuard {
   private static uint guardThreadId;
   private static HookProc keyboardCallback = OnKeyboard;
   private static HookProc mouseCallback = OnMouse;
+  private static Point mouseAnchor;
+  private static int virtualMouseX;
+  private static int virtualMouseY;
+  private static int virtualLeft;
+  private static int virtualTop;
+  private static int virtualRight;
+  private static int virtualBottom;
 
   public static int Run(uint processId) {
     targetWindow = FindWindow(processId);
     if (targetWindow == IntPtr.Zero) return 2;
+    if (!GetCursorPos(out mouseAnchor)) return 4;
+    virtualMouseX = mouseAnchor.X;
+    virtualMouseY = mouseAnchor.Y;
+    virtualLeft = GetSystemMetrics(76);
+    virtualTop = GetSystemMetrics(77);
+    virtualRight = virtualLeft + GetSystemMetrics(78) - 1;
+    virtualBottom = virtualTop + GetSystemMetrics(79) - 1;
     guardThreadId = GetCurrentThreadId();
     IntPtr module = GetModuleHandle(null);
     keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboardCallback, module, 0);
@@ -549,6 +570,10 @@ public static class AoeInputGuard {
       if (emergency) {
         PostThreadMessage(guardThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
       } else {
+        uint message = unchecked((uint)wParam.ToInt64());
+        string action = message == 0x0101 || message == 0x0105 ? "UP" : "DOWN";
+        Console.WriteLine("KEY|{0}|{1}", action, key);
+        Console.Out.Flush();
         return new IntPtr(1);
       }
     }
@@ -557,6 +582,17 @@ public static class AoeInputGuard {
 
   private static IntPtr OnMouse(int code, IntPtr wParam, IntPtr lParam) {
     if (code >= 0) {
+      MouseHookData data = Marshal.PtrToStructure<MouseHookData>(lParam);
+      if ((data.Flags & LLMHF_INJECTED) != 0) return new IntPtr(1);
+      uint message = unchecked((uint)wParam.ToInt64());
+      int wheel = unchecked((short)(data.MouseData >> 16));
+      if (message == 0x0200) {
+        virtualMouseX = Math.Max(virtualLeft, Math.Min(virtualRight, virtualMouseX + data.Point.X - mouseAnchor.X));
+        virtualMouseY = Math.Max(virtualTop, Math.Min(virtualBottom, virtualMouseY + data.Point.Y - mouseAnchor.Y));
+        SetCursorPos(mouseAnchor.X, mouseAnchor.Y);
+      }
+      Console.WriteLine("MOUSE|{0}|{1}|{2}|{3}", message, virtualMouseX, virtualMouseY, wheel);
+      Console.Out.Flush();
       return new IntPtr(1);
     }
     return CallNextHookEx(mouseHook, code, wParam, lParam);
@@ -578,12 +614,23 @@ exit $exitCode
 `;
 
 function stopInputGuard(): void {
+  if (inputGuardStopTimer) clearTimeout(inputGuardStopTimer);
+  inputGuardStopTimer = undefined;
   const guard = inputGuardProcess;
   inputGuardProcess = undefined;
+  inputGuardWindow = undefined;
   guard?.kill();
 }
 
-async function startInputGuard(): Promise<boolean> {
+function scheduleInputGuardStop(): void {
+  if (inputGuardStopTimer) clearTimeout(inputGuardStopTimer);
+  inputGuardStopTimer = setTimeout(stopInputGuard, 750);
+}
+
+async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> {
+  if (inputGuardStopTimer) clearTimeout(inputGuardStopTimer);
+  inputGuardStopTimer = undefined;
+  if (window && !window.isDestroyed()) inputGuardWindow = window;
   if (inputGuardProcess && !inputGuardProcess.killed) return true;
   const encodedScript = Buffer.from(inputGuardScript, "utf16le").toString("base64");
   const child = spawn("powershell.exe", [
@@ -599,14 +646,21 @@ async function startInputGuard(): Promise<boolean> {
   });
   return new Promise<boolean>((resolve) => {
     let settled = false;
+    let stdoutBuffer = "";
     const finish = (ready: boolean) => {
       if (settled) return;
       settled = true;
       resolve(ready);
     };
     child.stdout?.on("data", (chunk: Buffer) => {
-      const output = chunk.toString();
-      output.split(/\r?\n/).filter(Boolean).forEach((message) => {
+      stdoutBuffer += chunk.toString();
+      const messages = stdoutBuffer.split(/\r?\n/);
+      stdoutBuffer = messages.pop() ?? "";
+      messages.filter(Boolean).forEach((message) => {
+        if (message.startsWith("KEY|") || message.startsWith("MOUSE|")) {
+          forwardGuardedInput(message);
+          return;
+        }
         console.info(`[AoE2 automation] INPUT_GUARD|${message}`);
         if (message.includes("GUARD_READY")) finish(true);
         if (message.includes("GUARD_ERROR")) finish(false);
@@ -615,6 +669,75 @@ async function startInputGuard(): Promise<boolean> {
     child.once("exit", () => finish(false));
     setTimeout(() => finish(false), 5_000);
   });
+}
+
+function forwardGuardedInput(message: string): void {
+  const window = inputGuardWindow;
+  if (!window || window.isDestroyed()) return;
+  const parts = message.split("|");
+  if (parts[0] === "KEY") {
+    const keyCode = electronKeyCode(Number(parts[2]));
+    if (!keyCode) return;
+    window.webContents.sendInputEvent({
+      type: parts[1] === "UP" ? "keyUp" : "keyDown",
+      keyCode
+    });
+    return;
+  }
+  if (parts[0] !== "MOUSE") return;
+  const messageId = Number(parts[1]);
+  const screenPoint = screen.screenToDipPoint({ x: Number(parts[2]), y: Number(parts[3]) });
+  const bounds = window.getContentBounds();
+  const x = Math.round(screenPoint.x - bounds.x);
+  const y = Math.round(screenPoint.y - bounds.y);
+  if (x < 0 || y < 0 || x >= bounds.width || y >= bounds.height) return;
+  if (messageId === 0x0200) {
+    window.webContents.send("game:lobby-guard-pointer", { x, y });
+    window.webContents.sendInputEvent({ type: "mouseMove", x, y });
+  } else if (messageId === 0x0201 || messageId === 0x0204 || messageId === 0x0207) {
+    window.webContents.sendInputEvent({
+      type: "mouseDown",
+      x,
+      y,
+      button: messageId === 0x0201 ? "left" : messageId === 0x0204 ? "right" : "middle",
+      clickCount: 1
+    });
+  } else if (messageId === 0x0202 || messageId === 0x0205 || messageId === 0x0208) {
+    window.webContents.sendInputEvent({
+      type: "mouseUp",
+      x,
+      y,
+      button: messageId === 0x0202 ? "left" : messageId === 0x0205 ? "right" : "middle",
+      clickCount: 1
+    });
+  } else if (messageId === 0x020a) {
+    window.webContents.sendInputEvent({ type: "mouseWheel", x, y, deltaY: Number(parts[4]) });
+  }
+}
+
+function electronKeyCode(virtualKey: number): string | undefined {
+  if (virtualKey >= 0x41 && virtualKey <= 0x5a) return String.fromCharCode(virtualKey);
+  if (virtualKey >= 0x30 && virtualKey <= 0x39) return String.fromCharCode(virtualKey);
+  const keys: Record<number, string> = {
+    0x08: "Backspace",
+    0x09: "Tab",
+    0x0d: "Enter",
+    0x10: "Shift",
+    0x11: "Control",
+    0x12: "Alt",
+    0x1b: "Escape",
+    0x20: "Space",
+    0x21: "PageUp",
+    0x22: "PageDown",
+    0x23: "End",
+    0x24: "Home",
+    0x25: "Left",
+    0x26: "Up",
+    0x27: "Right",
+    0x28: "Down",
+    0x2e: "Delete"
+  };
+  return keys[virtualKey];
 }
 
 const createLobbySequenceScript = String.raw`
@@ -1355,9 +1478,11 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:set-lobby-input-lock", async (event, locked: boolean) => {
     const requested = locked === true;
     const applied = setWindowsInputBlocked(requested);
-    const guardApplied = requested ? await startInputGuard() : (stopInputGuard(), false);
+    const appWindow = BrowserWindow.fromWebContents(event.sender);
+    const guardApplied = requested ? await startInputGuard(appWindow) : (scheduleInputGuardStop(), false);
     console.info(`[AoE2 automation] INPUT_LOCK|Requested=${requested}|BlockInput=${applied}|Guard=${guardApplied}|Source=Renderer`);
-    if (requested && (applied || guardApplied)) {
+    if (requested && (applied || guardApplied) && !guardedSenders.has(event.sender)) {
+      guardedSenders.add(event.sender);
       event.sender.once("destroyed", () => {
         setWindowsInputBlocked(false);
         stopInputGuard();
@@ -1596,7 +1721,7 @@ export function registerGameHandlers(): void {
     setMainWindowGameCoverClickThrough(false);
     try {
       const inputBlocked = setWindowsInputBlocked(true);
-      const inputGuardStarted = await startInputGuard();
+      const inputGuardStarted = await startInputGuard(appWindow);
       emitLog(`INPUT_LOCK|Requested=True|BlockInput=${inputBlocked}|Guard=${inputGuardStarted}|Source=CreateLobby`);
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
@@ -1754,7 +1879,7 @@ export function registerGameHandlers(): void {
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
-      const inputGuardStarted = await startInputGuard();
+      const inputGuardStarted = await startInputGuard(appWindow);
       console.info(`[AoE2 automation] INPUT_LOCK|Requested=True|Guard=${inputGuardStarted}|Source=LobbyAction|Target=${target}`);
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
@@ -2040,7 +2165,7 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
-    const inputGuardStarted = await startInputGuard();
+    const inputGuardStarted = await startInputGuard(appWindow);
     console.info(`[AoE2 automation] INPUT_LOCK|Requested=True|Guard=${inputGuardStarted}|Source=GuestOpenLobby`);
     await shell.openExternal(lobbyId);
     // Steam hands the URI to AoE2 asynchronously. Give the game time to
