@@ -59,6 +59,7 @@ let offscreenWindowProcess: ChildProcess | undefined;
 let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
 let replayEndPoller: NodeJS.Timeout | undefined;
+let replayFocusTimers: NodeJS.Timeout[] = [];
 let replayDetectionGeneration = 0;
 
 const replayPollIntervalMs = 1500;
@@ -110,10 +111,29 @@ function stopReplayEndDetection(): void {
   replayEndPoller = undefined;
 }
 
+function clearReplayFocusTimers(): void {
+  for (const timer of replayFocusTimers) clearTimeout(timer);
+  replayFocusTimers = [];
+}
+
+function focusMainWindowAfterReplay(window: BrowserWindow): void {
+  clearReplayFocusTimers();
+  focusMainWindow(window);
+  for (const delayMs of [250, 1000]) {
+    const timer = setTimeout(() => {
+      replayFocusTimers = replayFocusTimers.filter((candidate) => candidate !== timer);
+      if (!window.isDestroyed()) focusMainWindow(window);
+    }, delayMs);
+    timer.unref();
+    replayFocusTimers.push(timer);
+  }
+}
+
 async function startReplayEndDetection(
   window: BrowserWindow,
   configuredFolder?: string
 ): Promise<{ started: boolean; message?: string }> {
+  clearReplayFocusTimers();
   stopReplayEndDetection();
   const generation = replayDetectionGeneration;
   const startedAt = Date.now();
@@ -179,7 +199,7 @@ async function startReplayEndDetection(
 
       if (!observedGrowth && Date.now() - startedAt >= replayStartTimeoutMs) {
         stopReplayEndDetection();
-        focusMainWindow(window);
+        focusMainWindowAfterReplay(window);
         if (!window.webContents.isDestroyed()) {
           window.webContents.send(
             "game:replay-detection-failed",
@@ -1618,7 +1638,7 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:confirm-replay-ended", async (event) => {
     stopReplayEndDetection();
     const window = BrowserWindow.fromWebContents(event.sender);
-    if (window) focusMainWindow(window);
+    if (window) focusMainWindowAfterReplay(window);
   });
 
   ipcMain.handle("game:read-replay-file", async (_event, filePath: string) => {
