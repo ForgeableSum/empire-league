@@ -98,11 +98,13 @@ export interface MapPreferences {
   favoriteMapIds: Partial<Record<MapGroupId, string>>;
 }
 
-export type CivilizationMode = "pick" | "random" | "mirror" | "full-random";
+export type CivilizationMode = "pick" | "random" | "mirror";
 
 export interface CivilizationPreference {
   mode: CivilizationMode;
   civilization?: string;
+  openLandBans?: string[];
+  closedLandBans?: string[];
 }
 
 export interface QueueDefinition {

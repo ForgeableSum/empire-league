@@ -12,6 +12,11 @@ import {
 } from "./database.mjs";
 import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
 import { normalizeQueueMapPreferences, publicMapCatalog, selectMapForMatch } from "./map-catalog.mjs";
+import {
+  civilizationBansForMapGroup,
+  normalizeCivilizationPreference,
+  rollCivilizationPreference
+} from "./civilization-roll.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -201,11 +206,16 @@ function compareOpponentPreference(ticket, left, right) {
 
 function sessionFor(match, ticket) {
   const opponent = match.host.id === ticket.id ? match.guest : match.host;
+  const playerCivilizationPreference = match.civilizationPreferences.get(ticket.id);
+  const opponentCivilizationPreference = match.civilizationPreferences.get(opponent.id);
   return {
     id: match.id,
     status: "match_found",
-    queue: ticket.queue,
-    opponentCivilizationPreference: opponent.queue.civilizationPreference,
+    queue: {
+      ...ticket.queue,
+      civilizationPreference: playerCivilizationPreference
+    },
+    opponentCivilizationPreference,
     player: ticket.player,
     opponent: opponent.player,
     role: match.host.id === ticket.id ? "host" : "guest",
@@ -238,6 +248,11 @@ async function tryMatch(ticket) {
   const guest = host.id === opponent.id ? ticket : opponent;
   const selectedMap = selectMapForMatch(host.queue, guest.queue);
   if (!selectedMap) return;
+  const mapGroupId = publicMapCatalog.maps.find((map) => map.id === selectedMap.id)?.groupId ?? null;
+  const sharedCivilizationBans = [
+    ...civilizationBansForMapGroup(host.queue.civilizationPreference, mapGroupId),
+    ...civilizationBansForMapGroup(guest.queue.civilizationPreference, mapGroupId)
+  ];
   const match = {
     id: `match-${randomUUID().slice(0, 8)}`,
     host,
@@ -252,7 +267,11 @@ async function tryMatch(ticket) {
     resultReports: new Map(),
     resultResolved: false,
     mapCatalogVersion: publicMapCatalog.version,
-    mapGroupId: publicMapCatalog.maps.find((map) => map.id === selectedMap.id)?.groupId ?? null
+    mapGroupId,
+    civilizationPreferences: new Map([
+      [host.id, rollCivilizationPreference(host.queue.civilizationPreference, mapGroupId, sharedCivilizationBans)],
+      [guest.id, rollCivilizationPreference(guest.queue.civilizationPreference, mapGroupId, sharedCivilizationBans)]
+    ])
   };
   host.matchId = match.id;
   guest.matchId = match.id;
@@ -347,6 +366,7 @@ const server = createServer(async (request, response) => {
       if (!body.queue?.id) return send(response, 400, { error: "queue is required" });
       try {
         body.queue = normalizeQueueMapPreferences(body.queue);
+        body.queue.civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
       } catch (error) {
         return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });
       }
@@ -408,6 +428,7 @@ const server = createServer(async (request, response) => {
       }
       try {
         body.queue = normalizeQueueMapPreferences(body.queue);
+        body.queue.civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
       } catch (error) {
         return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });
       }

@@ -1,6 +1,7 @@
-import { Clock, Copy, Dices, Search, Shuffle, Swords, Users, XCircle } from "lucide-react";
+import { Clock, Copy, Search, Settings, Shuffle, Swords, Users, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CivilizationMode, MapGroupId } from "../../shared/contracts/matchmaking";
+import { civilizations } from "../../shared/civilizations";
 import { mapCatalog } from "../../shared/mapCatalog";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { LobbyPreparation } from "../components/match/LobbyPreparation";
@@ -14,16 +15,6 @@ import { useAppStore } from "../state/appStore";
 const favoriteMapsKey = "empire-league-favorite-maps";
 const civilizationPreferenceKey = "empire-league-civilization-preference";
 
-const civilizations = [
-  "Armenians", "Aztecs", "Bengalis", "Berbers", "Bohemians", "Britons", "Bulgarians",
-  "Burgundians", "Burmese", "Byzantines", "Celts", "Chinese", "Cumans", "Dravidians",
-  "Ethiopians", "Franks", "Georgians", "Goths", "Gurjaras", "Hindustanis", "Huns",
-  "Incas", "Italians", "Japanese", "Jurchens", "Khitans", "Khmer", "Koreans",
-  "Lithuanians", "Magyars", "Malay", "Malians", "Mayans", "Mongols", "Persians",
-  "Poles", "Portuguese", "Romans", "Saracens", "Sicilians", "Slavs", "Spanish",
-  "Tatars", "Teutons", "Turks", "Vietnamese", "Vikings"
-];
-
 const civilizationModes: Array<{
   id: CivilizationMode;
   label: string;
@@ -31,9 +22,8 @@ const civilizationModes: Array<{
   icon: typeof Swords;
 }> = [
   { id: "pick", label: "Choose Civ", detail: "Play your selected civilization", icon: Swords },
-  { id: "random", label: "Random", detail: "Choose any civilization; duplicates are allowed", icon: Shuffle },
-  { id: "mirror", label: "Mirror", detail: "Match your opponent's civilization", icon: Copy },
-  { id: "full-random", label: "Full Random", detail: "Choose randomly without duplicating another player's civilization", icon: Dices }
+  { id: "random", label: "Random", detail: "Roll a civilization after the map is chosen", icon: Shuffle },
+  { id: "mirror", label: "Mirror", detail: "Match your opponent's civilization", icon: Copy }
 ];
 
 export function QueuePage() {
@@ -66,7 +56,7 @@ export function QueuePage() {
   const [civilizationMode, setCivilizationMode] = useState<CivilizationMode>(() => {
     try {
       const savedMode = JSON.parse(window.localStorage.getItem(civilizationPreferenceKey) ?? "{}").mode;
-      return savedMode === "prefer-random" ? "random" : savedMode ?? "pick";
+      return savedMode === "prefer-random" || savedMode === "full-random" ? "random" : savedMode ?? "pick";
     } catch {
       return "pick";
     }
@@ -78,15 +68,58 @@ export function QueuePage() {
       return "Byzantines";
     }
   });
+  const [civilizationBans, setCivilizationBans] = useState<{ open: string[]; closed: string[] }>(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(civilizationPreferenceKey) ?? "{}");
+      return {
+        open: Array.isArray(saved.openLandBans) ? saved.openLandBans.slice(0, 5) : [],
+        closed: Array.isArray(saved.closedLandBans) ? saved.closedLandBans.slice(0, 5) : []
+      };
+    } catch {
+      return { open: [], closed: [] };
+    }
+  });
+  const [banEditorOpen, setBanEditorOpen] = useState(false);
+  const [banTerrain, setBanTerrain] = useState<"open" | "closed">("open");
+
+  const saveCivilizationPreference = (
+    mode = civilizationMode,
+    selectedCivilization = civilization,
+    bans = civilizationBans
+  ) => {
+    window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({
+      mode,
+      civilization: selectedCivilization,
+      openLandBans: bans.open,
+      closedLandBans: bans.closed
+    }));
+  };
 
   const selectCivilizationMode = (mode: CivilizationMode) => {
     setCivilizationMode(mode);
-    window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({ mode, civilization }));
+    saveCivilizationPreference(mode);
   };
 
   const selectCivilization = (value: string) => {
     setCivilization(value);
-    window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({ mode: civilizationMode, civilization: value }));
+    saveCivilizationPreference(civilizationMode, value);
+  };
+
+  const toggleCivilizationBan = (terrain: "open" | "closed", name: string) => {
+    setCivilizationBans((current) => {
+      const list = current[terrain];
+      const nextList = list.includes(name)
+        ? list.filter((civilizationName) => civilizationName !== name)
+        : list.length < 5 ? [...list, name] : list;
+      const next = { ...current, [terrain]: nextList };
+      saveCivilizationPreference(civilizationMode, civilization, next);
+      return next;
+    });
+  };
+
+  const randomPreference = {
+    openLandBans: civilizationBans.open,
+    closedLandBans: civilizationBans.closed
   };
 
   const toggleFavorite = (queueId: string, groupId: MapGroupId, mapId: string) => {
@@ -178,7 +211,8 @@ export function QueuePage() {
         favoriteMapId: activeFavoriteIds[0],
         civilizationPreference: {
           mode: civilizationMode,
-          civilization: civilizationMode === "pick" ? civilization : undefined
+          civilization: civilizationMode === "pick" ? civilization : undefined,
+          ...(civilizationMode === "random" ? randomPreference : {})
         }
       });
     }, 250);
@@ -244,7 +278,8 @@ export function QueuePage() {
                     favoriteMapId: activeFavoriteIds[0],
                     civilizationPreference: {
                       mode: civilizationMode,
-                      civilization: civilizationMode === "pick" ? civilization : undefined
+                      civilization: civilizationMode === "pick" ? civilization : undefined,
+                      ...(civilizationMode === "random" ? randomPreference : {})
                     }
                   })}
                 >
@@ -324,6 +359,18 @@ export function QueuePage() {
                             displayValue={civilizationMode === "pick" ? undefined : "N/A"}
                           />
                         )}
+                        {mode.id === "random" && (
+                          <button
+                            className="civilization-random-settings"
+                            type="button"
+                            aria-label="Configure random civilization bans"
+                            disabled={preferencesLocked}
+                            onClick={() => setBanEditorOpen(true)}
+                          >
+                            <Settings size={17} />
+                            <span>{civilizationBans.open.length + civilizationBans.closed.length}/10 bans</span>
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -385,7 +432,8 @@ export function QueuePage() {
                       mode: civilizationMode,
                       civilization: civilizationMode === "pick"
                         ? civilization
-                        : undefined
+                        : undefined,
+                      ...(civilizationMode === "random" ? randomPreference : {})
                     }
                   })}
                 >
@@ -397,6 +445,73 @@ export function QueuePage() {
       ) : (
         <div className="empty-state">No matchmaking modes are available.</div>
       )}
+      {banEditorOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="civ-ban-title" onMouseDown={() => setBanEditorOpen(false)}>
+          <div className="match-modal civilization-ban-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="civilization-ban-header">
+              <div>
+                <span className="eyebrow">Random civilization settings</span>
+                <h2 id="civ-ban-title">Civilization bans</h2>
+              </div>
+            </div>
+            <p>Ban up to 5 civilizations for each land-map style. Both players' bans are combined, so neither player can roll a banned civilization.</p>
+            <ThemedSelect
+              className="civilization-ban-map-select"
+              label="Map style"
+              options={[
+                { value: "open", label: `Open land maps (${civilizationBans.open.length}/5 banned)` },
+                { value: "closed", label: `Closed land maps (${civilizationBans.closed.length}/5 banned)` }
+              ]}
+              value={banTerrain}
+              onChange={(value) => setBanTerrain(value as "open" | "closed")}
+            />
+            <CivilizationBanList
+              title={banTerrain === "open" ? "Open land maps" : "Closed land maps"}
+              selected={civilizationBans[banTerrain]}
+              onToggle={(name) => toggleCivilizationBan(banTerrain, name)}
+            />
+            <div className="modal-actions">
+              <button className="secondary" type="button" onClick={() => {
+                const next = { open: [], closed: [] };
+                setCivilizationBans(next);
+                saveCivilizationPreference(civilizationMode, civilization, next);
+              }}>Clear bans</button>
+              <button type="button" onClick={() => setBanEditorOpen(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CivilizationBanList({ title, selected, onToggle }: {
+  title: string;
+  selected: string[];
+  onToggle: (name: string) => void;
+}) {
+  return (
+    <section className="civilization-ban-group">
+      <div className="civilization-ban-group-heading">
+        <strong>{title}</strong>
+        <span>{selected.length}/5 selected</span>
+      </div>
+      <div className="civilization-ban-grid">
+        {civilizations.map((name) => {
+          const checked = selected.includes(name);
+          return (
+            <label className={checked ? "selected" : ""} key={name}>
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={!checked && selected.length >= 5}
+                onChange={() => onToggle(name)}
+              />
+              <span>{name}</span>
+            </label>
+          );
+        })}
+      </div>
     </section>
   );
 }

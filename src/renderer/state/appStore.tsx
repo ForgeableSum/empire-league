@@ -1218,8 +1218,7 @@ function aoe2SelectionForPreference(
   if (preference.mode === "pick") {
     return (preference.civilization as import("../../shared/aoe2UiManifest").Aoe2Civilization | undefined) ?? null;
   }
-  if (preference.mode === "random") return "Random";
-  if (preference.mode === "full-random") return "Full Random";
+  if (preference.mode === "random") return null;
   if (preference.mode === "mirror") return "Mirror";
   return null;
 }

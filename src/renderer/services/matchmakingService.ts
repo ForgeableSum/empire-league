@@ -9,6 +9,7 @@ import type {
 import type { MockServiceConfig } from "../state/types";
 import { currentUser, maps, matchmakingOpponents } from "../mocks/mockPlayers";
 import { mapCatalog, selectMapFromQueues } from "../../shared/mapCatalog";
+import { rollCivilization } from "../../shared/civilizations";
 import { matchmakerEventPollMs } from "../../shared/runtimeConfig";
 import { delay } from "./timing";
 import { authorizationHeaders, matchmakerUrl } from "./authService";
@@ -224,10 +225,24 @@ export class MockMatchmakingService implements MatchmakingService {
           }
         };
         const opponent = matchmakingOpponents[Math.floor(Math.random() * matchmakingOpponents.length)];
+        const selectedMap = selectMapFromQueues(
+          currentDefinition ?? { mapPool: selectedMaps },
+          opponentDefinition
+        );
+        const selectedMapGroup = mapCatalog.maps.find((map) => map.id === selectedMap?.id)?.groupId;
+        const resolvedDefinition = currentDefinition
+          ? {
+              ...currentDefinition,
+              civilizationPreference: rollCivilization(
+                currentDefinition.civilizationPreference,
+                selectedMapGroup
+              )
+            }
+          : undefined;
         const match: MatchSession = {
           id: `match-${crypto.randomUUID().slice(0, 8)}`,
           status: "match_found",
-          queue: currentDefinition ?? {
+          queue: resolvedDefinition ?? {
             id: "ranked-rm-1v1",
             name: "Ranked 1v1 Random Map",
             description: "Competitive 1v1 matchmaking with the active community map pool.",
@@ -252,10 +267,7 @@ export class MockMatchmakingService implements MatchmakingService {
           acceptedByPlayer: false,
           acceptedByOpponent: false,
           acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
-          selectedMap: selectMapFromQueues(
-            currentDefinition ?? { mapPool: selectedMaps },
-            opponentDefinition
-          ),
+          selectedMap,
           createdAt: new Date().toISOString()
         };
         listener({ type: "match_found", match });

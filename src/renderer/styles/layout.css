@@ -915,7 +915,7 @@
 
 .civilization-modes {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -979,6 +979,143 @@
   border-color: rgba(140, 100, 46, 0.52);
   border-radius: var(--radius);
   background: #12110f;
+}
+
+.civilization-random-settings {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  min-height: 36px;
+  border: 1px solid rgba(140, 100, 46, 0.52);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: #12110f;
+  font-size: 12px;
+  text-align: left;
+}
+
+.civilization-random-settings:hover {
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+
+.match-modal.civilization-ban-modal {
+  width: min(840px, calc(100vw - 32px));
+  max-width: 840px;
+  max-height: 70vh;
+  min-width: 0;
+  padding-inline: 28px;
+  overflow: auto;
+  overflow-x: hidden;
+}
+
+.civilization-ban-header,
+.civilization-ban-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.civilization-ban-header h2 {
+  margin: 4px 0 0;
+}
+
+.civilization-ban-modal > p,
+.civilization-ban-group-heading span {
+  margin: 0;
+  color: var(--muted);
+}
+
+.civilization-ban-map-select {
+  display: grid;
+  grid-template-columns: auto minmax(260px, 420px);
+  align-items: center;
+  justify-content: start;
+  gap: 12px;
+}
+
+.civilization-ban-map-select > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.civilization-ban-map-select .themed-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.civilization-ban-map-select .themed-select-options {
+  right: auto;
+  left: 0;
+  width: 100%;
+}
+
+.civilization-ban-group {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.civilization-ban-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 16px;
+  row-gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-height: min(310px, calc(70vh - 300px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.civilization-ban-grid label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: #171614;
+  cursor: pointer;
+}
+
+.civilization-ban-grid label input {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.civilization-ban-grid label span {
+  flex: 1 1 auto;
+  min-width: max-content;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.civilization-ban-grid label.selected {
+  border-color: var(--accent);
+  color: var(--text);
+  background: rgba(197, 141, 69, 0.12);
+}
+
+.civilization-ban-grid label:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.civilization-option-card .civilization-select,
+.civilization-option-card .civilization-random-settings {
+  width: 50%;
+  margin-right: auto;
+  margin-left: 0;
 }
 
 .civilization-option-card .themed-select-options {
