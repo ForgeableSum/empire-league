@@ -1964,12 +1964,21 @@ export function registerGameHandlers(): void {
       const message = `CURSOR_ACTION|Target=${target}|Label=${action.label}|DesignPoint=${action.point[0]},${action.point[1]}|${result.detail}`;
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
-      const sent = result.sent && (!verifiesReady || readyState?.state === "ready");
+      let sent = result.sent && (!verifiesReady || readyState?.state === "ready");
+      if (target === "start" && sent) {
+        const lobbyState = readAoe2HostSetupState(process.pid);
+        const startVerification = `START_VERIFY|State=${lobbyState.state}|${lobbyState.detail}`;
+        console.info(`[AoE2 automation] ${startVerification}`);
+        if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", startVerification);
+        sent = lobbyState.state !== "lobby-room";
+      }
       return {
         sent,
         message: sent
           ? `${target} ready state verified.`
-          : `${target} ready state could not be verified.`
+          : target === "start"
+            ? "AoE2 remained in the lobby after Start was clicked."
+            : `${target} ready state could not be verified.`
       };
     } catch (error) {
       console.error(`[AoE2 automation] Cursor action ${target} failed`, error);

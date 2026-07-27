@@ -281,7 +281,9 @@ async function tryMatch(ticket) {
     acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
     lobby: null,
     guestContentAccepted: false,
+    hostContentReady: false,
     guestLobbyReady: false,
+    customContentRequired: publicMapCatalog.maps.find((map) => map.id === selectedMap.id)?.isCustomMap === true,
     resultReports: new Map(),
     resultResolved: false,
     mapCatalogVersion: publicMapCatalog.version,
@@ -554,6 +556,23 @@ async function handleRequest(request, response) {
       return send(response, 200, { accepted: true });
     }
 
+    const hostContentReadyMatch = url.pathname.match(/^\/matches\/([^/]+)\/host-content-ready$/);
+    if (request.method === "POST" && hostContentReadyMatch) {
+      const match = matches.get(decodeURIComponent(hostContentReadyMatch[1]));
+      const body = await readJson(request);
+      if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only the host may confirm restored lobby readiness" });
+      }
+      if (!match.customContentRequired || !match.guestContentAccepted) {
+        return send(response, 409, { error: "custom content acceptance has not been reported" });
+      }
+      if (!match.hostContentReady) {
+        match.hostContentReady = true;
+        emit(match.guest, { type: "host_content_ready", matchId: match.id });
+      }
+      return send(response, 200, { ready: true });
+    }
+
     const guestReadyMatch = url.pathname.match(/^\/matches\/([^/]+)\/guest-ready$/);
     if (request.method === "POST" && guestReadyMatch) {
       const match = matches.get(decodeURIComponent(guestReadyMatch[1]));
@@ -562,6 +581,9 @@ async function handleRequest(request, response) {
         return send(response, 403, { error: "only the guest may report lobby readiness" });
       }
       if (!match.lobby) return send(response, 409, { error: "the lobby has not been published" });
+      if (match.customContentRequired && match.guestContentAccepted && !match.hostContentReady) {
+        return send(response, 409, { error: "the host has not restored readiness after custom content acceptance" });
+      }
       if (!match.guestLobbyReady) {
         match.guestLobbyReady = true;
         emit(match.host, { type: "guest_lobby_ready", matchId: match.id });
@@ -575,6 +597,10 @@ async function handleRequest(request, response) {
       const body = await readJson(request);
       if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
         return send(response, 403, { error: "only the host may report game start" });
+      }
+      if (!match.guestLobbyReady) return send(response, 409, { error: "the guest is not ready" });
+      if (match.customContentRequired && match.guestContentAccepted && !match.hostContentReady) {
+        return send(response, 409, { error: "the host has not restored readiness after custom content acceptance" });
       }
       emit(match.guest, { type: "game_started", matchId: match.id });
       return send(response, 200, { started: true });
