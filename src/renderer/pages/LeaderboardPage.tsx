@@ -42,7 +42,7 @@ export function LeaderboardPage() {
   );
   const divisionOptions = [
     { value: "all", label: "All" },
-    ...(["Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster"] satisfies Division[])
+    ...(["Copper", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster"] satisfies Division[])
       .map((item) => ({ value: item, label: `${item} (${formatDivisionRatingRange(item)})` }))
   ];
 

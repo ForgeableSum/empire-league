@@ -2,6 +2,7 @@ import type { PlayerProfile } from "./players.js";
 import type { MatchResult, ReplayMatchMetadata } from "./matches.js";
 
 export type Division =
+  | "Copper"
   | "Bronze"
   | "Silver"
   | "Gold"
@@ -11,7 +12,8 @@ export type Division =
   | "Grandmaster";
 
 export const divisionRatingRanges: Record<Division, readonly [number, number | null]> = {
-  Bronze: [0, 799],
+  Copper: [0, 500],
+  Bronze: [501, 799],
   Silver: [800, 999],
   Gold: [1000, 1199],
   Platinum: [1200, 1399],
@@ -32,7 +34,8 @@ export function getDivisionForRating(rating: number): Division {
   if (rating >= 1200) return "Platinum";
   if (rating >= 1000) return "Gold";
   if (rating >= 800) return "Silver";
-  return "Bronze";
+  if (rating >= 501) return "Bronze";
+  return "Copper";
 }
 
 export type DivisionTier = 1 | 2 | 3;
@@ -40,7 +43,8 @@ export type DivisionTier = 1 | 2 | 3;
 export function getDivisionTierForRating(rating: number): DivisionTier {
   const division = getDivisionForRating(rating);
   const thresholds: Record<Division, [number, number]> = {
-    Bronze: [600, 700],
+    Copper: [167, 334],
+    Bronze: [601, 701],
     Silver: [867, 934],
     Gold: [1067, 1134],
     Platinum: [1267, 1334],

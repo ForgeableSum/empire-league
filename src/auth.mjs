@@ -184,7 +184,8 @@ function divisionForRating(rating) {
   if (rating >= 1200) return "Platinum";
   if (rating >= 1000) return "Gold";
   if (rating >= 800) return "Silver";
-  return "Bronze";
+  if (rating >= 501) return "Bronze";
+  return "Copper";
 }
 
 async function fetchSteamProfile(steamId) {
