@@ -2294,6 +2294,10 @@
   font-size: 36px;
 }
 
+.result-screen h2 {
+  font-size: 72px;
+}
+
 .rating-swing span {
   color: var(--muted);
   font-size: 20px;

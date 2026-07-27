@@ -20,14 +20,6 @@ export function ResultScreen() {
         <strong>{result.ratingChange > 0 ? "+" : ""}{result.ratingChange} Rating</strong>
         <span>{contested ? "No rating change" : `${result.oldRating} → ${result.newRating}`}</span>
       </div>
-      <div className="metrics-grid compact">
-        <div><span>Opponent</span><strong>{match.opponent.displayName}</strong></div>
-        <div><span>Map</span><strong>{match.selectedMap?.name}</strong></div>
-        <div><span>Reason</span><strong>{result.reason}</strong></div>
-        <div><span>Source</span><strong>{result.verificationSource}</strong></div>
-        <div><span>Replay</span><strong>{contested ? "Not verified" : "Available"}</strong></div>
-        <div><span>Status</span><strong>{contested ? "Discarded" : "Recorded"}</strong></div>
-      </div>
       <div className="button-row">
         <button className="primary" type="button" onClick={() => void returnToMatchmaking()}>
           Return to Matchmaking
