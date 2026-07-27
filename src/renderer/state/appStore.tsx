@@ -287,6 +287,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    if (import.meta.env.VITE_SKIP_AOE_AUTO_LAUNCH === "true") return;
     if (!state.settings.autoLaunch) return;
 
     let cancelled = false;

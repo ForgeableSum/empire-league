@@ -1,10 +1,15 @@
 import { spawn } from "node:child_process";
 import { request } from "node:http";
 
-const vite = spawn(process.execPath, ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1"], {
-  stdio: "inherit"
-});
 const clientOnly = process.argv.includes("--client-only");
+const skipAoeAutoLaunch = process.argv.includes("--no-aoe");
+const vite = spawn(process.execPath, ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1"], {
+  stdio: "inherit",
+  env: {
+    ...process.env,
+    VITE_SKIP_AOE_AUTO_LAUNCH: skipAoeAutoLaunch ? "true" : process.env.VITE_SKIP_AOE_AUTO_LAUNCH
+  }
+});
 const matchmaker = clientOnly
   ? null
   : spawn(process.execPath, ["src/matchmaker.mjs"], {

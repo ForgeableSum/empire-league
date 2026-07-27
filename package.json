@@ -7,7 +7,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs",
+    "dev:no-aoe": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --no-aoe",
     "dev:client": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --client-only",
+    "dev:client:no-aoe": "tsc -p tsconfig.electron.json && node --env-file-if-exists=.env src/dev.mjs --client-only --no-aoe",
     "matchmaker": "node --env-file-if-exists=.env src/matchmaker.mjs",
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "build": "tsc -p tsconfig.json && npm run build:electron && vite build",
