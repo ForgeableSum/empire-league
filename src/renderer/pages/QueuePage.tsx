@@ -513,7 +513,7 @@ export function QueuePage() {
                 <h2 id="civ-ban-title">Civilization bans</h2>
               </div>
             </div>
-            <p>Ban up to 5 civilizations for each land-map style. Both players' bans are combined, so neither player can roll a banned civilization.</p>
+            <p>Ban up to 5 civilizations for each map style. Both players' bans are combined, so neither player can roll a banned civilization.</p>
             <ThemedSelect
               className="civilization-ban-map-select"
               label="Map style"

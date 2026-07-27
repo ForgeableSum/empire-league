@@ -1096,7 +1096,7 @@
 
 .civilization-ban-map-select {
   display: grid;
-  grid-template-columns: auto minmax(260px, 420px);
+  grid-template-columns: auto auto;
   align-items: center;
   justify-content: start;
   gap: 12px;
@@ -1109,7 +1109,7 @@
 }
 
 .civilization-ban-map-select .themed-select {
-  width: 100%;
+  width: max-content;
   min-width: 0;
 }
 
