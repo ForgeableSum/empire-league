@@ -153,11 +153,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const startupPromptResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const replayResultInFlightRef = useRef(false);
-  const hostContentReadyWaitersRef = useRef(new Map<string, {
-    resolve: () => void;
-    reject: (error: Error) => void;
-    timer: number;
-  }>());
   const [startupGamePrompt, setStartupGamePrompt] = useState<AppContextValue["startupGamePrompt"]>(null);
   const [roomSetupFailed, setRoomSetupFailed] = useState(false);
   const [roomSetupFailureReason, setRoomSetupFailureReason] = useState<AppContextValue["roomSetupFailureReason"]>(null);
@@ -677,30 +672,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   if (!confirmation.sent) {
                     log("Unverified-content confirmation keys could not be sent");
                   } else {
-                    const remainingMs = Math.max(1, deadline - Date.now());
-                    const hostReady = new Promise<void>((resolve, reject) => {
-                      const timer = window.setTimeout(() => {
-                        hostContentReadyWaitersRef.current.delete(event.matchId);
-                        reject(new Error("The host did not restore readiness after content acceptance."));
-                      }, remainingMs);
-                      hostContentReadyWaitersRef.current.set(event.matchId, { resolve, reject, timer });
-                    });
-                    try {
-                      await services.matchmaking.reportGuestContentAccepted(event.matchId);
-                    } catch (error) {
-                      const waiter = hostContentReadyWaitersRef.current.get(event.matchId);
-                      if (waiter) window.clearTimeout(waiter.timer);
-                      hostContentReadyWaitersRef.current.delete(event.matchId);
-                      throw error;
-                    }
+                    await services.matchmaking.reportGuestContentAccepted(event.matchId);
                     contentAcceptanceReported = true;
-                    log("Content accepted; waiting for the host to restore Ready");
-                    setState((previous) => ({
-                      ...previous,
-                      roomSetupMilestone: "Waiting for host to restore lobby readiness"
-                    }));
-                    await hostReady;
-                    log("Host restored Ready; resuming guest Ready checks");
+                    log("Content accepted; asked the host to verify Ready again");
                   }
                 }
               } while (!ready.sent && Date.now() < deadline);
@@ -718,18 +692,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
           })();
         }
-        if (event.type === "host_content_ready") {
-          const waiter = hostContentReadyWaitersRef.current.get(event.matchId);
-          if (waiter) {
-            window.clearTimeout(waiter.timer);
-            hostContentReadyWaitersRef.current.delete(event.matchId);
-            waiter.resolve();
-          }
-          setState((previous) => ({
-            ...previous,
-            roomSetupMilestone: "Host ready — completing lobby setup"
-          }));
-        }
         if (
           event.type === "guest_content_accepted"
           && window.electronApi
@@ -743,17 +705,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             try {
               log("Guest accepted custom content; waiting for the lobby state to settle");
               await delayForLobbyInput(lobbySetupTiming.hostReadySettleMs);
-              const deadline = Date.now() + lobbySetupTiming.customMapTransferTimeoutMs;
-              let ready: { sent: boolean; message: string };
-              do {
-                ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
-                if (!ready.sent && Date.now() < deadline) {
-                  log(`Host Ready not available yet: ${ready.message}`);
-                  await delayForLobbyInput(lobbySetupTiming.customMapTransferPollMs);
-                }
-              } while (!ready.sent && Date.now() < deadline);
+              const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
               if (!ready.sent) throw new Error(ready.message);
-              await services.matchmaking.reportHostContentReady(event.matchId);
               log("Host Ready verified again after guest content acceptance");
               setState((previous) => ({
                 ...previous,
