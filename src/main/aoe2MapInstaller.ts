@@ -50,6 +50,12 @@ export async function installBundledAoe2Maps(): Promise<Aoe2MapInstallResult> {
       join(bundledMapsDirectory(), fileName),
       join(mapDirectory, fileName)
     )));
+    await mkdir(modRoot, { recursive: true });
+    await writeFile(join(modRoot, "info.json"), JSON.stringify({
+      Author: "Empire League",
+      Description: "Maps installed and maintained by Empire League.",
+      Title: localModName
+    }));
     if (current.every(Boolean)) {
       result.skippedProfiles.push(profileId);
       continue;
@@ -60,11 +66,6 @@ export async function installBundledAoe2Maps(): Promise<Aoe2MapInstallResult> {
       join(bundledMapsDirectory(), fileName),
       join(mapDirectory, fileName)
     )));
-    await writeFile(join(modRoot, "info.json"), JSON.stringify({
-      Author: "Empire League / MembTV",
-      Description: "Tournament maps installed and maintained by Empire League.",
-      Title: localModName
-    }));
     result.installedProfiles.push(profileId);
   }
 
