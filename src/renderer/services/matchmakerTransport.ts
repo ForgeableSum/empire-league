@@ -1,6 +1,5 @@
 import type { PlayerProfile } from "../../shared/contracts/players";
 import type { QueueEventListener, UnsubscribeFunction } from "../../shared/contracts/matchmaking";
-import { matchmakerEventDeliveryDelayMs } from "../../shared/runtimeConfig";
 
 const matchmakerUrl = (import.meta.env.VITE_MATCHMAKER_URL ?? "http://127.0.0.1:4317").replace(/\/$/, "");
 
@@ -131,11 +130,8 @@ class MatchmakerTransport {
     if (message.type === "event" && this.subscription
       && message.ticketId === this.subscription.ticketId
       && message.event && Number.isSafeInteger(message.sequence)) {
-      const subscription = this.subscription;
-      subscription.after = Math.max(subscription.after, message.sequence ?? 0);
-      window.setTimeout(() => {
-        if (this.subscription === subscription) subscription.listener(message.event!);
-      }, matchmakerEventDeliveryDelayMs);
+      this.subscription.after = Math.max(this.subscription.after, message.sequence ?? 0);
+      this.subscription.listener(message.event);
       return;
     }
     if (message.type === "error") {

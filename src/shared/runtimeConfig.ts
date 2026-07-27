@@ -1,7 +1,7 @@
 export const cursorAutomationEnabled = true;
-export const matchmakerEventDeliveryDelayMs = 400;
 export const aoe2PhysicalClickSettleMs = 500;
 export const contentConfirmationKeyDelayMs = 150;
+export const customContentHostRecoveryMs = 4000;
 
 export const lobbySetupTiming = {
   hostLobbyAutomationSettleMs: 2000,

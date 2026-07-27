@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { aoe2UiManifest } from "../../shared/aoe2UiManifest";
 import type { MatchResult } from "../../shared/contracts/matches";
-import { lobbySetupTiming } from "../../shared/runtimeConfig";
+import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MapDefinition, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
@@ -674,7 +674,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   } else {
                     await services.matchmaking.reportGuestContentAccepted(event.matchId);
                     contentAcceptanceReported = true;
-                    log("Content accepted; asked the host to verify Ready again");
+                    log(`Content accepted; allowing ${customContentHostRecoveryMs} ms for the host to restore Ready`);
+                    await delayForLobbyInput(customContentHostRecoveryMs);
                   }
                 }
               } while (!ready.sent && Date.now() < deadline);
