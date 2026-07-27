@@ -249,9 +249,21 @@ async function tryMatch(ticket) {
   const selectedMap = selectMapForMatch(host.queue, guest.queue);
   if (!selectedMap) return;
   const mapGroupId = publicMapCatalog.maps.find((map) => map.id === selectedMap.id)?.groupId ?? null;
+  const hostSubmittedPreference = host.queue.civilizationPreference;
+  const guestSubmittedPreference = guest.queue.civilizationPreference;
+  const hostEffectivePreference = hostSubmittedPreference?.mode === "pick"
+    && hostSubmittedPreference.preferRandom
+    && guestSubmittedPreference?.mode === "random"
+    ? { ...hostSubmittedPreference, mode: "random" }
+    : hostSubmittedPreference;
+  const guestEffectivePreference = guestSubmittedPreference?.mode === "pick"
+    && guestSubmittedPreference.preferRandom
+    && hostSubmittedPreference?.mode === "random"
+    ? { ...guestSubmittedPreference, mode: "random" }
+    : guestSubmittedPreference;
   const sharedCivilizationBans = [
-    ...civilizationBansForMapGroup(host.queue.civilizationPreference, mapGroupId),
-    ...civilizationBansForMapGroup(guest.queue.civilizationPreference, mapGroupId)
+    ...civilizationBansForMapGroup(hostEffectivePreference, mapGroupId),
+    ...civilizationBansForMapGroup(guestEffectivePreference, mapGroupId)
   ];
   const match = {
     id: `match-${randomUUID().slice(0, 8)}`,
@@ -269,8 +281,8 @@ async function tryMatch(ticket) {
     mapCatalogVersion: publicMapCatalog.version,
     mapGroupId,
     civilizationPreferences: new Map([
-      [host.id, rollCivilizationPreference(host.queue.civilizationPreference, mapGroupId, sharedCivilizationBans)],
-      [guest.id, rollCivilizationPreference(guest.queue.civilizationPreference, mapGroupId, sharedCivilizationBans)]
+      [host.id, rollCivilizationPreference(hostEffectivePreference, mapGroupId, sharedCivilizationBans)],
+      [guest.id, rollCivilizationPreference(guestEffectivePreference, mapGroupId, sharedCivilizationBans)]
     ])
   };
   host.matchId = match.id;

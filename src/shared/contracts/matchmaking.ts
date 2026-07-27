@@ -103,6 +103,7 @@ export type CivilizationMode = "pick" | "random" | "mirror";
 export interface CivilizationPreference {
   mode: CivilizationMode;
   civilization?: string;
+  preferRandom?: boolean;
   openLandBans?: string[];
   closedLandBans?: string[];
 }

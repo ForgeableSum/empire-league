@@ -43,3 +43,20 @@ test("normalization limits each map-style list to five known unique civilization
   assert.deepEqual(normalized.openLandBans, civilizations.slice(0, 5));
   assert.deepEqual(normalized.closedLandBans, ["Franks"]);
 });
+
+test("normalization preserves prefer-random and bans for a chosen civilization", () => {
+  const normalized = normalizeCivilizationPreference({
+    mode: "pick",
+    civilization: "Mayans",
+    preferRandom: true,
+    openLandBans: ["Franks"],
+    closedLandBans: ["Turks"]
+  });
+  assert.deepEqual(normalized, {
+    mode: "pick",
+    civilization: "Mayans",
+    preferRandom: true,
+    openLandBans: ["Franks"],
+    closedLandBans: ["Turks"]
+  });
+});

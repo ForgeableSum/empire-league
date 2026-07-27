@@ -45,18 +45,24 @@ export function normalizeCivilizationPreference(preference) {
       mode: "pick",
       civilization: civilizations.includes(preference.civilization)
         ? preference.civilization
-        : "Byzantines"
+        : "Byzantines",
+      preferRandom: preference.preferRandom === true,
+      openLandBans: validCivilizationBans(preference.openLandBans),
+      closedLandBans: validCivilizationBans(preference.closedLandBans)
     };
   }
   if (preference.mode === "random") {
-    const validBans = (value) => [...new Set(
-      (Array.isArray(value) ? value : []).filter((name) => civilizations.includes(name))
-    )].slice(0, 5);
     return {
       mode: "random",
-      openLandBans: validBans(preference.openLandBans),
-      closedLandBans: validBans(preference.closedLandBans)
+      openLandBans: validCivilizationBans(preference.openLandBans),
+      closedLandBans: validCivilizationBans(preference.closedLandBans)
     };
   }
   return { mode: "mirror" };
+}
+
+function validCivilizationBans(value) {
+  return [...new Set(
+    (Array.isArray(value) ? value : []).filter((name) => civilizations.includes(name))
+  )].slice(0, 5);
 }

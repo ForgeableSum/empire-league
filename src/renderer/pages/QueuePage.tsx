@@ -68,6 +68,13 @@ export function QueuePage() {
       return "Byzantines";
     }
   });
+  const [preferRandom, setPreferRandom] = useState(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(civilizationPreferenceKey) ?? "{}").preferRandom === true;
+    } catch {
+      return false;
+    }
+  });
   const [civilizationBans, setCivilizationBans] = useState<{ open: string[]; closed: string[] }>(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(civilizationPreferenceKey) ?? "{}");
@@ -80,6 +87,7 @@ export function QueuePage() {
     }
   });
   const [banEditorOpen, setBanEditorOpen] = useState(false);
+  const [chooseCivilizationSettingsOpen, setChooseCivilizationSettingsOpen] = useState(false);
   const [banTerrain, setBanTerrain] = useState<"open" | "closed">("open");
 
   const saveCivilizationPreference = (
@@ -90,6 +98,7 @@ export function QueuePage() {
     window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({
       mode,
       civilization: selectedCivilization,
+      preferRandom,
       openLandBans: bans.open,
       closedLandBans: bans.closed
     }));
@@ -118,6 +127,7 @@ export function QueuePage() {
   };
 
   const randomPreference = {
+    preferRandom,
     openLandBans: civilizationBans.open,
     closedLandBans: civilizationBans.closed
   };
@@ -212,12 +222,12 @@ export function QueuePage() {
         civilizationPreference: {
           mode: civilizationMode,
           civilization: civilizationMode === "pick" ? civilization : undefined,
-          ...(civilizationMode === "random" ? randomPreference : {})
+          ...randomPreference
         }
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [civilization, civilizationMode, enabledGroups, favoriteMaps, isSearching, selectedMaps, selectedQueue]);
+  }, [civilization, civilizationBans, civilizationMode, enabledGroups, favoriteMaps, isSearching, preferRandom, selectedMaps, selectedQueue]);
 
   if (["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus)) {
     return <LobbyPreparation />;
@@ -279,7 +289,7 @@ export function QueuePage() {
                     civilizationPreference: {
                       mode: civilizationMode,
                       civilization: civilizationMode === "pick" ? civilization : undefined,
-                      ...(civilizationMode === "random" ? randomPreference : {})
+                      ...randomPreference
                     }
                   })}
                 >
@@ -331,13 +341,20 @@ export function QueuePage() {
                     const Icon = mode.icon;
                     return (
                       <div
-                        className={civilizationMode === mode.id ? "civilization-option-card active" : "civilization-option-card"}
+                        className={
+                          civilizationMode === mode.id || (preferRandom && civilizationMode === "pick" && mode.id === "random")
+                            ? "civilization-option-card active"
+                            : "civilization-option-card"
+                        }
                         key={mode.id}
                       >
                         <button
                           className="civilization-mode-choice"
                           type="button"
-                          aria-pressed={civilizationMode === mode.id}
+                          aria-pressed={
+                            civilizationMode === mode.id
+                              || (preferRandom && civilizationMode === "pick" && mode.id === "random")
+                          }
                           disabled={preferencesLocked}
                           onClick={() => selectCivilizationMode(mode.id)}
                         >
@@ -348,20 +365,38 @@ export function QueuePage() {
                           </span>
                         </button>
                         {mode.id === "pick" && (
-                          <ThemedSelect
-                            className="civilization-select"
-                            label="Civilization"
-                            options={civilizations.map((name) => ({ value: name, label: name }))}
-                            value={civilization}
-                            onChange={selectCivilization}
-                            disabled={preferencesLocked || civilizationMode !== "pick"}
-                            searchable
-                            displayValue={civilizationMode === "pick" ? undefined : "N/A"}
-                          />
+                          <>
+                            <ThemedSelect
+                              className="civilization-select"
+                              label="Civilization"
+                              options={civilizations.map((name) => ({ value: name, label: name }))}
+                              value={civilization}
+                              onChange={selectCivilization}
+                              disabled={preferencesLocked || civilizationMode !== "pick"}
+                              searchable
+                              displayValue={civilizationMode === "pick" ? undefined : "N/A"}
+                            />
+                            <button
+                              className="civilization-select-activate"
+                              type="button"
+                              aria-label={`Choose ${civilization}`}
+                              disabled={preferencesLocked}
+                              onClick={() => selectCivilizationMode("pick")}
+                            />
+                            <button
+                              className="civilization-card-settings"
+                              type="button"
+                              aria-label="Configure chosen civilization behavior"
+                              disabled={preferencesLocked}
+                              onClick={() => setChooseCivilizationSettingsOpen(true)}
+                            >
+                              <Settings size={17} />
+                            </button>
+                          </>
                         )}
                         {mode.id === "random" && (
                           <button
-                            className="civilization-random-settings"
+                            className="civilization-card-settings"
                             type="button"
                             aria-label="Configure random civilization bans"
                             disabled={preferencesLocked}
@@ -432,7 +467,7 @@ export function QueuePage() {
                       civilization: civilizationMode === "pick"
                         ? civilization
                         : undefined,
-                      ...(civilizationMode === "random" ? randomPreference : {})
+                      ...randomPreference
                     }
                   })}
                 >
@@ -475,8 +510,40 @@ export function QueuePage() {
                 setCivilizationBans(next);
                 saveCivilizationPreference(civilizationMode, civilization, next);
               }}>Clear bans</button>
-              <button type="button" onClick={() => setBanEditorOpen(false)}>Done</button>
+              <button className="primary" type="button" onClick={() => setBanEditorOpen(false)}>Done</button>
             </div>
+          </div>
+        </div>
+      )}
+      {chooseCivilizationSettingsOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="prefer-random-title" onMouseDown={() => setChooseCivilizationSettingsOpen(false)}>
+          <div className="match-modal prefer-random-modal" onMouseDown={(event) => event.stopPropagation()}>
+            <div>
+              <span className="eyebrow">Choose Civ settings</span>
+              <h2 id="prefer-random-title">Civilization preference</h2>
+            </div>
+            <label className="prefer-random-option">
+              <input
+                type="checkbox"
+                checked={preferRandom}
+                onChange={(event) => {
+                  const next = event.target.checked;
+                  setPreferRandom(next);
+                  window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({
+                    mode: civilizationMode,
+                    civilization,
+                    preferRandom: next,
+                    openLandBans: civilizationBans.open,
+                    closedLandBans: civilizationBans.closed
+                  }));
+                }}
+              />
+              <span>
+                <strong>Prefer random</strong>
+                <small>If your opponent selects Random, you’ll also receive a random civilization. Otherwise, you’ll play your selected civilization.</small>
+              </span>
+            </label>
+            <button className="primary" type="button" onClick={() => setChooseCivilizationSettingsOpen(false)}>Done</button>
           </div>
         </div>
       )}

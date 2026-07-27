@@ -982,7 +982,7 @@
   background: #12110f;
 }
 
-.civilization-random-settings {
+.civilization-card-settings {
   position: absolute;
   top: 3px;
   right: 3px;
@@ -999,16 +999,71 @@
   background: transparent;
 }
 
-.civilization-random-settings:hover,
-.civilization-random-settings:focus-visible {
+.civilization-card-settings:hover,
+.civilization-card-settings:focus-visible {
   color: var(--accent-2);
   background: rgba(197, 141, 69, 0.12);
+}
+
+.prefer-random-modal {
+  width: min(520px, calc(100vw - 40px));
+}
+
+.prefer-random-modal h2 {
+  margin-top: 4px;
+}
+
+.prefer-random-modal > button {
+  width: calc(50% - 5px);
+  justify-self: end;
+}
+
+.prefer-random-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #171614;
+  cursor: pointer;
+}
+
+.prefer-random-option input {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.prefer-random-option span,
+.prefer-random-option small {
+  display: block;
+}
+
+.prefer-random-option strong {
+  font-size: 16px;
+}
+
+.prefer-random-option small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .civilization-option-card .civilization-select {
   width: 50%;
   margin-right: auto;
   margin-left: 0;
+}
+
+.civilization-select-activate {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  width: calc(50% - 7px);
+  height: 36px;
+  padding: 0;
+  background: transparent;
 }
 
 .match-modal.civilization-ban-modal {
