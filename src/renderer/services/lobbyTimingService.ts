@@ -2,8 +2,7 @@ import { aoe2UiManifest, type Aoe2UiAction } from "../../shared/aoe2UiManifest";
 import type { CivilizationPreference, MatchSession } from "../../shared/contracts/matchmaking";
 import {
   contentConfirmationKeyDelayMs,
-  lobbySetupTiming,
-  matchmakerEventPollMs
+  lobbySetupTiming
 } from "../../shared/runtimeConfig";
 
 const storageKey = "empire-league:lobby-setup-timing:v1";
@@ -54,24 +53,21 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
   total += defaultClickDurationMs() + mapPicker.selectionSettleMs;
   total += actionDuration(actions.copyLobbyUri) + lobbySetupTiming.clipboardReadMs;
   total += civilizationSelectionDuration(match.queue.civilizationPreference);
-  total += lobbySetupTiming.lobbyMetadataMs + matchmakerEventPollMs;
+  total += lobbySetupTiming.lobbyMetadataMs;
   total += lobbySetupTiming.guestJoinMs + lobbySetupTiming.guestReadySettleMs;
   total += civilizationSelectionDuration(match.opponentCivilizationPreference);
-  total += matchmakerEventPollMs;
   total += lobbySetupTiming.hostReadySettleMs + actionDuration(actions.hostReady);
-  total += matchmakerEventPollMs;
 
   if (custom) {
     total += lobbySetupTiming.customMapTransferPollMs + actions.guestReady.settleMs;
     total += contentConfirmationKeyDelayMs + actions.confirmGuestContent.settleMs;
-    total += matchmakerEventPollMs;
     total += lobbySetupTiming.hostReadySettleMs + actionDuration(actions.hostReady);
     total += lobbySetupTiming.customMapTransferPollMs;
   } else {
     total += lobbySetupTiming.customMapTransferPollMs;
   }
 
-  total += actionDuration(actions.guestReady) + matchmakerEventPollMs;
+  total += actionDuration(actions.guestReady);
   total += lobbySetupTiming.hostReadyToStartMs + lobbySetupTiming.startGameSettleMs;
   total += actionDuration(actions.startGame) + lobbySetupTiming.revealAfterStartMs;
   return total;

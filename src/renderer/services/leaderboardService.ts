@@ -1,11 +1,9 @@
 import type { PlayerProfile } from "../../shared/contracts/players";
-import { authorizationHeaders, matchmakerUrl } from "./authService";
+import { matchmakerTransport } from "./matchmakerTransport";
 
 export const leaderboardService = {
   async list(): Promise<PlayerProfile[]> {
-    const response = await fetch(`${matchmakerUrl}/leaderboard`, { headers: authorizationHeaders() });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error ?? `Leaderboard request failed (${response.status}).`);
+    const body = await matchmakerTransport.request<{ players: PlayerProfile[] }>("/leaderboard");
     return body.players;
   }
 };

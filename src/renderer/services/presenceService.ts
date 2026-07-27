@@ -1,12 +1,8 @@
-import { authorizationHeaders, matchmakerUrl } from "./authService";
+import { matchmakerTransport } from "./matchmakerTransport";
 
 export const presenceService = {
   async getOnlinePlayerCount(): Promise<number> {
-    const response = await fetch(`${matchmakerUrl}/online`, {
-      headers: authorizationHeaders()
-    });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status}).`);
+    const body = await matchmakerTransport.request<{ onlinePlayers: number }>("/online");
     return Number(body.onlinePlayers);
   }
 };

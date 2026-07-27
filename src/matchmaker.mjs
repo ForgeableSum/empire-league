@@ -1,10 +1,10 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { WebSocket, WebSocketServer } from "ws";
 import {
   database,
   checkDatabase,
   getLeaderboard,
-  getOnlinePlayerCount,
   getPlayerMatchHistory,
   linkPlayerAoeProfile,
   recordMatchResultConflict,
@@ -49,7 +49,13 @@ async function readJson(request) {
 }
 
 function emit(ticket, event) {
-  ticket.events.push({ sequence: ++eventSequence, event });
+  const item = { sequence: ++eventSequence, event };
+  ticket.events.push(item);
+  for (const socket of ticket.eventSockets ?? []) {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "event", ticketId: ticket.id, ...item }));
+    }
+  }
 }
 
 async function reconcileReplayPlayerLinks(match, actingTicket, replay) {
@@ -305,7 +311,7 @@ async function expireMatch(match) {
   emit(match.guest, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
 }
 
-const server = createServer(async (request, response) => {
+async function handleRequest(request, response) {
   if (request.method === "OPTIONS") return send(response, 204, {});
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
 
@@ -362,7 +368,12 @@ const server = createServer(async (request, response) => {
     if (!authenticatedPlayer) return send(response, 401, { error: "authentication required" });
 
     if (request.method === "GET" && url.pathname === "/online") {
-      return send(response, 200, { onlinePlayers: await getOnlinePlayerCount() });
+      const playerIds = new Set(
+        [...webSocketServer.clients]
+          .map((socket) => socketSessions.get(socket)?.player?.id)
+          .filter(Boolean)
+      );
+      return send(response, 200, { onlinePlayers: playerIds.size });
     }
 
     if (request.method === "GET" && url.pathname === "/matches/history") {
@@ -417,14 +428,6 @@ const server = createServer(async (request, response) => {
       } finally {
         playersJoiningQueue.delete(authenticatedPlayer.id);
       }
-    }
-
-    const eventMatch = url.pathname.match(/^\/tickets\/([^/]+)\/events$/);
-    if (request.method === "GET" && eventMatch) {
-      const ticket = tickets.get(decodeURIComponent(eventMatch[1]));
-      if (!ticket || ticket.player.id !== authenticatedPlayer.id) return send(response, 404, { error: "ticket not found" });
-      const after = Number(url.searchParams.get("after") ?? 0);
-      return send(response, 200, { events: ticket.events.filter((item) => item.sequence > after) });
     }
 
     const ticketMatch = url.pathname.match(/^\/tickets\/([^/]+)$/);
@@ -654,7 +657,163 @@ const server = createServer(async (request, response) => {
     console.error("[matchmaker]", error);
     return send(response, 500, { error: error instanceof Error ? error.message : "internal error" });
   }
+}
+
+const server = createServer(handleRequest);
+
+const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
+const socketSessions = new WeakMap();
+
+function sendSocket(socket, message) {
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+}
+
+function unsubscribeSocket(socket) {
+  const session = socketSessions.get(socket);
+  if (session?.ticketId) tickets.get(session.ticketId)?.eventSockets?.delete(socket);
+  if (session) session.ticketId = null;
+}
+
+server.on("upgrade", (request, socket, head) => {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
+  if (url.pathname !== "/events") {
+    socket.destroy();
+    return;
+  }
+  webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+    webSocketServer.emit("connection", webSocket);
+  });
 });
+
+webSocketServer.on("connection", (socket) => {
+  socketSessions.set(socket, { player: null, token: null, ticketId: null, authenticating: false, alive: true });
+  socket.on("pong", () => {
+    const session = socketSessions.get(socket);
+    if (session) session.alive = true;
+  });
+
+  socket.on("message", async (data) => {
+    const session = socketSessions.get(socket);
+    try {
+      const message = JSON.parse(data.toString());
+      if (message.type === "authenticate") {
+        if (session.player || session.authenticating || typeof message.token !== "string") {
+          sendSocket(socket, { type: "error", code: "INVALID_AUTH_REQUEST", message: "Invalid authentication request." });
+          return;
+        }
+        session.authenticating = true;
+        const player = await authenticate({ headers: { authorization: `Bearer ${message.token}` } });
+        session.authenticating = false;
+        if (!player) {
+          sendSocket(socket, { type: "error", code: "AUTHENTICATION_FAILED", message: "Authentication failed." });
+          socket.close(4001, "Authentication failed");
+          return;
+        }
+        session.player = player;
+        session.token = message.token;
+        sendSocket(socket, { type: "authenticated", player });
+        return;
+      }
+
+      if (message.type === "subscribe") {
+        if (!session.player) {
+          sendSocket(socket, { type: "error", code: "AUTHENTICATION_REQUIRED", message: "Authenticate before subscribing." });
+          return;
+        }
+        const ticketId = typeof message.ticketId === "string" ? message.ticketId : "";
+        const ticket = tickets.get(ticketId);
+        if (!ticket || ticket.player.id !== session.player.id) {
+          sendSocket(socket, { type: "error", code: "TICKET_NOT_FOUND", message: "Matchmaking ticket not found." });
+          return;
+        }
+        unsubscribeSocket(socket);
+        session.ticketId = ticketId;
+        ticket.eventSockets ??= new Set();
+        ticket.eventSockets.add(socket);
+        const after = Number.isSafeInteger(message.after) && message.after >= 0 ? message.after : 0;
+        for (const item of ticket.events.filter((candidate) => candidate.sequence > after)) {
+          sendSocket(socket, { type: "event", ticketId, ...item });
+        }
+        sendSocket(socket, { type: "subscribed", ticketId });
+        return;
+      }
+
+      if (message.type === "request") {
+        if (typeof message.id !== "string" || typeof message.method !== "string" || typeof message.path !== "string") {
+          sendSocket(socket, { type: "error", code: "INVALID_REQUEST", message: "Invalid RPC request." });
+          return;
+        }
+        const chunks = message.body === undefined ? [] : [Buffer.from(JSON.stringify(message.body))];
+        const rpcRequest = {
+          method: message.method.toUpperCase(),
+          url: message.path,
+          headers: {
+            host: requestHost(socket),
+            ...(session.token ? { authorization: `Bearer ${session.token}` } : {})
+          },
+          authenticatedPlayer: session.player,
+          async *[Symbol.asyncIterator]() {
+            yield* chunks;
+          }
+        };
+        let status = 200;
+        let responseBody = "";
+        const rpcResponse = {
+          writeHead(nextStatus) {
+            status = nextStatus;
+          },
+          end(chunk = "") {
+            responseBody += chunk?.toString?.() ?? String(chunk);
+          }
+        };
+        await handleRequest(rpcRequest, rpcResponse);
+        let body = null;
+        try {
+          body = responseBody ? JSON.parse(responseBody) : null;
+        } catch {
+          body = { error: "Matchmaker returned an invalid RPC response." };
+          status = 500;
+        }
+        sendSocket(socket, { type: "response", id: message.id, status, body });
+        if (message.method.toUpperCase() === "POST" && new URL(message.path, "http://localhost").pathname === "/auth/logout" && status < 400) {
+          unsubscribeSocket(socket);
+          session.player = null;
+          session.token = null;
+        }
+        return;
+      }
+
+      sendSocket(socket, { type: "error", code: "INVALID_MESSAGE", message: "Unsupported WebSocket message." });
+    } catch (error) {
+      const session = socketSessions.get(socket);
+      if (session) session.authenticating = false;
+      console.error("[matchmaker websocket]", error);
+      sendSocket(socket, { type: "error", code: "WEBSOCKET_ERROR", message: "Invalid WebSocket request." });
+    }
+  });
+
+  socket.on("close", () => unsubscribeSocket(socket));
+  socket.on("error", (error) => console.warn("[matchmaker websocket]", error.message));
+});
+
+function requestHost(socket) {
+  return socket._socket?.localAddress && socket._socket?.localPort
+    ? `${socket._socket.localAddress}:${socket._socket.localPort}`
+    : `127.0.0.1:${port}`;
+}
+
+const socketHeartbeat = setInterval(() => {
+  for (const socket of webSocketServer.clients) {
+    const session = socketSessions.get(socket);
+    if (!session?.alive) {
+      socket.terminate();
+      continue;
+    }
+    session.alive = false;
+    socket.ping();
+  }
+}, 30_000);
+socketHeartbeat.unref();
 
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
@@ -667,5 +826,9 @@ server.listen(port, host, () => {
 });
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => server.close(() => database.end().finally(() => process.exit(0))));
+  process.on(signal, () => {
+    clearInterval(socketHeartbeat);
+    for (const socket of webSocketServer.clients) socket.close(1001, "Server shutting down");
+    server.close(() => database.end().finally(() => process.exit(0)));
+  });
 }

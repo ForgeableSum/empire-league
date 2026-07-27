@@ -10,9 +10,8 @@ import type { MockServiceConfig } from "../state/types";
 import { currentUser, maps, matchmakingOpponents } from "../mocks/mockPlayers";
 import { mapCatalog, selectMapFromQueues } from "../../shared/mapCatalog";
 import { rollCivilization } from "../../shared/civilizations";
-import { matchmakerEventPollMs } from "../../shared/runtimeConfig";
 import { delay } from "./timing";
-import { authorizationHeaders, matchmakerUrl } from "./authService";
+import { matchmakerTransport } from "./matchmakerTransport";
 
 export interface MatchmakingService {
   joinQueue(request: JoinQueueRequest): Promise<QueueTicket>;
@@ -30,64 +29,31 @@ export interface MatchmakingService {
   reportMatchResult(report: MatchResultReport): Promise<void>;
 }
 
-const localMatchmakerUrl = matchmakerUrl;
-
 export class LocalMatchmakingService implements MatchmakingService {
   private activeTicketId: string | null = null;
 
   async joinQueue(request: JoinQueueRequest): Promise<QueueTicket> {
-    const response = await fetch(`${localMatchmakerUrl}/queue`, {
+    return matchmakerTransport.request<QueueTicket>("/queue", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
-      body: JSON.stringify({ queue: request.queue, canHost: request.canHost })
+      body: { queue: request.queue, canHost: request.canHost }
     });
-    return this.read<QueueTicket>(response);
   }
 
   async updateQueue(ticketId: string, queue: NonNullable<JoinQueueRequest["queue"]>): Promise<void> {
-    await this.read(await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}`, {
+    await matchmakerTransport.request(`/tickets/${encodeURIComponent(ticketId)}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
-      body: JSON.stringify({ queue })
-    }));
+      body: { queue }
+    });
   }
 
   async leaveQueue(ticketId: string): Promise<void> {
-    await this.read(await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}`, { method: "DELETE", headers: authorizationHeaders() }));
+    await matchmakerTransport.request(`/tickets/${encodeURIComponent(ticketId)}`, { method: "DELETE" });
     if (this.activeTicketId === ticketId) this.activeTicketId = null;
   }
 
   subscribeToQueue(ticketId: string, listener: QueueEventListener): UnsubscribeFunction {
     this.activeTicketId = ticketId;
-    let stopped = false;
-    let after = 0;
-    let polling = false;
-    const poll = async () => {
-      if (stopped || polling) return;
-      polling = true;
-      try {
-        const result = await this.read<{ events: Array<{ sequence: number; event: Parameters<QueueEventListener>[0] }> }>(
-          await fetch(`${localMatchmakerUrl}/tickets/${encodeURIComponent(ticketId)}/events?after=${after}`, { headers: authorizationHeaders() })
-        );
-        for (const item of result.events) {
-          after = Math.max(after, item.sequence);
-          listener(item.event);
-        }
-      } catch (error) {
-        if (!stopped) {
-          listener({ type: "error", code: "MATCHMAKER_UNAVAILABLE", message: error instanceof Error ? error.message : "Local matchmaker unavailable." });
-        }
-        stopped = true;
-      } finally {
-        polling = false;
-      }
-    };
-    void poll();
-    const timer = window.setInterval(() => void poll(), matchmakerEventPollMs);
-    return () => {
-      stopped = true;
-      window.clearInterval(timer);
-    };
+    return matchmakerTransport.subscribe(ticketId, listener);
   }
 
   async acceptMatch(matchId: string): Promise<void> {
@@ -100,11 +66,10 @@ export class LocalMatchmakingService implements MatchmakingService {
 
   async publishLobby(matchId: string, lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void> {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
-    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/lobby`, {
+    await matchmakerTransport.request(`/matches/${encodeURIComponent(matchId)}/lobby`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
-      body: JSON.stringify({ ticketId: this.activeTicketId, lobby })
-    }));
+      body: { ticketId: this.activeTicketId, lobby }
+    });
   }
 
   async reportGuestLobbyJoined(matchId: string): Promise<void> {
@@ -128,44 +93,34 @@ export class LocalMatchmakingService implements MatchmakingService {
     milestone: "guest-joined" | "host-ready" | "guest-content-accepted" | "guest-ready"
   ): Promise<void> {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
-    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/${milestone}`, {
+    await matchmakerTransport.request(`/matches/${encodeURIComponent(matchId)}/${milestone}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
-      body: JSON.stringify({ ticketId: this.activeTicketId })
-    }));
+      body: { ticketId: this.activeTicketId }
+    });
   }
 
   async reportGameStarted(matchId: string): Promise<void> {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
-    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/started`, {
+    await matchmakerTransport.request(`/matches/${encodeURIComponent(matchId)}/started`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
-      body: JSON.stringify({ ticketId: this.activeTicketId })
-    }));
+      body: { ticketId: this.activeTicketId }
+    });
   }
 
   async reportMatchResult(report: MatchResultReport): Promise<void> {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
-    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(report.matchId)}/result`, {
+    await matchmakerTransport.request(`/matches/${encodeURIComponent(report.matchId)}/result`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
-      body: JSON.stringify({ ticketId: this.activeTicketId, replay: report.replay, error: report.error })
-    }));
+      body: { ticketId: this.activeTicketId, replay: report.replay, error: report.error }
+    });
   }
 
   private async matchAction(matchId: string, action: "accept" | "decline"): Promise<void> {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
-    await this.read(await fetch(`${localMatchmakerUrl}/matches/${encodeURIComponent(matchId)}/${action}`, {
+    await matchmakerTransport.request(`/matches/${encodeURIComponent(matchId)}/${action}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authorizationHeaders() },
-      body: JSON.stringify({ ticketId: this.activeTicketId })
-    }));
-  }
-
-  private async read<T = unknown>(response: Response): Promise<T> {
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.error ?? `Matchmaker request failed (${response.status}).`);
-    return body as T;
+      body: { ticketId: this.activeTicketId }
+    });
   }
 }
 

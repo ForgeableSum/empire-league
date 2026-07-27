@@ -116,6 +116,7 @@ export async function pollSteamLogin(attemptId, pollToken) {
 }
 
 export async function authenticate(request, refreshSteamProfile = false) {
+  if (request.authenticatedPlayer) return request.authenticatedPlayer;
   const authorization = request.headers.authorization ?? "";
   const match = authorization.match(/^Bearer (\S+)$/);
   if (!match) return null;
@@ -126,7 +127,6 @@ export async function authenticate(request, refreshSteamProfile = false) {
     [hash(match[1])]
   );
   if (!rows.length) return null;
-  await database.execute("UPDATE auth_sessions SET last_used_at = NOW(3) WHERE token_hash = ?", [hash(match[1])]);
   const row = rows[0];
   if (refreshSteamProfile && row.steam_id) {
     const steamProfile = await fetchSteamProfile(row.steam_id);

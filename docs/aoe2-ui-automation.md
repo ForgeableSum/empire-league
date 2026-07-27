@@ -67,7 +67,7 @@ AoE2's unverified-content modal is accepted with one window-local Tab followed b
 
 ## Lobby countdown
 
-`lobbyTimingService.ts` is the countdown's source of truth. Its baseline follows the same manifest and runtime timing constants used by automation, including map-picker actions, optional civilization selection for both players, Ready ordering, matchmaker polling, custom-content confirmation, the second custom-map Host Ready, Start, and reveal.
+`lobbyTimingService.ts` is the countdown's source of truth. Its baseline follows the same manifest and runtime timing constants used by automation, including map-picker actions, optional civilization selection for both players, Ready ordering, WebSocket-delivered matchmaker events, custom-content confirmation, the second custom-map Host Ready, Start, and reveal.
 
 After a successful setup, the client stores the difference between that match's calculated baseline and its measured end-to-end duration. Standard and custom-map histories are kept separately. Future estimates add the rolling median of the latest successful residuals to the match-specific baseline, so the countdown adapts to real Steam, AoE2, machine, and network overhead without losing the deterministic workflow model.
 

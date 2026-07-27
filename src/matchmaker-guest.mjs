@@ -1,4 +1,7 @@
+import WebSocket from "ws";
+
 const matchmakerUrl = "http://127.0.0.1:4317";
+const accessToken = process.env.EMPIRE_GUEST_AUTH_TOKEN;
 
 const queue = {
   id: "ranked-rm-1v1",
@@ -36,15 +39,58 @@ const player = {
   recentForm: ["win", "loss", "win", "loss", "win"]
 };
 
-async function request(path, options) {
-  const response = await fetch(`${matchmakerUrl}${path}`, options);
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
-  return body;
-}
-
 let ticket;
 let stopped = false;
+let socket;
+let requestSequence = 0;
+let authenticatedResolve;
+const pendingRequests = new Map();
+let eventHandler;
+
+async function connect() {
+  socket = new WebSocket(matchmakerUrl.replace(/^http/, "ws") + "/events");
+  socket.on("message", (data) => {
+    const message = JSON.parse(data.toString());
+    if (message.type === "authenticated") {
+      authenticatedResolve?.();
+      return;
+    }
+    if (message.type === "response") {
+      const pending = pendingRequests.get(message.id);
+      if (!pending) return;
+      pendingRequests.delete(message.id);
+      if (message.status >= 400) pending.reject(new Error(message.body?.error ?? `Request failed (${message.status})`));
+      else pending.resolve(message.body);
+      return;
+    }
+    if (message.type === "event") void Promise.resolve(eventHandler?.(message.event)).catch((error) => {
+      console.error(`[guest bot] ${error instanceof Error ? error.message : error}`);
+      void stop();
+    });
+  });
+  await new Promise((resolve, reject) => {
+    socket.once("open", resolve);
+    socket.once("error", reject);
+  });
+  const authenticated = new Promise((resolve) => {
+    authenticatedResolve = resolve;
+  });
+  socket.send(JSON.stringify({ type: "authenticate", token: accessToken }));
+  await authenticated;
+}
+
+async function request(path, options = {}) {
+  const id = `guest-${++requestSequence}`;
+  const result = new Promise((resolve, reject) => pendingRequests.set(id, { resolve, reject }));
+  socket.send(JSON.stringify({
+    type: "request",
+    id,
+    method: options.method ?? "GET",
+    path,
+    body: typeof options.body === "string" ? JSON.parse(options.body) : options.body
+  }));
+  return result;
+}
 
 async function stop() {
   if (stopped) return;
@@ -57,6 +103,8 @@ async function stop() {
 }
 
 async function main() {
+  if (!accessToken) throw new Error("EMPIRE_GUEST_AUTH_TOKEN is required.");
+  await connect();
   await request("/health");
   ticket = await request("/queue", {
     method: "POST",
@@ -65,12 +113,8 @@ async function main() {
   });
   console.log("[guest bot] Joined Ranked 1v1. Waiting for your Electron client...");
 
-  let after = 0;
-  while (!stopped) {
-    const result = await request(`/tickets/${encodeURIComponent(ticket.id)}/events?after=${after}`);
-    for (const item of result.events) {
-      after = Math.max(after, item.sequence);
-      const event = item.event;
+  await new Promise((resolve, reject) => {
+    eventHandler = async (event) => {
       if (event.type === "match_found") {
         console.log(`[guest bot] Matched with ${event.match.opponent.displayName}. Auto-accepting as ${event.match.role}.`);
         await request(`/matches/${encodeURIComponent(event.match.id)}/accept`, {
@@ -86,12 +130,17 @@ async function main() {
         console.log(`[guest bot] SUCCESS: received ${event.lobby.platformLobbyId}`);
         console.log("[guest bot] Host automation and lobby relay both worked.");
         await stop();
-        return;
+        socket.close();
+        resolve();
       }
       if (event.type === "error") throw new Error(event.message);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 400));
-  }
+    };
+    socket.send(JSON.stringify({ type: "subscribe", ticketId: ticket.id, after: 0 }));
+    socket.once("error", reject);
+    socket.once("close", () => {
+      if (!stopped) reject(new Error("Matchmaker WebSocket closed."));
+    });
+  });
 }
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
