@@ -3,9 +3,9 @@ import { aoe2UiManifest } from "../../shared/aoe2UiManifest";
 import type { MatchResult } from "../../shared/contracts/matches";
 import { lobbySetupTiming } from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
-import type { LobbySession, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
+import type { LobbySession, MapDefinition, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
-import { mapCatalog } from "../../shared/mapCatalog";
+import { getCatalogMap, mapCatalog } from "../../shared/mapCatalog";
 import { maps, currentUser } from "../mocks/mockPlayers";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
 import { MockGameIntegrationService } from "../services/gameIntegrationService";
@@ -568,7 +568,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               .then(() => {
                 startRoomSetupWatchdog();
                 log("Starting AoE2 lobby automation");
-                return window.electronApi!.runAoe2CreateLobbySequence(acceptedSession.selectedMap?.name ?? "Arabia");
+                return window.electronApi!.runAoe2CreateLobbySequence(
+                  getLobbyMapName(acceptedSession.selectedMap)
+                );
               });
             void prepareLobby(acceptedSession);
           }
@@ -643,7 +645,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })();
         }
         if (event.type === "host_lobby_ready" && window.electronApi) {
-          const customContentFlow = isCustomLobbyMap(matchedSessionRef.current?.selectedMap?.name);
+          const customContentFlow = isCustomLobbyMap(matchedSessionRef.current?.selectedMap);
           setState((previous) => ({
             ...previous,
             roomSetupMilestone: customContentFlow ? "Receiving lobby files" : "Waiting for Ready"
@@ -685,7 +687,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (
           event.type === "guest_content_accepted"
           && window.electronApi
-          && isCustomLobbyMap(matchedSessionRef.current?.selectedMap?.name)
+          && isCustomLobbyMap(matchedSessionRef.current?.selectedMap)
         ) {
           setState((previous) => ({
             ...previous,
@@ -907,7 +909,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await services.game.launchGame();
       log("Opening multiplayer menu");
       if (window.electronApi) {
-        const automation = await (lobbyAutomationRef.current ?? window.electronApi.runAoe2CreateLobbySequence(match.selectedMap.name));
+        const automation = await (
+          lobbyAutomationRef.current
+          ?? window.electronApi.runAoe2CreateLobbySequence(getLobbyMapName(match.selectedMap))
+        );
         lobbyAutomationRef.current = null;
         if (!automation.sent) throw new Error(automation.message);
         if (!automation.lobbyUri) throw new Error("AoE2 did not copy a valid lobby URI.");
@@ -1197,9 +1202,13 @@ function delayForLobbyInput(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
-function isCustomLobbyMap(mapName?: string): boolean {
-  return mapName !== undefined
-    && (aoe2UiManifest.mapPicker.customMapNames as readonly string[]).includes(mapName);
+function getLobbyMapName(map?: MapDefinition): string {
+  return (map && getCatalogMap(map.id)?.gameMapName) ?? mapCatalog.maps[0].gameMapName;
+}
+
+function isCustomLobbyMap(map?: MapDefinition): boolean {
+  return map !== undefined
+    && (aoe2UiManifest.mapPicker.customMapNames as readonly string[]).includes(getLobbyMapName(map));
 }
 
 function aoe2SelectionForPreference(

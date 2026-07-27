@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeQueueMapPreferences, selectMapForMatch } from "./map-catalog.mjs";
+import { normalizeQueueMapPreferences, publicMapCatalog, selectMapForMatch } from "./map-catalog.mjs";
 
 function queue(mapIds, favoriteMapIds = {}) {
   return normalizeQueueMapPreferences({
@@ -22,6 +22,23 @@ test("canonicalizes client map metadata against the catalog", () => {
     thumbnailUrl: ""
   });
   assert.equal(normalized.mapCatalogVersion, 1);
+});
+
+test("every UI map defines its AoE2 lobby-picker metadata", () => {
+  for (const map of publicMapCatalog.maps) {
+    assert.equal(typeof map.gameMapName, "string", `${map.id} needs a gameMapName`);
+    assert.ok(map.gameMapName.length > 0, `${map.id} needs a non-empty gameMapName`);
+    assert.equal(
+      Number.isInteger(map.lobbyPickerResultIndex) && map.lobbyPickerResultIndex >= 0,
+      true,
+      `${map.id} needs a non-negative lobbyPickerResultIndex`
+    );
+  }
+  assert.equal(
+    new Set(publicMapCatalog.maps.map((map) => map.gameMapName)).size,
+    publicMapCatalog.maps.length,
+    "gameMapName values must be unique"
+  );
 });
 
 test("rejects unknown maps and favorites that are not selected", () => {

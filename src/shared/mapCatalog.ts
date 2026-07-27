@@ -3,6 +3,8 @@ import type { MapDefinition, MapGroupDefinition, MapGroupId } from "./contracts/
 
 export interface MapCatalogEntry extends Omit<MapDefinition, "thumbnailUrl"> {
   gameMapName: string;
+  lobbyPickerResultIndex: number;
+  isCustomMap?: boolean;
   groupId: MapGroupId;
   imageAsset: string;
   wikiUrl: string;

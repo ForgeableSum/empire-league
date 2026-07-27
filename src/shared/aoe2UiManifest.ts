@@ -1,3 +1,5 @@
+import { mapCatalog } from "./mapCatalog.js";
+
 export type Aoe2Activation = "click" | "clickEnter";
 
 export interface Aoe2UiAction {
@@ -8,6 +10,14 @@ export interface Aoe2UiAction {
   hoverMs?: number;
   holdMs?: number;
 }
+
+const mapPickerEntries: Record<string, number> = Object.fromEntries(
+  mapCatalog.maps.map((map) => [map.gameMapName, map.lobbyPickerResultIndex])
+);
+
+const customMapNames = mapCatalog.maps
+  .filter((map) => map.isCustomMap)
+  .map((map) => map.gameMapName);
 
 export const aoe2UiManifest = {
   schemaVersion: 1,
@@ -98,18 +108,10 @@ export const aoe2UiManifest = {
     searchPoint: [1040, 431] as const,
     mapStylePoint: [2755, 429] as const,
     customStylePoint: [2609, 613] as const,
-    customMapNames: ["KotD6 Arabia EL"] as readonly string[],
+    customMapNames,
     resultColumnCenters: [738, 1064, 1390, 1715, 2040, 2365] as const,
     resultRowCenters: [665, 989, 1313, 1637] as const,
-    entries: {
-      Acropolis: 0,
-      Arabia: 0,
-      Arena: 1,
-      "Gold Rush": 0,
-      "KotD6 Arabia EL": 0,
-      MegaRandom: 0,
-      Nomad: 1
-    } satisfies Record<string, number>,
+    entries: mapPickerEntries,
     openSettleMs: 1_000,
     styleMenuSettleMs: 500,
     styleSelectionSettleMs: 1_000,
