@@ -27,8 +27,11 @@ let latestPointer: {
 } | undefined;
 const copyCoordinatesAccelerator = "CommandOrControl+Shift+C";
 const toggleCoverAccelerator = "CommandOrControl+Shift+H";
+const toggleOpacityAccelerator = "CommandOrControl+Shift+O";
 const independentWindowMinimize = process.env.EMPIRE_INDEPENDENT_WINDOW_MINIMIZE === "true";
 const opacityMode = process.env.EMPIRE_OPACITY_MODE === "true";
+let reducedOpacityEnabled = opacityMode;
+let opacityShortcutWindow: BrowserWindow | null = null;
 const lifecycleEvents = [
   "show", "hide", "focus", "blur", "minimize", "restore",
   "enter-full-screen", "leave-full-screen", "always-on-top-changed"
@@ -110,7 +113,7 @@ export function createMainWindow(): BrowserWindow {
     maximizable: false,
     autoHideMenuBar: true,
     backgroundColor: "#141312",
-    opacity: opacityMode ? 0.8 : 1,
+    opacity: reducedOpacityEnabled ? 0.8 : 1,
     webPreferences: {
       preload: join(currentDir, "../preload/preload.cjs"),
       contextIsolation: true,
@@ -149,6 +152,14 @@ export function createMainWindow(): BrowserWindow {
   };
 
   mainWindow.setMenuBarVisibility(false);
+  opacityShortcutWindow = mainWindow;
+  globalShortcut.unregister(toggleOpacityAccelerator);
+  globalShortcut.register(toggleOpacityAccelerator, () => {
+    const window = opacityShortcutWindow;
+    if (!window || window.isDestroyed()) return;
+    reducedOpacityEnabled = !reducedOpacityEnabled;
+    window.setOpacity(reducedOpacityEnabled ? 0.8 : 1);
+  });
   mainWindow.once("ready-to-show", () => {
     if (mainWindow.isDestroyed()) return;
     logWindowLifecycle(mainWindow, "CALL ready-to-show");
@@ -182,6 +193,10 @@ export function createMainWindow(): BrowserWindow {
   screen.on("display-metrics-changed", handleDisplayMetricsChanged);
   mainWindow.once("closed", () => {
     screen.off("display-metrics-changed", handleDisplayMetricsChanged);
+    if (opacityShortcutWindow === mainWindow) {
+      opacityShortcutWindow = null;
+      globalShortcut.unregister(toggleOpacityAccelerator);
+    }
     if (taskbarMinimizedWindow === mainWindow) taskbarMinimizedWindow = null;
     if (taskbarMinimizeCompletedWindow === mainWindow) taskbarMinimizeCompletedWindow = null;
   });
@@ -208,7 +223,7 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   }
   mainCoverManuallyVisible = true;
   window.setIgnoreMouseEvents(false);
-  window.setOpacity(opacityMode ? 0.8 : 1);
+  window.setOpacity(reducedOpacityEnabled ? 0.8 : 1);
   window.setFullScreen(true);
   window.setAlwaysOnTop(true, "screen-saver");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -240,7 +255,7 @@ export function restoreMainWindowFromGameCover(): void {
   if (!window || window.isDestroyed() || !state) return;
   logWindowLifecycle(window, "CALL restoreMainWindowFromGameCover");
   window.setIgnoreMouseEvents(false);
-  window.setOpacity(state.opacity);
+  window.setOpacity(reducedOpacityEnabled ? 0.8 : 1);
   window.setAlwaysOnTop(state.alwaysOnTop);
   window.setVisibleOnAllWorkspaces(false);
   window.setFocusable(state.focusable);
