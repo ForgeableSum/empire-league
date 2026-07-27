@@ -368,7 +368,6 @@ export function QueuePage() {
                             onClick={() => setBanEditorOpen(true)}
                           >
                             <Settings size={17} />
-                            <span>{civilizationBans.open.length + civilizationBans.closed.length}/10 bans</span>
                           </button>
                         )}
                       </div>

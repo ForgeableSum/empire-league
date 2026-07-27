@@ -933,6 +933,7 @@
 }
 
 .civilization-option-card {
+  position: relative;
   min-height: 108px;
   display: flex;
   flex-direction: column;
@@ -982,22 +983,32 @@
 }
 
 .civilization-random-settings {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 7px;
-  min-height: 36px;
-  border: 1px solid rgba(140, 100, 46, 0.52);
-  border-radius: var(--radius);
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
   color: var(--muted);
-  background: #12110f;
-  font-size: 12px;
-  text-align: left;
+  background: transparent;
 }
 
-.civilization-random-settings:hover {
-  border-color: var(--accent);
+.civilization-random-settings:hover,
+.civilization-random-settings:focus-visible {
   color: var(--accent-2);
+  background: rgba(197, 141, 69, 0.12);
+}
+
+.civilization-option-card .civilization-select {
+  width: 50%;
+  margin-right: auto;
+  margin-left: 0;
 }
 
 .match-modal.civilization-ban-modal {
@@ -1109,13 +1120,6 @@
 .civilization-ban-grid label:has(input:disabled) {
   cursor: not-allowed;
   opacity: 0.45;
-}
-
-.civilization-option-card .civilization-select,
-.civilization-option-card .civilization-random-settings {
-  width: 50%;
-  margin-right: auto;
-  margin-left: 0;
 }
 
 .civilization-option-card .themed-select-options {
