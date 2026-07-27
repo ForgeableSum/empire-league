@@ -610,7 +610,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     2
                   );
                   if (!selected.sent) throw new Error(selected.message);
-                  log(`${selection} selected in AoE2`);
+                  if (selected.usedRandomCivilizationFallback) {
+                    notify("The civilization you selected requires a DLC purchase. Choosing random instead.", "warning");
+                    log(`${selection} unavailable; Random selected in AoE2`);
+                  } else {
+                    log(`${selection} selected in AoE2`);
+                  }
                 }
                 log("Guest lobby opened; reporting join to the host");
                 await services.matchmaking.reportGuestLobbyJoined(event.matchId);
@@ -936,7 +941,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             1
           );
           if (!selected.sent) throw new Error(selected.message);
-          log(`${selection} selected in AoE2`);
+          if (selected.usedRandomCivilizationFallback) {
+            notify("The civilization you selected requires a DLC purchase. Choosing random instead.", "warning");
+            log(`${selection} unavailable; Random selected in AoE2`);
+          } else {
+            log(`${selection} selected in AoE2`);
+          }
         }
         log(`Lobby URI discovered: ${automation.lobbyUri}`);
         const lobbyResult = await services.game.createLobby({

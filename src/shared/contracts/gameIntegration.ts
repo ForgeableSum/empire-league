@@ -42,6 +42,7 @@ export interface GameInputResult {
   sent: boolean;
   message: string;
   lobbyUri?: string;
+  usedRandomCivilizationFallback?: boolean;
 }
 
 export interface MouseTestPointerInfo {

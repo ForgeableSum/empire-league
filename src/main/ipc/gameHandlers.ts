@@ -2074,6 +2074,43 @@ export function registerGameHandlers(): void {
       const lobbyState = readAoe2HostSetupState(gameProcess.pid);
       emitLog(`CIV_SELECT|Step=VerifyReturn|Selection=${selection}|${lobbyState.detail}`);
       if (lobbyState.state !== "lobby-room") {
+        if (selection in aoe2UiManifest.civilizationGrid.entries) {
+          const [randomX, randomY] = civilizationDesignPoint("Random");
+          const randomTile = await postAoe2DesignClick(
+            gameProcess.pid,
+            randomX,
+            randomY,
+            {
+              synchronous: true,
+              hoverMs: aoe2UiManifest.civilizationGrid.hoverMs,
+              holdMs: aoe2UiManifest.civilizationGrid.holdMs
+            }
+          );
+          emitLog(
+            `CIV_SELECT|Step=FallbackRandom|UnavailableSelection=${selection}`
+            + `|DesignPoint=${randomX},${randomY}|${randomTile.detail}`
+          );
+          if (!randomTile.sent) throw new Error(`Random could not be selected after ${selection} was unavailable.`);
+          await delay(aoe2UiManifest.civilizationPicker.selectionSettleMs);
+
+          const randomEnter = await sendAoe2Enter(gameProcess.pid);
+          emitLog(`CIV_SELECT|Step=FallbackConfirmEnter|UnavailableSelection=${selection}|${randomEnter.detail}`);
+          if (!randomEnter.sent) throw new Error("Random civilization confirmation Enter could not be sent.");
+          await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+
+          const fallbackLobbyState = readAoe2HostSetupState(gameProcess.pid);
+          emitLog(
+            `CIV_SELECT|Step=FallbackVerifyReturn|UnavailableSelection=${selection}|${fallbackLobbyState.detail}`
+          );
+          if (fallbackLobbyState.state === "lobby-room") {
+            emitLog(`CIV_SELECT|Complete=True|Selection=Random|FallbackFrom=${selection}|Slot=${slot}`);
+            return {
+              sent: true,
+              message: `${selection} was unavailable; Random selected for AoE2 lobby slot ${slot}.`,
+              usedRandomCivilizationFallback: true
+            };
+          }
+        }
         throw new Error(`${selection} selection did not return to the lobby room.`);
       }
       emitLog(`CIV_SELECT|Complete=True|Selection=${selection}|Slot=${slot}`);
