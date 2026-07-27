@@ -104,6 +104,7 @@ export function createMainWindow(): BrowserWindow {
     frame: false,
     fullscreen: true,
     kiosk: false,
+    alwaysOnTop: true,
     resizable: false,
     minimizable: true,
     maximizable: false,
@@ -152,6 +153,7 @@ export function createMainWindow(): BrowserWindow {
     if (mainWindow.isDestroyed()) return;
     logWindowLifecycle(mainWindow, "CALL ready-to-show");
     mainWindow.setFullScreen(true);
+    mainWindow.setAlwaysOnTop(true, "screen-saver");
     fitFullScreenToDisplay();
     mainWindow.show();
     mainWindow.focus();
@@ -266,9 +268,6 @@ export function focusMainWindow(window: BrowserWindow): void {
   window.setAlwaysOnTop(true, "screen-saver");
   window.show();
   window.focus();
-  setTimeout(() => {
-    if (!window.isDestroyed()) window.setAlwaysOnTop(false);
-  }, 750);
 }
 
 export function setMainWindowGameCoverOverAoe(active: boolean): void {
@@ -278,8 +277,6 @@ export function setMainWindowGameCoverOverAoe(active: boolean): void {
     if (taskbarMinimizedWindow === window) return;
     window.setAlwaysOnTop(true, "screen-saver");
     if (mainCoverManuallyVisible) window.showInactive();
-  } else {
-    window.setAlwaysOnTop(false);
   }
 }
 
