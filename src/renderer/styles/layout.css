@@ -316,6 +316,15 @@
   margin-inline: auto;
 }
 
+.legal-footer {
+  max-width: 1000px;
+  margin: 64px auto 0;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: center;
+}
+
 .main-area::-webkit-scrollbar {
   width: 12px;
 }

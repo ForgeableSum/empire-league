@@ -93,6 +93,9 @@ export function Shell({ children }: { children: ReactNode }) {
             </div>
           </header>
           {children}
+          <footer className="legal-footer">
+            Age of Empires II © Microsoft Corporation. Empire League is an independent community project and is not endorsed by or affiliated with Microsoft.
+          </footer>
         </div>
       </main>
     </div>
