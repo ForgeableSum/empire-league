@@ -14,7 +14,7 @@ import { useAppStore } from "./state/appStore";
 import { LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
-import loadingScreenArtwork from "./assets/el_full_1.webp";
+import loadingScreenArtwork from "./assets/el_full_1.png";
 
 const permanentLoadingScreen = import.meta.env.VITE_PERMANENT_LOADING_SCREEN === "true";
 
