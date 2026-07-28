@@ -553,8 +553,8 @@ async function handleRequest(request, response) {
         return send(response, 404, { error: "match or ticket not found" });
       }
       clearTimeout(match.expirationTimer);
-      emit(match.host, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
-      emit(match.guest, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
+      const opponent = match.host.id === body.ticketId ? match.guest : match.host;
+      emit(opponent, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
       deleteMatch(match);
       return send(response, 200, { declined: true });
     }
