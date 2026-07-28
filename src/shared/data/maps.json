@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "groups": [
     {
       "id": "land-open",
@@ -86,9 +86,10 @@
     },
     {
       "id": "land-nomad",
-      "name": "Land Nomad",
-      "gameMapName": "Land Nomad",
+      "name": "Land Nomad EL",
+      "gameMapName": "Land Nomad EL",
       "lobbyPickerResultIndex": 0,
+      "isCustomMap": true,
       "style": "nomad",
       "groupId": "land-open",
       "imageAsset": "land-nomad.png",

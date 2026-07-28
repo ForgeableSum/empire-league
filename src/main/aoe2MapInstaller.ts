@@ -4,7 +4,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const localModName = "Empire League Maps";
-const bundledMapFiles = ["KotD6 Arabia EL.rms", "KotD6 Arabia EL.png"] as const;
+const bundledMapFiles = [
+  "KotD6 Arabia EL.rms",
+  "KotD6 Arabia EL.png",
+  "Land Nomad EL.rms",
+  "Land Nomad EL.png"
+] as const;
 const legacyMapFiles = ["KotD6, Arabia.rms", "KotD6, Arabia.png"] as const;
 
 export interface Aoe2MapInstallResult {

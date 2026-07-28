@@ -21,7 +21,7 @@ test("canonicalizes client map metadata against the catalog", () => {
     style: "open",
     thumbnailUrl: ""
   });
-  assert.equal(normalized.mapCatalogVersion, 3);
+  assert.equal(normalized.mapCatalogVersion, 4);
 });
 
 test("every UI map defines its AoE2 lobby-picker metadata", () => {

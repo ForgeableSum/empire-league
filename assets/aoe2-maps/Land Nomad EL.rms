@@ -1,0 +1,530 @@
+/* Land Nomad EL
+ *
+ * Empire League forest tuning:
+ * - lower total forest coverage
+ * - more, smaller woodlines
+ * - wider gaps between woodlines and other terrain
+ *
+ * Based on the official Land Nomad 2022 random map script.
+ */
+
+/* ****************************************************** */
+<PLAYER_SETUP>
+  random_placement
+if EMPIRE_WARS
+else
+  nomad_resources
+  force_nomad_treaty
+endif
+
+ai_info_map_type NOMAD 1 0 0
+
+
+/* ****************************************************** */
+
+/* PH SEASONS */
+
+start_random
+percent_chance 33 #define PH_ALPINE
+percent_chance 33 #define PH_AUTUMN
+percent_chance 34 #define PH_MEDISOUTH
+end_random
+
+#include_drs F_seasons.inc
+
+<LAND_GENERATION>
+
+base_terrain LAYER_C
+
+
+create_player_lands 
+{ 
+
+  terrain_type                     LAYER_A
+  land_percent                     100
+  base_size                        8
+if TINY_MAP
+  right_border                     3
+  top_border                       3
+  bottom_border                    3
+  left_border                      3
+elseif SMALL_MAP
+  right_border                     3
+  top_border                       3
+  bottom_border                    3
+  left_border                      3
+elseif MEDIUM_MAP
+  right_border                     2
+  top_border                       2
+  bottom_border                    2
+  left_border                      2
+elseif LARGE_MAP
+  right_border                     2
+  top_border                       2
+  bottom_border                    2
+  left_HUGE_MAP
+  right_border                     2
+  top_border                       2
+  bottom_border                    2
+  left_border                      2
+else
+  right_border                     1
+  top_border                       1
+  bottom_border                    1
+  left_border                      1
+endif
+  border_fuzziness                 100
+  zone                             1
+  other_zone_avoidance_distance    7
+  circle_radius 36
+}
+
+/* ****************************************************** */
+<TERRAIN_GENERATION>
+
+#include_drs F_ColorCorrection.inc
+
+#define WMASK_VODA
+#include_drs F_WaterMasking.inc
+
+/* PRIMARY FOREST */
+
+create_terrain WOODIES
+{
+  base_terrain                   LAYER_A
+  spacing_to_other_terrain_types 5
+  land_percent                   12
+  number_of_clumps               16
+  set_scale_by_groups
+if EMPIRE_WARS
+  set_avoid_player_start_areas
+endif
+}
+
+create_terrain LAYER_A
+{
+  base_terrain                   LAYER_C
+  land_percent                   100
+  number_of_clumps               1000
+}
+
+create_terrain LAYER_A
+{
+  base_terrain                   LAYER_C
+  land_percent                   100
+  number_of_clumps               1000
+}
+
+create_terrain LAYER_A
+{
+  base_terrain                   LAYER_C
+  land_percent                   100
+  number_of_clumps               1000
+}
+
+create_terrain LAYER_A
+{
+  base_terrain                   LAYER_C
+  land_percent                   100
+  number_of_clumps               1000
+}
+
+/* PRIMARY PATCH */
+
+create_terrain LAYER_B
+{
+  base_terrain                   LAYER_A
+  number_of_clumps               8
+  spacing_to_other_terrain_types 1
+  land_percent                   4
+  set_scale_by_size
+}
+
+
+/* SECONDARY FOREST */
+
+create_terrain WOODIES_B
+{
+  base_terrain                   LAYER_B
+  spacing_to_other_terrain_types 5
+  land_percent                   2
+  number_of_clumps               5
+  set_scale_by_groups
+if EMPIRE_WARS
+  set_avoid_player_start_areas
+endif
+}
+
+/* PH Masking Patch */
+
+   create_terrain LAYER_A
+{
+  base_terrain                   LAYER_B
+  number_of_clumps               1000
+  land_percent                   100
+}
+
+   create_terrain LAYER_B
+{
+  base_terrain                   LAYER_A
+  number_of_clumps               36
+  spacing_to_other_terrain_types 0
+  land_percent                   rnd(14,28)
+  set_scale_by_size
+}
+
+   create_terrain ROAD
+{
+  base_terrain                   LAYER_B
+  number_of_clumps               1000
+  spacing_to_other_terrain_types 2
+  land_percent                   100
+}
+   create_terrain LAYER_A
+{
+  base_terrain                   LAYER_B
+  number_of_clumps               1000
+  land_percent                   100
+terrain_mask 2
+}
+   create_terrain LAYER_A
+{
+  base_terrain                   LAYER_B
+  number_of_clumps               1000
+  land_percent                   100
+terrain_mask 2
+}
+   create_terrain LAYER_B
+{
+  base_terrain                   ROAD
+  number_of_clumps               1000
+  land_percent                   100
+}
+   create_terrain LAYER_B
+{
+  base_terrain                   ROAD
+  number_of_clumps               1000
+  land_percent                   100
+}
+
+   create_terrain LAYER_C
+{
+  base_terrain                   LAYER_A
+  number_of_clumps               24
+  spacing_to_other_terrain_types 0
+  land_percent                   rnd(2,6)
+  set_scale_by_size
+  terrain_mask 1
+}
+
+/* PH Masking Patch End */
+
+/* LAYER E+F Patch */
+
+   create_terrain LAYER_E
+{
+  base_terrain                   LAYER_A
+  number_of_clumps               20
+  spacing_to_other_terrain_types 0
+  land_percent                   2
+  set_scale_by_size
+  terrain_mask 1
+}
+
+   create_terrain LAYER_F
+{
+  base_terrain                   LAYER_A
+  number_of_clumps               14
+  spacing_to_other_terrain_types 0
+  land_percent                   1
+  set_scale_by_size
+  terrain_mask 1
+}
+
+
+/* ****************************************************** */
+<OBJECTS_GENERATION>
+
+if EMPIRE_WARS
+
+#define GNR_NORMALTC
+#define GNR_STARTVILLS
+#define GNR_CLASSICSCOUT
+
+/*
+
+#define GNR_GIVERELICS
+#define GNR_RELICMODERN_MEDIUM
+
+*/
+
+#define GNR_REGICIDE_SPECIALTOWER /* only tower + king */
+#define GNR_6KER
+
+#define GNR_STARTINGGOLD
+#define GNR_STARTINGSTONE
+
+#define GNR_STARTGOLD744CL
+#define GNR_STARTSTONE54CL
+
+#define GNR_GIVEHERD_A
+#define GNR_GIVEHERD_B
+
+#define GNR_HERD4CLASSIC_A
+#define GNR_HERD22CLASSIC_B
+
+#define GNR_GIVEHUNT
+
+#define GNR_HUNT3OR4CLASSIC
+
+#define GNR_GIVELURES
+#define GNR_CLASSICLURES
+
+/*
+
+#define GNR_FARGMODERN_GIVE
+#define GNR_FARSMODERN_GIVE
+
+#define GNR_FARG_CLASSIC
+#define GNR_FARS_CLASSIC
+
+*/
+
+#define GNR_HOMESTRAGGLE
+#define GNR_NORMALBIRDS
+
+#include_drs GeneratingObjects.inc
+
+else
+
+create_object VILLAGER
+{
+  set_place_for_every_player
+	if LUDIKRIS_MAP
+  temp_min_distance_group_placement  45
+	else
+  temp_min_distance_group_placement  15
+	endif
+  avoid_forest_zone 3
+  min_distance_group_placement 2
+ }
+
+endif
+
+
+
+if EMPIRE_WARS
+
+
+create_object RELIC
+{
+
+		if TINY_MAP
+   number_of_objects            5
+   temp_min_distance_group_placement 40
+		elseif SMALL_MAP
+   number_of_objects            5
+   temp_min_distance_group_placement 45
+		elseif MEDIUM_MAP
+   number_of_objects            5
+   temp_min_distance_group_placement 65
+		elseif LARGE_MAP
+   number_of_objects            7
+   temp_min_distance_group_placement 60
+		elseif HUGE_MAP
+   number_of_objects            8
+   temp_min_distance_group_placement 65
+		else
+   number_of_objects            999
+   temp_min_distance_group_placement 70
+		endif
+   min_distance_group_placement 3
+   min_distance_to_players 20
+}
+
+
+create_object GOLD
+{
+  number_of_groups			999
+  temp_min_distance_group_placement  	26
+  number_of_objects          4
+  group_placement_radius     3
+  set_tight_grouping
+  set_gaia_object_only
+  actor_area 66
+  actor_area_radius 4
+  avoid_forest_zone 2
+  min_distance_to_players 46
+}
+
+create_object STONE
+{
+  number_of_groups			999
+  temp_min_distance_group_placement  	29
+  number_of_objects          3
+  group_placement_radius     3
+  set_tight_grouping
+  set_gaia_object_only
+  avoid_actor_area 66
+  avoid_forest_zone 2
+  min_distance_to_players 46
+}
+
+else
+
+create_object RELIC
+{
+
+		if TINY_MAP
+   number_of_objects            5
+   temp_min_distance_group_placement 40
+		elseif SMALL_MAP
+   number_of_objects            5
+   temp_min_distance_group_placement 45
+		elseif MEDIUM_MAP
+   number_of_objects            5
+   temp_min_distance_group_placement 65
+		elseif LARGE_MAP
+   number_of_objects            7
+   temp_min_distance_group_placement 60
+		elseif HUGE_MAP
+   number_of_objects            8
+   temp_min_distance_group_placement 65
+		else
+   number_of_objects            999
+   temp_min_distance_group_placement 70
+		endif
+   min_distance_group_placement 3
+}
+
+
+/* SPECIAL STUFF FOR REGICIDE */
+
+	if REGICIDE
+
+create_object KING
+{
+  set_place_for_every_player
+  min_distance_to_players       2
+  max_distance_to_players       12
+}
+create_object VILLAGER
+{
+  set_place_for_every_player
+  number_of_objects 7
+	if LUDIKRIS_MAP
+  temp_min_distance_group_placement  45
+	elseif TINY_MAP
+  temp_min_distance_group_placement  28
+	elseif SMALL_MAP
+  temp_min_distance_group_placement  34
+	else
+  temp_min_distance_group_placement  40
+	endif
+  avoid_forest_zone 2
+  min_distance_group_placement 2
+ }
+	endif
+
+start_random
+percent_chance 50
+create_object HERDABLE_A
+percent_chance 50
+create_object HERDABLE_B
+end_random
+{
+   number_of_objects 2
+   number_of_groups	999
+   set_loose_grouping
+   set_gaia_object_only
+   temp_min_distance_group_placement  23
+   avoid_forest_zone 3
+   min_distance_group_placement 3
+}
+
+create_object HUNTABLE
+{
+   number_of_objects 3
+   number_of_groups	999
+   set_loose_grouping
+   set_gaia_object_only
+   temp_min_distance_group_placement  24
+   avoid_forest_zone 3
+   min_distance_group_placement 3
+}
+
+start_random
+percent_chance 50
+create_object LURABLE_A
+percent_chance 50
+create_object LURABLE_B
+end_random
+{
+   number_of_objects 1
+   number_of_groups	999
+   set_loose_grouping
+   set_gaia_object_only
+   temp_min_distance_group_placement  24
+   avoid_forest_zone 3
+   min_distance_group_placement 3
+}
+
+
+
+create_object GOLD
+{
+  number_of_groups			999
+  temp_min_distance_group_placement  	24 /* from 26 */
+  number_of_objects          4
+  group_placement_radius     3
+  set_tight_grouping
+  set_gaia_object_only
+  actor_area 66
+  actor_area_radius 4
+  avoid_forest_zone 3
+}
+
+create_object STONE
+{
+  number_of_groups			999
+  temp_min_distance_group_placement  	27 /* from 29 */
+  number_of_objects          3
+  group_placement_radius     3
+  set_tight_grouping
+  set_gaia_object_only
+  avoid_actor_area 66
+  avoid_forest_zone 3
+}
+
+create_object BIRDS_A
+{
+   number_of_objects         4
+   set_scaling_to_map_size
+}
+
+
+endif
+
+create_object STRAGGLER
+{
+  number_of_objects          15
+  set_gaia_object_only
+  set_scaling_to_map_size
+  avoid_actor_area 66
+  avoid_actor_area 67
+  avoid_forest_zone 3
+}
+
+
+/* ****************************************************** */
+
+<ELEVATION_GENERATION>
+
+
+#define GNRELEV_HEIGHT02
+#define GNRELEV_INTENSITY_H
+#define GNRELEV_LAY_A
+
+#include_drs GeneratingElevation.inc
+
+<CONNECTION_GENERATION>
