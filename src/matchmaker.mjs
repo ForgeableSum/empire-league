@@ -25,6 +25,8 @@ const tickets = new Map();
 const matches = new Map();
 const playersJoiningQueue = new Set();
 const minimumQueueTimeMs = 15_000;
+const matchSetupTimeoutMs = Number(process.env.MATCH_SETUP_TIMEOUT_MS ?? 120_000);
+const matchResultTimeoutMs = Number(process.env.MATCH_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
 let eventSequence = 0;
 
 function send(response, status, body) {
@@ -56,6 +58,44 @@ function emit(ticket, event) {
       socket.send(JSON.stringify({ type: "event", ticketId: ticket.id, ...item }));
     }
   }
+}
+
+function clearMatchTimers(match) {
+  clearTimeout(match.expirationTimer);
+  clearTimeout(match.lifecycleTimer);
+  match.expirationTimer = undefined;
+  match.lifecycleTimer = undefined;
+}
+
+function deleteMatch(match) {
+  clearMatchTimers(match);
+  matches.delete(match.id);
+  for (const ticket of [match.host, match.guest]) {
+    if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
+    ticket.matchId = null;
+  }
+}
+
+function expireActiveMatch(match, message) {
+  if (!matches.has(match.id)) return;
+  emit(match.host, { type: "error", code: "MATCH_EXPIRED", message });
+  emit(match.guest, { type: "error", code: "MATCH_EXPIRED", message });
+  deleteMatch(match);
+  console.warn(`[matchmaker] ${match.id}: ${message}`);
+}
+
+function scheduleMatchLifecycleTimeout(match, timeoutMs, message) {
+  clearTimeout(match.lifecycleTimer);
+  match.lifecycleTimer = setTimeout(() => expireActiveMatch(match, message), timeoutMs);
+  match.lifecycleTimer.unref?.();
+}
+
+function refreshMatchSetupTimeout(match) {
+  scheduleMatchLifecycleTimeout(
+    match,
+    matchSetupTimeoutMs,
+    "The lobby setup timed out before the game started."
+  );
 }
 
 async function reconcileReplayPlayerLinks(match, actingTicket, replay) {
@@ -183,6 +223,7 @@ async function resolveContestedResult(match, detail, implicatedTicketIds, report
     matchId: match.id,
     result: contestedResultForTicket(match.guest)
   });
+  deleteMatch(match);
 }
 
 function sharedMapPool(firstQueue, secondQueue) {
@@ -306,9 +347,9 @@ async function tryMatch(ticket) {
 
 async function expireMatch(match) {
   if (match.accepted.size === 2 || !matches.has(match.id)) return;
-  matches.delete(match.id);
   emit(match.host, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
   emit(match.guest, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
+  deleteMatch(match);
 }
 
 async function handleRequest(request, response) {
@@ -466,6 +507,17 @@ async function handleRequest(request, response) {
       const ticket = tickets.get(ticketId);
       if (!ticket || ticket.player.id !== authenticatedPlayer.id) return send(response, 404, { error: "ticket not found" });
       clearTimeout(ticket.matchSearchTimer);
+      const match = ticket.matchId ? matches.get(ticket.matchId) : null;
+      if (match) {
+        const opponent = match.host.id === ticket.id ? match.guest : match.host;
+        emit(opponent, {
+          type: "error",
+          code: "MATCH_DECLINED",
+          message: "The other player left the match."
+        });
+        deleteMatch(match);
+        return send(response, 200, { ok: true });
+      }
       tickets.delete(ticketId);
       return send(response, 200, { ok: true });
     }
@@ -485,6 +537,7 @@ async function handleRequest(request, response) {
       match.accepted.add(body.ticketId);
       if (match.accepted.size === 2) {
         clearTimeout(match.expirationTimer);
+        refreshMatchSetupTimeout(match);
         emit(match.host, { type: "opponent_accepted", matchId: match.id, role: "host" });
         emit(match.guest, { type: "opponent_accepted", matchId: match.id, role: "guest" });
       }
@@ -500,9 +553,9 @@ async function handleRequest(request, response) {
         return send(response, 404, { error: "match or ticket not found" });
       }
       clearTimeout(match.expirationTimer);
-      matches.delete(match.id);
       emit(match.host, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
       emit(match.guest, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
+      deleteMatch(match);
       return send(response, 200, { declined: true });
     }
 
@@ -514,6 +567,7 @@ async function handleRequest(request, response) {
         return send(response, 403, { error: "only the host may publish a lobby" });
       }
       match.lobby = body.lobby;
+      refreshMatchSetupTimeout(match);
       emit(match.guest, { type: "lobby_ready", matchId: match.id, lobby: match.lobby });
       return send(response, 200, { published: true });
     }
@@ -528,6 +582,7 @@ async function handleRequest(request, response) {
       if (!match.lobby) return send(response, 409, { error: "the lobby has not been published" });
       if (!match.guestLobbyJoined) {
         match.guestLobbyJoined = true;
+        refreshMatchSetupTimeout(match);
         emit(match.host, { type: "guest_lobby_joined", matchId: match.id });
       }
       return send(response, 200, { joined: true });
@@ -543,6 +598,7 @@ async function handleRequest(request, response) {
       if (!match.guestLobbyJoined) return send(response, 409, { error: "the guest has not joined the lobby" });
       if (!match.hostLobbyReady) {
         match.hostLobbyReady = true;
+        refreshMatchSetupTimeout(match);
         emit(match.guest, { type: "host_lobby_ready", matchId: match.id });
       }
       return send(response, 200, { ready: true });
@@ -558,6 +614,7 @@ async function handleRequest(request, response) {
       if (!match.hostLobbyReady) return send(response, 409, { error: "the host has not readied the lobby" });
       if (!match.guestContentAccepted) {
         match.guestContentAccepted = true;
+        refreshMatchSetupTimeout(match);
         emit(match.host, { type: "guest_content_accepted", matchId: match.id });
       }
       return send(response, 200, { accepted: true });
@@ -573,6 +630,7 @@ async function handleRequest(request, response) {
       if (!match.lobby) return send(response, 409, { error: "the lobby has not been published" });
       if (!match.guestLobbyReady) {
         match.guestLobbyReady = true;
+        refreshMatchSetupTimeout(match);
         emit(match.host, { type: "guest_lobby_ready", matchId: match.id });
       }
       return send(response, 200, { ready: true });
@@ -585,6 +643,11 @@ async function handleRequest(request, response) {
       if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
         return send(response, 403, { error: "only the host may report game start" });
       }
+      scheduleMatchLifecycleTimeout(
+        match,
+        matchResultTimeoutMs,
+        "The match result was not reported before the match expired."
+      );
       emit(match.guest, { type: "game_started", matchId: match.id });
       return send(response, 200, { started: true });
     }
@@ -657,6 +720,7 @@ async function handleRequest(request, response) {
         matchId: match.id,
         result: resultForTicket(match, match.guest, hostReplay, ratings)
       });
+      deleteMatch(match);
       console.log(`[matchmaker] ${match.id}: verified winner=${hostReplay.winnerProfileId}`);
       return send(response, 200, { accepted: true, resolved: true, contested: false });
     }
