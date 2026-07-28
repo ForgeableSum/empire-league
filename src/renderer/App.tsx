@@ -14,13 +14,16 @@ import { useAppStore } from "./state/appStore";
 import { Loader2, LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
-import loadingScreenArtwork from "./assets/el_icon.webp";
+import loadingScreenArtwork from "./assets/el_full_1.webp";
+
+const permanentLoadingScreen = import.meta.env.VITE_PERMANENT_LOADING_SCREEN === "true";
 
 export function App() {
   const [mouseTestActive, setMouseTestActive] = useState(false);
   const [startupScreenVisible, setStartupScreenVisible] = useState(true);
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
   useEffect(() => {
+    if (permanentLoadingScreen) return;
     const timer = window.setTimeout(() => setStartupScreenVisible(false), 3000);
     return () => window.clearTimeout(timer);
   }, []);
@@ -34,7 +37,6 @@ export function App() {
         <main className="auth-screen session-loading-screen" aria-label="Loading Empire League">
           <div className="session-loading-mark">
             <img className="session-loading-artwork" src={loadingScreenArtwork} alt="Empire League" />
-            <h1>Empire League</h1>
             <Loader2 className="spin" size={24} aria-hidden="true" />
           </div>
         </main>
