@@ -48,7 +48,7 @@ interface AppContextValue {
   authError: string | null;
   signInWithSteam: () => Promise<void>;
   signOut: () => Promise<void>;
-  startupGamePrompt: "restart" | "force-close" | null;
+  startupGamePrompt: "force-close" | null;
   respondToStartupGamePrompt: (confirmed: boolean) => void;
   roomSetupFailed: boolean;
   roomSetupFailureReason: "lobby_setup" | "game_not_running" | "game_not_owned" | null;
@@ -316,23 +316,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         const existingProcess = await window.electronApi.detectAoe2Process();
         if (existingProcess.running) {
-          const shouldRestart = await requestStartupGameConfirmation("restart");
+          const shouldRestart = await requestStartupGameConfirmation("force-close");
           if (!shouldRestart) {
             await window.electronApi.quitApp();
             return;
           }
 
-          const gracefulClose = await window.electronApi.closeAoe2(false);
-          if (!gracefulClose.closed) {
-            const shouldForceClose = await requestStartupGameConfirmation("force-close");
-            if (!shouldForceClose) {
-              await window.electronApi.quitApp();
-              return;
-            }
-            const forcedClose = await window.electronApi.closeAoe2(true);
-            if (!forcedClose.closed) {
-              throw new Error(forcedClose.message ?? "AoE2 could not be closed.");
-            }
+          const forcedClose = await window.electronApi.closeAoe2(true);
+          if (!forcedClose.closed) {
+            throw new Error(forcedClose.message ?? "AoE2 could not be closed.");
           }
         }
 

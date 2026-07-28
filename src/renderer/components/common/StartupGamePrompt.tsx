@@ -4,7 +4,6 @@ import { useAppStore } from "../../state/appStore";
 
 export function StartupGamePrompt() {
   const { startupGamePrompt, respondToStartupGamePrompt } = useAppStore();
-  const forceClose = startupGamePrompt === "force-close";
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -19,19 +18,15 @@ export function StartupGamePrompt() {
   return (
     <div className="modal-backdrop startup-game-prompt-backdrop" role="dialog" aria-modal="true" aria-labelledby="startup-game-prompt-title">
       <div className="match-modal startup-game-prompt">
-        <div className={`startup-game-prompt__icon${forceClose ? " danger" : ""}`}>
+        <div className="startup-game-prompt__icon danger">
           <AlertTriangle size={26} aria-hidden="true" />
         </div>
         <span className="eyebrow">AoE2 is already running</span>
-        <h2 id="startup-game-prompt-title">{forceClose ? "Force close AoE2?" : "Restart AoE2 for Empire League?"}</h2>
-        <p>
-          {forceClose
-            ? "AoE2 did not close normally. Forcing it to close may lose unsaved progress or end an active match."
-            : "Empire League requires the game process to restart."}
-        </p>
+        <h2 id="startup-game-prompt-title">Force close AoE2?</h2>
+        <p>Empire League must force close and restart AoE2. This may lose unsaved progress or end an active match.</p>
         <div className="modal-actions">
-          <button autoFocus className={forceClose ? "danger" : "primary"} type="button" onClick={() => respondToStartupGamePrompt(true)}>
-            <RotateCcw size={18} /> {forceClose ? "Force Close & Restart" : "Restart AoE2"}
+          <button autoFocus className="danger" type="button" onClick={() => respondToStartupGamePrompt(true)}>
+            <RotateCcw size={18} /> Force Close & Restart
           </button>
           <button className="secondary" type="button" onClick={() => respondToStartupGamePrompt(false)}>
             <X size={18} /> Quit Empire League
