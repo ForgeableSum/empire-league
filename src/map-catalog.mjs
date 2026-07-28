@@ -27,12 +27,18 @@ export function normalizeQueueMapPreferences(queue) {
   }
 
   const selectedIds = [];
+  const ignoredMapIds = [];
   for (const submittedMap of queue.mapPool) {
     const mapId = typeof submittedMap === "string" ? submittedMap : submittedMap?.id;
     if (typeof mapId !== "string" || !mapsById.has(mapId)) {
-      throw new Error(`unknown map id: ${String(mapId ?? "")}`);
+      const ignoredId = String(mapId ?? "");
+      if (!ignoredMapIds.includes(ignoredId)) ignoredMapIds.push(ignoredId);
+      continue;
     }
     if (!selectedIds.includes(mapId)) selectedIds.push(mapId);
+  }
+  if (selectedIds.length === 0) {
+    throw new Error(`no recognized enabled maps remain${ignoredMapIds.length ? ` (ignored: ${ignoredMapIds.join(", ")})` : ""}`);
   }
 
   const selectedMaps = selectedIds.map((mapId) => mapsById.get(mapId));
@@ -62,6 +68,7 @@ export function normalizeQueueMapPreferences(queue) {
   const favoriteMapIds = {};
   for (const [groupId, mapId] of Object.entries(submittedFavorites)) {
     const map = mapsById.get(mapId);
+    if (!map && ignoredMapIds.includes(String(mapId))) continue;
     if (!groupsById.has(groupId) || !map || map.groupId !== groupId) {
       throw new Error(`favorite map for ${groupId} is invalid`);
     }
@@ -79,6 +86,7 @@ export function normalizeQueueMapPreferences(queue) {
       enabledGroupIds,
       favoriteMapIds
     },
+    ignoredMapIds,
     favoriteMapId: Object.values(favoriteMapIds)[0]
   };
 }

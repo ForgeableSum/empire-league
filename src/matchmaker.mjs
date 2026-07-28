@@ -387,8 +387,11 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && url.pathname === "/queue") {
       const body = await readJson(request);
       if (!body.queue?.id) return send(response, 400, { error: "queue is required" });
+      let ignoredMapIds = [];
       try {
         body.queue = normalizeQueueMapPreferences(body.queue);
+        ignoredMapIds = body.queue.ignoredMapIds;
+        delete body.queue.ignoredMapIds;
         body.queue.civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
       } catch (error) {
         return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });
@@ -421,7 +424,12 @@ async function handleRequest(request, response) {
       }, minimumQueueTimeMs);
       try {
         await tryMatch(ticket);
-        return send(response, 201, { id: ticket.id, queueId: ticket.queueId, joinedAt: ticket.joinedAt });
+        return send(response, 201, {
+          id: ticket.id,
+          queueId: ticket.queueId,
+          joinedAt: ticket.joinedAt,
+          ignoredMapIds
+        });
       } catch (error) {
         tickets.delete(ticket.id);
         throw error;
@@ -443,6 +451,7 @@ async function handleRequest(request, response) {
       }
       try {
         body.queue = normalizeQueueMapPreferences(body.queue);
+        delete body.queue.ignoredMapIds;
         body.queue.civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
       } catch (error) {
         return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });

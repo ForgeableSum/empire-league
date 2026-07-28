@@ -43,18 +43,25 @@ test("every UI map defines its AoE2 lobby-picker metadata", () => {
   );
 });
 
-test("rejects unknown maps and favorites that are not selected", () => {
-  assert.throws(() => queue(["made-up-map"]), /unknown map id/);
+test("ignores stale maps when recognized enabled maps remain", () => {
+  const normalized = queue(["arabia", "made-up-map", "acropolis"], { "land-open": "acropolis" });
+  assert.deepEqual(normalized.mapPool.map((map) => map.id), ["arabia"]);
+  assert.deepEqual(normalized.ignoredMapIds, ["made-up-map", "acropolis"]);
+  assert.deepEqual(normalized.mapPreferences.favoriteMapIds, {});
+});
+
+test("rejects queues with no recognized enabled maps and favorites that are not selected", () => {
+  assert.throws(() => queue(["made-up-map"]), /no recognized enabled maps remain/);
   assert.throws(() => queue(["arabia"], { "land-open": "atacama" }), /must be enabled/);
 });
 
-test("keeps disabled maps out of the public catalog and rejects them in queues", () => {
+test("keeps disabled maps out of the public catalog and rejects queues containing only disabled maps", () => {
   assert.equal(publicMapCatalog.maps.some((map) => map.id === "acropolis"), false);
   assert.equal(publicMapCatalog.maps.some((map) => map.id === "african-clearing"), true);
   assert.equal(publicMapCatalog.maps.some((map) => map.id === "gold-rush"), false);
   assert.equal(publicMapCatalog.maps.some((map) => map.id === "land-nomad"), true);
-  assert.throws(() => queue(["acropolis"]), /unknown map id/);
-  assert.throws(() => queue(["gold-rush"]), /unknown map id/);
+  assert.throws(() => queue(["acropolis"]), /no recognized enabled maps remain/);
+  assert.throws(() => queue(["gold-rush"]), /no recognized enabled maps remain/);
 });
 
 test("rejects selected maps from disabled groups", () => {

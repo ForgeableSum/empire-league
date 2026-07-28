@@ -192,6 +192,7 @@ export interface QueueTicket {
   id: string;
   queueId: string;
   joinedAt: string;
+  ignoredMapIds?: string[];
 }
 
 export type QueueEvent =

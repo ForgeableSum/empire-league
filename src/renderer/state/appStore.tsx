@@ -508,6 +508,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: state.currentUser, canHost: true });
       ticketRef.current = ticket.id;
+      if (ticket.ignoredMapIds?.length) {
+        notify("Your map pool was outdated. Retired maps were ignored; restart Empire League to update.", "warning", {
+          detail: `Ignored maps: ${ticket.ignoredMapIds.join(", ")}`,
+          durationMs: 10_000
+        });
+      }
       setRoomSetupFailed(false);
       setRoomSetupFailureReason(null);
       setState((previous) => ({
