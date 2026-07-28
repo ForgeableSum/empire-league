@@ -532,6 +532,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             status: "match_found" as const
           };
           matchedSessionRef.current = matchedSession;
+          setPage("play");
           setState((previous) => ({
             ...previous,
             queueStatus: "match_found",
