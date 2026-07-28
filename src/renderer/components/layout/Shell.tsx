@@ -1,6 +1,6 @@
 import { BarChart3, History, Home, LogOut, Play, Settings, User } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import appIcon from "../../assets/el-2.png";
+import appIcon from "../../assets/el_icon_no_plume.png";
 import { presenceService } from "../../services/presenceService";
 import { useAppStore, type AppPage } from "../../state/appStore";
 import { WindowControls } from "./WindowControls";

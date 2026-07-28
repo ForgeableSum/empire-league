@@ -55,7 +55,7 @@ function logWindowLifecycle(window: BrowserWindow, event: string): void {
 function appIconPath(): string {
   return app.isPackaged
     ? join(process.resourcesPath, "icon.png")
-    : join(app.getAppPath(), "src/renderer/assets/el-2.png");
+    : join(app.getAppPath(), "src/renderer/assets/el_icon_no_plume.png");
 }
 
 function loadRenderer(window: BrowserWindow, route = ""): void {

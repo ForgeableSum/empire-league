@@ -77,9 +77,9 @@
   color: var(--accent-2);
 }
 
-.session-loading-logo {
-  width: 96px;
-  height: 96px;
+.session-loading-artwork {
+  width: 140px;
+  height: 140px;
   object-fit: contain;
 }
 

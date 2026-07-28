@@ -53,10 +53,10 @@
     "directories": {
       "output": "release"
     },
-    "icon": "src/renderer/assets/el-2.png",
+    "icon": "src/renderer/assets/el_icon_no_plume.png",
     "extraResources": [
       {
-        "from": "src/renderer/assets/el-2.png",
+        "from": "src/renderer/assets/el_icon_no_plume.png",
         "to": "icon.png"
       },
       {

@@ -14,7 +14,7 @@ import { useAppStore } from "./state/appStore";
 import { Loader2, LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
-import empireLeagueLogo from "./assets/el-2.png";
+import loadingScreenArtwork from "./assets/el_icon.webp";
 
 export function App() {
   const [mouseTestActive, setMouseTestActive] = useState(false);
@@ -33,7 +33,7 @@ export function App() {
         <WindowControls />
         <main className="auth-screen session-loading-screen" aria-label="Loading Empire League">
           <div className="session-loading-mark">
-            <img className="session-loading-logo" src={empireLeagueLogo} alt="Empire League" />
+            <img className="session-loading-artwork" src={loadingScreenArtwork} alt="Empire League" />
             <h1>Empire League</h1>
             <Loader2 className="spin" size={24} aria-hidden="true" />
           </div>
