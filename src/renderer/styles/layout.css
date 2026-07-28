@@ -1025,9 +1025,9 @@
   min-height: 36px;
   padding-top: 6px;
   padding-bottom: 6px;
-  border-color: rgba(140, 100, 46, 0.52);
+  border-color: rgba(140, 100, 46, 0.28);
   border-radius: var(--radius);
-  background: #12110f;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .civilization-card-settings {
@@ -1099,9 +1099,9 @@
 }
 
 .civilization-option-card .civilization-select {
-  width: 50%;
+  width: calc(50% - 35px);
   margin-right: auto;
-  margin-left: 0;
+  margin-left: 35px;
 }
 
 .civilization-select-activate {
