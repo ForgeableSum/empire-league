@@ -15,19 +15,26 @@ export function RoomSetupRecoveryPrompt() {
           <AlertTriangle size={26} aria-hidden="true" />
         </div>
         <span className="eyebrow">{gameNotRunning || gameNotOwned ? "Game restart required" : "Room setup failed"}</span>
-        <h2 id="room-setup-failed-title">Something went wrong.</h2>
+        <h2 id="room-setup-failed-title">
+          {gameNotRunning || gameNotOwned ? "Restart Empire League manually" : "Something went wrong."}
+        </h2>
         <p>
-          {gameNotOwned
-            ? "The running AoE2 DE process wasn’t launched by Empire League. Restart Empire League to relaunch the game, or quit."
-            : gameNotRunning
-              ? "AoE2 DE needs to be running before you queue. Restart Empire League to launch it again, or quit."
-              : "Empire League stopped making progress while setting up the game room for 65 seconds."}
+          {gameNotRunning || gameNotOwned
+            ? "Quit Empire League, make sure AoE2 is fully closed, then start Empire League again."
+            : "Empire League stopped making progress while setting up the game room for 65 seconds."}
         </p>
         <div className="modal-actions">
-          <button autoFocus className="primary" type="button" onClick={() => void exitAfterRoomSetupFailure(true)}>
-            <RotateCcw size={18} /> Restart
-          </button>
-          <button className="secondary" type="button" onClick={() => void exitAfterRoomSetupFailure(false)}>
+          {!gameNotRunning && !gameNotOwned && (
+            <button autoFocus className="primary" type="button" onClick={() => void exitAfterRoomSetupFailure(true)}>
+              <RotateCcw size={18} /> Restart
+            </button>
+          )}
+          <button
+            autoFocus={gameNotRunning || gameNotOwned}
+            className={gameNotRunning || gameNotOwned ? "primary" : "secondary"}
+            type="button"
+            onClick={() => void exitAfterRoomSetupFailure(false)}
+          >
             <Power size={18} /> Quit
           </button>
         </div>

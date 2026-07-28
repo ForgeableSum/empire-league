@@ -1,4 +1,4 @@
-import { AlertTriangle, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 import { useEffect } from "react";
 import { useAppStore } from "../../state/appStore";
 
@@ -22,13 +22,10 @@ export function StartupGamePrompt() {
           <AlertTriangle size={26} aria-hidden="true" />
         </div>
         <span className="eyebrow">AoE2 is already running</span>
-        <h2 id="startup-game-prompt-title">Force close AoE2?</h2>
-        <p>Empire League must force close and restart AoE2. This may lose unsaved progress or end an active match.</p>
+        <h2 id="startup-game-prompt-title">Close AoE2 before continuing</h2>
+        <p>Quit Empire League, close AoE2 manually, then start Empire League again.</p>
         <div className="modal-actions">
-          <button autoFocus className="danger" type="button" onClick={() => respondToStartupGamePrompt(true)}>
-            <RotateCcw size={18} /> Force Close & Restart
-          </button>
-          <button className="secondary" type="button" onClick={() => respondToStartupGamePrompt(false)}>
+          <button autoFocus className="primary" type="button" onClick={() => respondToStartupGamePrompt(false)}>
             <X size={18} /> Quit Empire League
           </button>
         </div>
