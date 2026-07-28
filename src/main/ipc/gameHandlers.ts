@@ -41,6 +41,7 @@ import {
   postAoe2DesignClick,
   readAoe2HostSetupState,
   readAoe2ReadyState,
+  restoreAoe2NativeWindowBehind,
   sendAoe2Enter,
   sendAoe2Tab,
   sendAoe2Text
@@ -313,8 +314,8 @@ function moveAoe2WindowOffscreen(): void {
       if (game.running && game.pid && game.windowReady) {
         sawGame = true;
         if (game.pid !== lastPid) {
-          focusAoe2NativeWindow(game.pid);
-          console.info(`[AoE2 automation] MOUSE_TEST|Visible=True|DefaultWindowState=True|Pid=${game.pid}|Mode=Koffi`);
+          restoreAoe2NativeWindowBehind(game.pid);
+          console.info(`[AoE2 automation] WINDOW_READY|BehindElectron=True|Pid=${game.pid}|Mode=Koffi`);
           lastPid = game.pid;
         }
         const foreground = isAoe2NativeWindowForeground(game.pid);

@@ -159,8 +159,9 @@ export function restoreAoe2NativeWindowBehind(processId: number): boolean {
   const window = findLargestProcessWindow(processId);
   if (!window) return false;
   ShowWindow!(window, 9);
-  SetWindowPos!(window, null, 0, 0, 0, 0, 0x0015);
-  return true;
+  // HWND_BOTTOM plus SWP_NOACTIVATE keeps the game below the Electron shell.
+  // Passing null here means HWND_TOP, which allowed AoE2 to cover Electron.
+  return Boolean(SetWindowPos!(window, 1n, 0, 0, 0, 0, 0x0013));
 }
 
 export async function clickAoe2DesignPoint(
