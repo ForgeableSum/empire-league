@@ -83,9 +83,48 @@
   object-fit: contain;
 }
 
-.session-loading-screen .session-loading-mark > .spin {
-  width: 72px;
+.medieval-loader {
+  width: 92px;
   height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+}
+
+.medieval-loader span {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #ffe2a0;
+  background: linear-gradient(135deg, #fff0b9 0%, #c28632 42%, #694019 100%);
+  box-shadow:
+    inset 0 0 3px rgba(255, 246, 205, 0.8),
+    0 3px 8px rgba(0, 0, 0, 0.5);
+  transform: rotate(45deg);
+  animation: medieval-loader-jewel 1.2s ease-in-out infinite;
+}
+
+.medieval-loader span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.medieval-loader span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes medieval-loader-jewel {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(7px) rotate(45deg) scale(0.75);
+    box-shadow: 0 0 0 rgba(224, 166, 68, 0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-7px) rotate(45deg) scale(1);
+    box-shadow: 0 0 14px rgba(255, 205, 112, 0.8);
+  }
 }
 
 .window-title img {

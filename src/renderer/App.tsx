@@ -11,7 +11,7 @@ import { StartupGamePrompt } from "./components/common/StartupGamePrompt";
 import { RoomSetupRecoveryPrompt } from "./components/common/RoomSetupRecoveryPrompt";
 import { WindowControls } from "./components/layout/WindowControls";
 import { useAppStore } from "./state/appStore";
-import { Loader2, LogIn } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
 import loadingScreenArtwork from "./assets/el_full_1.webp";
@@ -37,7 +37,11 @@ export function App() {
         <main className="auth-screen session-loading-screen" aria-label="Loading Empire League">
           <div className="session-loading-mark">
             <img className="session-loading-artwork" src={loadingScreenArtwork} alt="Empire League" />
-            <Loader2 className="spin" size={24} aria-hidden="true" />
+            <div className="medieval-loader" role="status" aria-label="Loading">
+              <span aria-hidden="true" />
+              <span aria-hidden="true" />
+              <span aria-hidden="true" />
+            </div>
           </div>
         </main>
         <StartupGamePrompt />
