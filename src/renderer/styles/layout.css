@@ -256,6 +256,37 @@
   background: #28241f;
 }
 
+.nav-search-loader {
+  width: 34px;
+  height: 24px;
+  gap: 5px;
+  justify-content: flex-start;
+  padding: 0;
+  position: relative;
+  top: -2px;
+}
+
+.nav-search-loader span {
+  width: 7px;
+  height: 7px;
+  animation-name: nav-search-loader-jewel;
+}
+
+@keyframes nav-search-loader-jewel {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(2px) rotate(45deg) scale(0.75);
+    box-shadow: 0 0 0 rgba(224, 166, 68, 0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-4px) rotate(45deg) scale(1);
+    box-shadow: 0 0 14px rgba(255, 205, 112, 0.8);
+  }
+}
+
 .sidebar-meta {
   margin-top: auto;
   display: grid;

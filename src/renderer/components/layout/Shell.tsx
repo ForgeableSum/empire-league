@@ -56,6 +56,13 @@ export function Shell({ children }: { children: ReactNode }) {
             >
               {item.icon}
               <span>{item.label}</span>
+              {item.page === "play" && state.queueStatus === "searching" && (
+                <span className="medieval-loader nav-search-loader" role="status" aria-label="Searching for a match">
+                  <span aria-hidden="true" />
+                  <span aria-hidden="true" />
+                  <span aria-hidden="true" />
+                </span>
+              )}
             </button>
           ))}
         </nav>
