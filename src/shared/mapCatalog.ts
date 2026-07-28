@@ -4,6 +4,7 @@ import type { MapDefinition, MapGroupDefinition, MapGroupId } from "./contracts/
 export interface MapCatalogEntry extends Omit<MapDefinition, "thumbnailUrl"> {
   /** Catalog entries are enabled by default so maps can be retired without deleting their metadata. */
   enabled?: boolean;
+  description: string;
   gameMapName: string;
   lobbyPickerResultIndex: number;
   isCustomMap?: boolean;

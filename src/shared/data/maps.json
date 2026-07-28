@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "groups": [
     {
       "id": "land-open",
@@ -24,6 +24,7 @@
     {
       "id": "arabia",
       "name": "KotD6 Arabia EL",
+      "description": "A competitive Arabia variant with strategic elevations, sparse vegetation, and carefully controlled starting woodlines.",
       "gameMapName": "KotD6 Arabia EL",
       "lobbyPickerResultIndex": 0,
       "isCustomMap": true,
@@ -35,6 +36,7 @@
     {
       "id": "land-madness",
       "name": "Land Madness",
+      "description": "With resources scattered across the map and forests surrounded by unbuildable rugged terrain, walling is nearly impossible and military presence will be crucial.",
       "gameMapName": "Land Madness",
       "lobbyPickerResultIndex": 0,
       "style": "open",
@@ -45,6 +47,7 @@
     {
       "id": "acropolis",
       "name": "Acropolis",
+      "description": "Battle on the barren slopes of your base as you defend your hill and conquer the enemy's.",
       "gameMapName": "Acropolis",
       "lobbyPickerResultIndex": 0,
       "enabled": false,
@@ -56,6 +59,7 @@
     {
       "id": "african-clearing",
       "name": "African Clearing",
+      "description": "Lone villagers have wandered into a forest clearing and must now battle for control of its sparse resources.",
       "gameMapName": "African Clearing",
       "lobbyPickerResultIndex": 0,
       "style": "nomad",
@@ -66,6 +70,7 @@
     {
       "id": "atacama",
       "name": "Atacama",
+      "description": "This barren desert is unlikely to quench anyone's thirst, but its aridity gives way to lush trees the deeper one goes.",
       "gameMapName": "Atacama",
       "lobbyPickerResultIndex": 0,
       "style": "open",
@@ -76,6 +81,7 @@
     {
       "id": "gold-rush",
       "name": "Gold Rush",
+      "description": "A whole heap of gold and a few wolves lie in the middle of a desert.",
       "gameMapName": "Gold Rush",
       "lobbyPickerResultIndex": 0,
       "enabled": false,
@@ -87,6 +93,7 @@
     {
       "id": "land-nomad",
       "name": "Land Nomad EL",
+      "description": "Lone villagers settle across open land with no water in sight. Smaller, more numerous woodlines leave additional room to expand and fight.",
       "gameMapName": "Land Nomad EL",
       "lobbyPickerResultIndex": 0,
       "isCustomMap": true,
@@ -98,6 +105,7 @@
     {
       "id": "arena",
       "name": "Arena",
+      "description": "The walls around your forest clearing are your only protection from the carnage in the middle.",
       "gameMapName": "Arena",
       "lobbyPickerResultIndex": 1,
       "style": "closed",
@@ -108,6 +116,7 @@
     {
       "id": "fortified-clearing",
       "name": "Fortified Clearing",
+      "description": "Your forward defenses are strong, but your rear is vulnerable to raids. Secure the center for a quick counterattack or outmaneuver enemies with a flank.",
       "gameMapName": "Fortified Clearing",
       "lobbyPickerResultIndex": 0,
       "style": "closed",
@@ -118,6 +127,7 @@
     {
       "id": "hideout",
       "name": "Hideout",
+      "description": "A palisade wall provides only false comfort over the palpable feeling of an enemy lurking just around the corner.",
       "gameMapName": "Hideout",
       "lobbyPickerResultIndex": 0,
       "style": "closed",
@@ -128,6 +138,7 @@
     {
       "id": "black-forest",
       "name": "Black Forest",
+      "description": "Islands of grass in a sea of trees. Follow the paths through the forest to find your allies and enemies.",
       "gameMapName": "Black Forest",
       "lobbyPickerResultIndex": 0,
       "style": "closed",
@@ -138,6 +149,7 @@
     {
       "id": "michi",
       "name": "Michi",
+      "description": "An impenetrable forest separates the teams until one breaks through and draws first blood on this infamous battlefield.",
       "gameMapName": "Michi",
       "lobbyPickerResultIndex": 0,
       "style": "closed",
@@ -148,6 +160,7 @@
     {
       "id": "four-lakes",
       "name": "Four Lakes",
+      "description": "Four serene corner lakes create a race for control of the much-coveted waters and their abundant fish.",
       "gameMapName": "Four Lakes",
       "lobbyPickerResultIndex": 0,
       "style": "hybrid",
@@ -158,6 +171,7 @@
     {
       "id": "baltic",
       "name": "Baltic",
+      "description": "An ocean with peninsulas and sheltered bays.",
       "gameMapName": "Baltic",
       "lobbyPickerResultIndex": 0,
       "style": "water",
@@ -168,6 +182,7 @@
     {
       "id": "islands",
       "name": "Islands",
+      "description": "Each player starts alone on an island. Uninhabited islands may be rich with resources, so be prepared to rule the sea.",
       "gameMapName": "Islands",
       "lobbyPickerResultIndex": 0,
       "style": "water",
@@ -178,6 +193,7 @@
     {
       "id": "mediterranean",
       "name": "Mediterranean",
+      "description": "An inland sea surrounded by land; it sounds deceptively peaceful.",
       "gameMapName": "Mediterranean",
       "lobbyPickerResultIndex": 0,
       "style": "water",
@@ -188,6 +204,7 @@
     {
       "id": "golden-swamp",
       "name": "Golden Swamp",
+      "description": "A tropical central marsh surrounds a small island brimming with gold, making the contested swampland too enticing to pass up.",
       "gameMapName": "Golden Swamp",
       "lobbyPickerResultIndex": 0,
       "style": "hybrid",

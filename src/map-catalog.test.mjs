@@ -21,11 +21,13 @@ test("canonicalizes client map metadata against the catalog", () => {
     style: "open",
     thumbnailUrl: ""
   });
-  assert.equal(normalized.mapCatalogVersion, 4);
+  assert.equal(normalized.mapCatalogVersion, 5);
 });
 
 test("every UI map defines its AoE2 lobby-picker metadata", () => {
   for (const map of publicMapCatalog.maps) {
+    assert.equal(typeof map.description, "string", `${map.id} needs a description`);
+    assert.ok(map.description.length > 0, `${map.id} needs a non-empty description`);
     assert.equal(typeof map.gameMapName, "string", `${map.id} needs a gameMapName`);
     assert.ok(map.gameMapName.length > 0, `${map.id} needs a non-empty gameMapName`);
     assert.equal(
