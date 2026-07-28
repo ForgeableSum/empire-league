@@ -1,4 +1,4 @@
-import { mapCatalog } from "./mapCatalog.js";
+import { enabledMapCatalogEntries } from "./mapCatalog.js";
 
 export type Aoe2Activation = "click" | "clickEnter";
 
@@ -12,10 +12,10 @@ export interface Aoe2UiAction {
 }
 
 const mapPickerEntries: Record<string, number> = Object.fromEntries(
-  mapCatalog.maps.map((map) => [map.gameMapName, map.lobbyPickerResultIndex])
+  enabledMapCatalogEntries.map((map) => [map.gameMapName, map.lobbyPickerResultIndex])
 );
 
-const customMapNames = mapCatalog.maps
+const customMapNames = enabledMapCatalogEntries
   .filter((map) => map.isCustomMap)
   .map((map) => map.gameMapName);
 

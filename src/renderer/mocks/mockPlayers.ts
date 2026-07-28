@@ -1,7 +1,8 @@
 import { getDivisionForRating, type MapDefinition, type MapGroupDefinition, type MatchOutcome } from "../../shared/contracts/matchmaking";
-import { mapCatalog } from "../../shared/mapCatalog";
+import { enabledMapCatalogEntries, mapCatalog } from "../../shared/mapCatalog";
 import type { PlayerProfile } from "../../shared/contracts/players";
 import acropolisThumbnail from "../assets/maps/acropolis.png";
+import africanClearingThumbnail from "../assets/maps/african-clearing.png";
 import arabiaThumbnail from "../assets/maps/arabia.png";
 import arenaThumbnail from "../assets/maps/arena.png";
 import atacamaThumbnail from "../assets/maps/atacama.png";
@@ -14,6 +15,7 @@ import goldRushThumbnail from "../assets/maps/gold-rush.png";
 import hideoutThumbnail from "../assets/maps/hideout.png";
 import islandsThumbnail from "../assets/maps/islands.png";
 import landMadnessThumbnail from "../assets/maps/land-madness.png";
+import landNomadThumbnail from "../assets/maps/land-nomad.png";
 import mediterraneanThumbnail from "../assets/maps/mediterranean.png";
 import michiThumbnail from "../assets/maps/michi.png";
 
@@ -25,8 +27,10 @@ const thumbnailByAsset: Record<string, string> = {
   "arabia.png": arabiaThumbnail,
   "land-madness.png": landMadnessThumbnail,
   "acropolis.png": acropolisThumbnail,
+  "african-clearing.png": africanClearingThumbnail,
   "atacama.png": atacamaThumbnail,
   "gold-rush.png": goldRushThumbnail,
+  "land-nomad.png": landNomadThumbnail,
   "arena.png": arenaThumbnail,
   "fortified-clearing.png": fortifiedClearingThumbnail,
   "hideout.png": hideoutThumbnail,
@@ -39,7 +43,7 @@ const thumbnailByAsset: Record<string, string> = {
   "golden-swamp.png": goldenSwampThumbnail
 };
 
-export const maps: MapDefinition[] = mapCatalog.maps.map((map) => ({
+export const maps: MapDefinition[] = enabledMapCatalogEntries.map((map) => ({
   id: map.id,
   name: map.name,
   style: map.style,

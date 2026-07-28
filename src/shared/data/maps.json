@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "groups": [
     {
       "id": "land-open",
@@ -47,10 +47,21 @@
       "name": "Acropolis",
       "gameMapName": "Acropolis",
       "lobbyPickerResultIndex": 0,
+      "enabled": false,
       "style": "open",
       "groupId": "land-open",
       "imageAsset": "acropolis.png",
       "wikiUrl": "https://ageofempires.fandom.com/wiki/Acropolis"
+    },
+    {
+      "id": "african-clearing",
+      "name": "African Clearing",
+      "gameMapName": "African Clearing",
+      "lobbyPickerResultIndex": 0,
+      "style": "nomad",
+      "groupId": "land-open",
+      "imageAsset": "african-clearing.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/African_Clearing"
     },
     {
       "id": "atacama",
@@ -67,10 +78,21 @@
       "name": "Gold Rush",
       "gameMapName": "Gold Rush",
       "lobbyPickerResultIndex": 0,
+      "enabled": false,
       "style": "open",
       "groupId": "land-open",
       "imageAsset": "gold-rush.png",
       "wikiUrl": "https://ageofempires.fandom.com/wiki/Gold_Rush"
+    },
+    {
+      "id": "land-nomad",
+      "name": "Land Nomad",
+      "gameMapName": "Land Nomad",
+      "lobbyPickerResultIndex": 0,
+      "style": "nomad",
+      "groupId": "land-open",
+      "imageAsset": "land-nomad.png",
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Land_Nomad"
     },
     {
       "id": "arena",

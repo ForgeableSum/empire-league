@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 
 const catalog = JSON.parse(readFileSync(new URL("./shared/data/maps.json", import.meta.url), "utf8"));
-const mapsById = new Map(catalog.maps.map((map) => [map.id, map]));
+const enabledMaps = catalog.maps.filter((map) => map.enabled !== false);
+const mapsById = new Map(enabledMaps.map((map) => [map.id, map]));
 const groupsById = new Map(catalog.groups.map((group) => [group.id, group]));
 
 export const publicMapCatalog = Object.freeze({
   version: catalog.version,
   groups: catalog.groups,
-  maps: catalog.maps
+  maps: enabledMaps
 });
 
 function canonicalMap(map) {

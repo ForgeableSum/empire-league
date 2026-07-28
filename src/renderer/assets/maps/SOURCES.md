@@ -6,6 +6,7 @@ The following random-map thumbnails were downloaded from their respective
 Age of Empires Series Wiki pages:
 
 - [Atacama](https://ageofempires.fandom.com/wiki/Atacama)
+- [African Clearing](https://ageofempires.fandom.com/wiki/African_Clearing)
 - [Baltic](https://ageofempires.fandom.com/wiki/Baltic)
 - [Black Forest](https://ageofempires.fandom.com/wiki/Black_Forest)
 - [Fortified Clearing](https://ageofempires.fandom.com/wiki/Fortified_Clearing)
@@ -14,6 +15,7 @@ Age of Empires Series Wiki pages:
 - [Hideout](https://ageofempires.fandom.com/wiki/Hideout)
 - [Islands](https://ageofempires.fandom.com/wiki/Islands)
 - [Land Madness](https://ageofempires.fandom.com/wiki/Land_Madness)
+- [Land Nomad](https://ageofempires.fandom.com/wiki/Land_Nomad)
 - [Mediterranean](https://ageofempires.fandom.com/wiki/Mediterranean)
 - [Michi](https://ageofempires.fandom.com/wiki/Michi)
 

@@ -21,7 +21,7 @@ test("canonicalizes client map metadata against the catalog", () => {
     style: "open",
     thumbnailUrl: ""
   });
-  assert.equal(normalized.mapCatalogVersion, 1);
+  assert.equal(normalized.mapCatalogVersion, 3);
 });
 
 test("every UI map defines its AoE2 lobby-picker metadata", () => {
@@ -44,6 +44,15 @@ test("every UI map defines its AoE2 lobby-picker metadata", () => {
 test("rejects unknown maps and favorites that are not selected", () => {
   assert.throws(() => queue(["made-up-map"]), /unknown map id/);
   assert.throws(() => queue(["arabia"], { "land-open": "atacama" }), /must be enabled/);
+});
+
+test("keeps disabled maps out of the public catalog and rejects them in queues", () => {
+  assert.equal(publicMapCatalog.maps.some((map) => map.id === "acropolis"), false);
+  assert.equal(publicMapCatalog.maps.some((map) => map.id === "african-clearing"), true);
+  assert.equal(publicMapCatalog.maps.some((map) => map.id === "gold-rush"), false);
+  assert.equal(publicMapCatalog.maps.some((map) => map.id === "land-nomad"), true);
+  assert.throws(() => queue(["acropolis"]), /unknown map id/);
+  assert.throws(() => queue(["gold-rush"]), /unknown map id/);
 });
 
 test("rejects selected maps from disabled groups", () => {

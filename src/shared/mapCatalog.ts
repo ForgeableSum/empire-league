@@ -2,6 +2,8 @@ import catalog from "./data/maps.json" with { type: "json" };
 import type { MapDefinition, MapGroupDefinition, MapGroupId } from "./contracts/matchmaking.js";
 
 export interface MapCatalogEntry extends Omit<MapDefinition, "thumbnailUrl"> {
+  /** Catalog entries are enabled by default so maps can be retired without deleting their metadata. */
+  enabled?: boolean;
   gameMapName: string;
   lobbyPickerResultIndex: number;
   isCustomMap?: boolean;
@@ -18,6 +20,7 @@ export interface MapCatalog {
 
 export const mapCatalog = catalog as MapCatalog;
 export const mapCatalogById = new Map(mapCatalog.maps.map((map) => [map.id, map]));
+export const enabledMapCatalogEntries = mapCatalog.maps.filter((map) => map.enabled !== false);
 
 export function getCatalogMap(mapId: string): MapCatalogEntry | undefined {
   return mapCatalogById.get(mapId);
