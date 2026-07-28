@@ -39,6 +39,7 @@ const civilizationModes: Array<{
 export function QueuePage() {
   const { state, queues, startQueue, updateActiveQueue, cancelQueue } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
+  const [initialMapPreferences] = useState(() => buildInitialMapPreferences(queues));
   const [selectedQueueId, setSelectedQueueId] = useState(() => {
     const savedQueueId = loadMapPreferences().selectedQueueId;
     return queues.some((queue) => queue.id === savedQueueId) ? savedQueueId! : queues[0]?.id ?? "";
@@ -49,20 +50,8 @@ export function QueuePage() {
     && state.gameStatus !== "loading";
   const isSearching = state.queueStatus === "searching";
   const preferencesLocked = !["idle", "cancelled", "completed", "searching"].includes(state.queueStatus);
-  const [selectedMaps, setSelectedMaps] = useState<Record<string, string[]>>(() => {
-    const saved = loadMapPreferences();
-    return Object.fromEntries(queues.map((queue) => {
-      const deselected = new Set(saved.queues?.[queue.id]?.deselectedMapIds ?? []);
-      return [queue.id, queue.mapPool.map((map) => map.id).filter((mapId) => !deselected.has(mapId))];
-    }));
-  });
-  const [enabledGroups, setEnabledGroups] = useState<Record<string, MapGroupId[]>>(() => {
-    const saved = loadMapPreferences();
-    return Object.fromEntries(queues.map((queue) => {
-      const disabled = new Set(saved.queues?.[queue.id]?.disabledGroupIds ?? []);
-      return [queue.id, mapGroups.map((group) => group.id).filter((groupId) => !disabled.has(groupId))];
-    }));
-  });
+  const [selectedMaps, setSelectedMaps] = useState<Record<string, string[]>>(initialMapPreferences.selectedMaps);
+  const [enabledGroups, setEnabledGroups] = useState<Record<string, MapGroupId[]>>(initialMapPreferences.enabledGroups);
   const [favoriteMaps, setFavoriteMaps] = useState<Record<string, Partial<Record<MapGroupId, string>>>>(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(favoriteMapsKey) ?? "{}") as Record<string, unknown>;
@@ -184,11 +173,15 @@ export function QueuePage() {
     setSelectedMaps((current) => {
       const queueMaps = current[queueId] ?? [];
       const removing = queueMaps.includes(mapId);
+      const nextQueueMaps = removing
+        ? queueMaps.filter((id) => id !== mapId)
+        : [...queueMaps, mapId];
+      if (removing && !hasActiveMap(queueId, nextQueueMaps, enabledGroups[queueId] ?? [], queues)) {
+        return current;
+      }
       return {
         ...current,
-        [queueId]: removing
-          ? queueMaps.filter((id) => id !== mapId)
-          : [...queueMaps, mapId]
+        [queueId]: nextQueueMaps
       };
     });
   };
@@ -196,11 +189,15 @@ export function QueuePage() {
   const toggleGroup = (queueId: string, groupId: MapGroupId) => {
     setEnabledGroups((current) => {
       const queueGroups = current[queueId] ?? [];
+      const nextQueueGroups = queueGroups.includes(groupId)
+        ? queueGroups.filter((id) => id !== groupId)
+        : [...queueGroups, groupId];
+      if (!hasActiveMap(queueId, selectedMaps[queueId] ?? [], nextQueueGroups, queues)) {
+        return current;
+      }
       return {
         ...current,
-        [queueId]: queueGroups.includes(groupId)
-          ? queueGroups.filter((id) => id !== groupId)
-          : [...queueGroups, groupId]
+        [queueId]: nextQueueGroups
       };
     });
   };
@@ -632,6 +629,45 @@ function loadMapPreferences(): PersistedMapPreferences {
   } catch {
     return { version: 1 };
   }
+}
+
+function buildInitialMapPreferences(queues: ReturnType<typeof useAppStore>["queues"]) {
+  const saved = loadMapPreferences();
+  const selectedMaps: Record<string, string[]> = {};
+  const enabledGroups: Record<string, MapGroupId[]> = {};
+
+  for (const queue of queues) {
+    const deselected = new Set(saved.queues?.[queue.id]?.deselectedMapIds ?? []);
+    const disabled = new Set(saved.queues?.[queue.id]?.disabledGroupIds ?? []);
+    selectedMaps[queue.id] = queue.mapPool.map((map) => map.id).filter((mapId) => !deselected.has(mapId));
+    enabledGroups[queue.id] = mapGroups.map((group) => group.id).filter((groupId) => !disabled.has(groupId));
+
+    if (!hasActiveMap(queue.id, selectedMaps[queue.id], enabledGroups[queue.id], queues)) {
+      const fallbackMap = queue.mapPool[0];
+      const fallbackGroup = mapGroups.find((group) => group.maps.some((map) => map.id === fallbackMap?.id));
+      if (fallbackMap && fallbackGroup) {
+        selectedMaps[queue.id] = [...new Set([...selectedMaps[queue.id], fallbackMap.id])];
+        enabledGroups[queue.id] = [...new Set([...enabledGroups[queue.id], fallbackGroup.id])];
+      }
+    }
+  }
+
+  return { selectedMaps, enabledGroups };
+}
+
+function hasActiveMap(
+  queueId: string,
+  selectedMapIds: string[],
+  enabledGroupIds: MapGroupId[],
+  queues: ReturnType<typeof useAppStore>["queues"]
+): boolean {
+  const queueMapIds = new Set(queues.find((queue) => queue.id === queueId)?.mapPool.map((map) => map.id) ?? []);
+  const enabledMapIds = new Set(
+    mapGroups
+      .filter((group) => enabledGroupIds.includes(group.id))
+      .flatMap((group) => group.maps.map((map) => map.id))
+  );
+  return selectedMapIds.some((mapId) => queueMapIds.has(mapId) && enabledMapIds.has(mapId));
 }
 
 function persistMapPreferences(
