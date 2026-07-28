@@ -509,11 +509,11 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
     : centerRed < 50 && centerGreen < 50 && centerBlue < 50
       && leftRed > 100 && leftGreen > 50 && leftBlue < 30
       ? "multiplayer-menu"
-      : centerRed > 120 && centerGreen > 100 && centerBlue > 70
-        && leftRed < 100 && leftGreen < 80 && leftBlue < 70
-        ? "create-lobby-dialog"
-        : centerRed > 150 && centerGreen > 150 && centerBlue > 140
-          ? "main-menu"
+      : centerRed > 150 && centerGreen > 150 && centerBlue > 140
+        ? "main-menu"
+        : centerRed > 120 && centerGreen > 100 && centerBlue > 70
+          && leftRed < 100 && leftGreen < 80 && leftBlue < 70
+          ? "create-lobby-dialog"
           : "unknown";
   return {
     state,

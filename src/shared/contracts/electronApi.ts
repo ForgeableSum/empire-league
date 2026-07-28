@@ -25,6 +25,7 @@ export interface ElectronGameApi {
   startReplayEndDetection(replayFolder?: string): Promise<{ started: boolean; message?: string }>;
   stopReplayEndDetection(): Promise<void>;
   confirmReplayEnded(): Promise<void>;
+  testReturnToMenuRecovery(): Promise<{ started: boolean; message?: string }>;
   onReplayEnded(listener: (filePath: string) => void): () => void;
   onReplayDetectionFailed(listener: (message: string) => void): () => void;
   readReplayFile(filePath: string): Promise<Uint8Array>;

@@ -4,6 +4,11 @@ import { ThemedSelect } from "../common/ThemedSelect";
 
 export function DeveloperPanel() {
   const { state, updateMockConfig, simulateMatchEnd } = useAppStore();
+
+  async function testMenuRecovery(): Promise<void> {
+    const result = await window.electronApi?.testReturnToMenuRecovery();
+    if (result && !result.started) window.alert(result.message ?? "AoE2 recovery could not start.");
+  }
   const config = state.mockConfig;
   return (
     <aside className="dev-panel">
@@ -45,6 +50,9 @@ export function DeveloperPanel() {
         })}
       />
       <button className="secondary wide" type="button" onClick={() => void simulateMatchEnd()}>Simulate Match End</button>
+      <button className="secondary wide" type="button" onClick={() => void testMenuRecovery()}>
+        Test Post-Game Menu Recovery
+      </button>
       <h2>Event Log</h2>
       <div className="event-log">{state.eventLog.map((entry) => <code key={entry}>{entry}</code>)}</div>
     </aside>

@@ -22,13 +22,15 @@ import {
 } from "../../shared/runtimeConfig.js";
 import {
   closeTestOverlay,
+  hideReturnToMenuOverlay,
   hideMainWindowGameCover,
   focusMainWindow,
   restoreMainWindowFromGameCover,
   setMouseCoordinateOverlayEnabled,
   setMainWindowGameCoverClickThrough,
   setMainWindowGameCoverOverAoe,
-  showMainWindowAsGameCover
+  showMainWindowAsGameCover,
+  showReturnToMenuOverlay
 } from "../window.js";
 import {
   closeAoe2NativeWindow,
@@ -60,6 +62,7 @@ let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
 let replayEndPoller: NodeJS.Timeout | undefined;
 let replayFocusTimers: NodeJS.Timeout[] = [];
+let returnToMenuPoller: NodeJS.Timeout | undefined;
 let replayDetectionGeneration = 0;
 
 const replayPollIntervalMs = 1500;
@@ -127,6 +130,47 @@ function focusMainWindowAfterReplay(window: BrowserWindow): void {
     timer.unref();
     replayFocusTimers.push(timer);
   }
+}
+
+function stopReturnToMenuWatch(): void {
+  if (returnToMenuPoller) clearTimeout(returnToMenuPoller);
+  returnToMenuPoller = undefined;
+  hideReturnToMenuOverlay();
+}
+
+function startReturnToMenuWatch(window: BrowserWindow): void {
+  stopReturnToMenuWatch();
+  showReturnToMenuOverlay();
+  let consecutiveMainMenuReads = 0;
+
+  const poll = (): void => {
+    if (window.isDestroyed()) {
+      stopReturnToMenuWatch();
+      return;
+    }
+    const game = detectAoe2NativeProcess();
+    if (!game.running) {
+      stopReturnToMenuWatch();
+      focusMainWindowAfterReplay(window);
+      return;
+    }
+    if (game.pid && game.windowReady) {
+      const state = readAoe2HostSetupState(game.pid);
+      consecutiveMainMenuReads = state.state === "main-menu"
+        ? consecutiveMainMenuReads + 1
+        : 0;
+      console.info(`[AoE2 recovery] MENU_WATCH|Reads=${consecutiveMainMenuReads}|${state.detail}`);
+      if (consecutiveMainMenuReads >= 2) {
+        stopReturnToMenuWatch();
+        focusMainWindowAfterReplay(window);
+        return;
+      }
+    }
+    returnToMenuPoller = setTimeout(poll, 250);
+    returnToMenuPoller.unref();
+  };
+
+  poll();
 }
 
 async function startReplayEndDetection(
@@ -1626,6 +1670,7 @@ export function registerGameHandlers(): void {
   });
 
   ipcMain.handle("game:start-replay-end-detection", async (event, replayFolder?: string) => {
+    stopReturnToMenuWatch();
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return { started: false, message: "The Empire League window was not found." };
     return startReplayEndDetection(window, replayFolder);
@@ -1638,7 +1683,19 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:confirm-replay-ended", async (event) => {
     stopReplayEndDetection();
     const window = BrowserWindow.fromWebContents(event.sender);
-    if (window) focusMainWindowAfterReplay(window);
+    if (window) startReturnToMenuWatch(window);
+  });
+
+  ipcMain.handle("game:test-return-to-menu-recovery", async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const game = detectAoe2NativeProcess();
+    if (!window || !game.pid || !game.windowReady) {
+      return { started: false, message: "A ready AoE2 window was not found." };
+    }
+    window.hide();
+    focusAoe2NativeWindow(game.pid);
+    startReturnToMenuWatch(window);
+    return { started: true };
   });
 
   ipcMain.handle("game:read-replay-file", async (_event, filePath: string) => {

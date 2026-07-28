@@ -32,6 +32,7 @@ const independentWindowMinimize = process.env.EMPIRE_INDEPENDENT_WINDOW_MINIMIZE
 const opacityMode = process.env.EMPIRE_OPACITY_MODE === "true";
 let reducedOpacityEnabled = opacityMode;
 let opacityShortcutWindow: BrowserWindow | null = null;
+let returnToMenuOverlay: BrowserWindow | null = null;
 const lifecycleEvents = [
   "show", "hide", "focus", "blur", "minimize", "restore",
   "enter-full-screen", "leave-full-screen", "always-on-top-changed"
@@ -283,6 +284,85 @@ export function focusMainWindow(window: BrowserWindow): void {
   window.setAlwaysOnTop(true, "screen-saver");
   window.show();
   window.focus();
+}
+
+export function showReturnToMenuOverlay(): void {
+  if (returnToMenuOverlay && !returnToMenuOverlay.isDestroyed()) {
+    returnToMenuOverlay.showInactive();
+    return;
+  }
+
+  const display = screen.getPrimaryDisplay();
+  const width = 720;
+  const height = 190;
+  const bottomMargin = 56;
+  returnToMenuOverlay = new BrowserWindow({
+    show: false,
+    x: display.workArea.x + Math.round((display.workArea.width - width) / 2),
+    y: display.workArea.y + display.workArea.height - height - bottomMargin,
+    width,
+    height,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    focusable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  returnToMenuOverlay.setAlwaysOnTop(true, "screen-saver");
+  returnToMenuOverlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  returnToMenuOverlay.setIgnoreMouseEvents(true);
+  returnToMenuOverlay.once("closed", () => {
+    returnToMenuOverlay = null;
+  });
+  const markup = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+  body {
+    padding: 3px;
+    color: #f8f2e7;
+    font-family: "Segoe UI", sans-serif;
+  }
+  section {
+    height: 100%;
+    padding: 26px 32px;
+    border: 3px solid #d8b25b;
+    border-radius: 18px;
+    background: rgba(15, 14, 13, .97);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, .72), 0 0 28px rgba(216, 178, 91, .24);
+    text-align: center;
+  }
+  strong { display: block; color: #d8b25b; font-size: 16px; letter-spacing: .16em; text-transform: uppercase; }
+  p { margin: 14px 0 7px; font-size: 30px; font-weight: 700; line-height: 1.2; }
+  span { color: #d4ccbe; font-size: 17px; }
+</style>
+</head>
+<body>
+  <section>
+    <strong>Match complete</strong>
+    <p>Return to the AoE2 main menu.</p>
+    <span>Empire League will reopen automatically.</span>
+  </section>
+</body>
+</html>`;
+  void returnToMenuOverlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(markup)}`)
+    .then(() => returnToMenuOverlay?.showInactive());
+}
+
+export function hideReturnToMenuOverlay(): void {
+  const overlay = returnToMenuOverlay;
+  returnToMenuOverlay = null;
+  if (overlay && !overlay.isDestroyed()) overlay.close();
 }
 
 export function setMainWindowGameCoverOverAoe(active: boolean): void {
