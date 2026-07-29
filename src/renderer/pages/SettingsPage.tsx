@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
+import { CircleHelp } from "lucide-react";
 import { useAppStore } from "../state/appStore";
 
 export function SettingsPage() {
@@ -30,17 +31,16 @@ export function SettingsPage() {
         </label>
         <Toggle
           label="Match-found notifications"
+          helpText="Shows a Windows notification and flashes the taskbar icon when a match is found. The in-app match screen appears either way."
           checked={settings.matchNotifications}
           onChange={(matchNotifications) => updateSettings({ matchNotifications })}
         />
-        <div className="setting-with-note">
-          <Toggle
-            label="Automatically reject Family Share accounts"
-            checked={settings.autoRejectFamilySharing}
-            onChange={(autoRejectFamilySharing) => updateSettings({ autoRejectFamilySharing })}
-          />
-          <small>Family Share accounts have a higher likelihood of being smurfs.</small>
-        </div>
+        <Toggle
+          label="Automatically reject Family Share accounts"
+          helpText="Family Share accounts have a higher likelihood of being smurfs."
+          checked={settings.autoRejectFamilySharing}
+          onChange={(autoRejectFamilySharing) => updateSettings({ autoRejectFamilySharing })}
+        />
       </SettingsGroup>
 
       <SettingsGroup title="Account">
@@ -68,11 +68,45 @@ function SettingsGroup({ title, children }: { title: string; children: ReactNode
   return <div className="panel settings-group"><h2>{title}</h2>{children}</div>;
 }
 
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+function Toggle({
+  label,
+  helpText,
+  checked,
+  onChange
+}: {
+  label: string;
+  helpText?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const inputId = useId();
   return (
-    <label className="toggle-row">
-      <span>{label}</span>
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
-    </label>
+    <div className="toggle-row">
+      <span className="setting-label">
+        <label htmlFor={inputId}>{label}</label>
+        {helpText && <HelpTooltip text={helpText} />}
+      </span>
+      <input id={inputId} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+    </div>
+  );
+}
+
+function HelpTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const tooltipId = useId();
+  return (
+    <span className="help-tooltip" data-open={open || undefined}>
+      <button
+        type="button"
+        className="help-tooltip-trigger"
+        aria-label="More information"
+        aria-describedby={tooltipId}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <CircleHelp size={16} aria-hidden="true" />
+      </button>
+      <span id={tooltipId} className="help-tooltip-content" role="tooltip">{text}</span>
+    </span>
   );
 }

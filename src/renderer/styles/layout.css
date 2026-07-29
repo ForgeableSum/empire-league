@@ -2337,14 +2337,58 @@
   min-height: 18px;
 }
 
-.setting-with-note {
-  display: grid;
-  gap: 3px;
+.setting-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.setting-with-note small {
+.help-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.help-tooltip-trigger {
+  width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
   color: var(--muted);
+  background: transparent;
+}
+
+.help-tooltip-trigger:hover,
+.help-tooltip-trigger:focus-visible {
+  color: var(--accent-2);
+  background: transparent;
+}
+
+.help-tooltip-content {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: min(260px, calc(100vw - 48px));
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: #11100f;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.help-tooltip:hover .help-tooltip-content,
+.help-tooltip:focus-within .help-tooltip-content,
+.help-tooltip[data-open] .help-tooltip-content {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .settings-group input[type="checkbox"],
