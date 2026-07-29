@@ -1,10 +1,12 @@
 import { app, BrowserWindow, clipboard, ipcMain, screen, shell } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { access, readFile, readdir, stat } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
+import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
 import {
   aoe2UiManifest,
   civilizationDesignPoint,
@@ -50,6 +52,7 @@ import {
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const execFileAsync = promisify(execFile);
 const aoe2AppId = "813780";
+const currentDir = dirname(fileURLToPath(import.meta.url));
 let launchRequested = false;
 let ownedAoe2Pid: number | undefined;
 let quittingAfterGameCleanup = false;
@@ -1410,6 +1413,125 @@ async function detectAoe2Installation() {
   };
 }
 
+async function runSteamFamilyProbe(expectedSteamId?: string): Promise<SteamFamilyProbeResult> {
+  const events: SteamFamilyProbeResult["events"] = [];
+  const startedAt = new Date();
+  const logDirectory = join(app.getPath("userData"), "logs", "steam-family-probe");
+  const logPath = join(logDirectory, `${startedAt.toISOString().replace(/[:.]/g, "-")}.jsonl`);
+
+  if (process.platform !== "win32") {
+    return {
+      status: "unknown",
+      exitCode: null,
+      logPath,
+      events,
+      message: "The Steam family probe currently supports Windows only."
+    };
+  }
+  if (expectedSteamId && !/^\d{17}$/.test(expectedSteamId)) {
+    throw new Error("The expected Steam ID must be a 17-digit SteamID64.");
+  }
+
+  const installation = await detectAoe2Installation();
+  if (!installation.installed || !installation.path) {
+    return {
+      status: "unknown",
+      exitCode: null,
+      logPath,
+      events,
+      message: installation.message ?? "AoE2 could not be located."
+    };
+  }
+
+  const dllPath = join(installation.path, "steam_api64.dll");
+  if (!(await pathExists(dllPath))) {
+    return {
+      status: "unknown",
+      exitCode: null,
+      logPath,
+      events,
+      message: `Steamworks library was not found at ${dllPath}.`
+    };
+  }
+
+  const probeScript = join(currentDir, "..", "steamFamilyProbe.js");
+  const processStatus = await detectAoe2Process();
+  const mainEvent = {
+    at: new Date().toISOString(),
+    level: "info" as const,
+    event: "electron_probe_context",
+    data: {
+      electronPid: process.pid,
+      aoe2Running: processStatus.running,
+      aoe2Pid: processStatus.pid,
+      installationPath: installation.path,
+      probeScript,
+      dllPath
+    }
+  };
+
+  const childResult = await new Promise<{ exitCode: number | null; stdout: string; stderr: string }>((resolve) => {
+    const child = execFile(
+      process.execPath,
+      [probeScript, dllPath, expectedSteamId ?? ""],
+      {
+        cwd: installation.path,
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: "1",
+          SteamAppId: aoe2AppId,
+          SteamGameId: aoe2AppId,
+          SteamOverlayGameId: aoe2AppId
+        },
+        timeout: 20_000,
+        windowsHide: true,
+        maxBuffer: 2 * 1024 * 1024
+      },
+      (error, stdout, stderr) => {
+        const exitCode = error && "code" in error && typeof error.code === "number" ? error.code : child.exitCode;
+        resolve({ exitCode, stdout, stderr });
+      }
+    );
+  });
+
+  events.push(mainEvent);
+  for (const line of childResult.stdout.split(/\r?\n/).filter(Boolean)) {
+    try {
+      events.push(JSON.parse(line) as SteamFamilyProbeResult["events"][number]);
+    } catch {
+      events.push({
+        at: new Date().toISOString(),
+        level: "warn",
+        event: "unparsed_stdout",
+        data: { line }
+      });
+    }
+  }
+  if (childResult.stderr.trim()) {
+    events.push({
+      at: new Date().toISOString(),
+      level: "error",
+      event: "probe_stderr",
+      data: { text: childResult.stderr.trim() }
+    });
+  }
+
+  await mkdir(logDirectory, { recursive: true });
+  await writeFile(logPath, `${events.map((event) => JSON.stringify(event)).join("\n")}\n`, "utf8");
+
+  const finished = [...events].reverse().find((event) => event.event === "probe_finished");
+  const rawStatus = finished?.data?.status;
+  const status: SteamFamilyProbeResult["status"] =
+    rawStatus === "owned" || rawStatus === "family_shared" ? rawStatus : "unknown";
+  const message = status === "family_shared"
+    ? `Family sharing detected. Raw diagnostics saved to ${logPath}`
+    : status === "owned"
+      ? `Steam reports that this account owns the selected AoE2 license. Raw diagnostics saved to ${logPath}`
+      : `Steam could not determine AoE2 license ownership from the companion process. Raw diagnostics saved to ${logPath}`;
+
+  return { status, exitCode: childResult.exitCode, logPath, events, message };
+}
+
 type UiWidget = Record<string, unknown>;
 
 function decodeLocalizedText(value: string): string {
@@ -1594,6 +1716,10 @@ export function registerGameHandlers(): void {
       ...status,
       owned: Boolean(status.pid && status.pid === ownedAoe2Pid)
     };
+  });
+
+  ipcMain.handle("game:probe-steam-family", async (_event, expectedSteamId?: string) => {
+    return runSteamFamilyProbe(expectedSteamId);
   });
 
   ipcMain.handle("game:close", async (_event, force: boolean) => {

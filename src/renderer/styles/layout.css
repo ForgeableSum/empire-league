@@ -2338,6 +2338,20 @@
   color: var(--danger);
 }
 
+.steam-probe-log {
+  max-height: 320px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0f0e0d;
+  color: var(--muted);
+  font: 11px/1.45 Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .toggle-row {
   min-height: 36px;
   display: flex;

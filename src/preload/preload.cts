@@ -4,6 +4,7 @@ import type { ElectronGameApi } from "../shared/contracts/electronApi.js";
 const electronApi: ElectronGameApi = {
   detectAoe2Installation: () => ipcRenderer.invoke("game:detect-installation"),
   detectAoe2Process: () => ipcRenderer.invoke("game:detect-process"),
+  runSteamFamilyProbe: (expectedSteamId) => ipcRenderer.invoke("game:probe-steam-family", expectedSteamId),
   closeAoe2: (force) => ipcRenderer.invoke("game:close", force),
   launchAoe2: () => ipcRenderer.invoke("game:launch"),
   focusAoe2: () => ipcRenderer.invoke("game:focus"),

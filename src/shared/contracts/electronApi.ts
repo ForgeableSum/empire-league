@@ -14,9 +14,23 @@ import type {
 } from "./gameIntegration.js";
 import type { Aoe2CivilizationSelection } from "../aoe2UiManifest.js";
 
+export interface SteamFamilyProbeResult {
+  status: "owned" | "family_shared" | "unknown";
+  exitCode: number | null;
+  logPath: string;
+  events: Array<{
+    at: string;
+    level: "info" | "warn" | "error";
+    event: string;
+    data?: Record<string, unknown>;
+  }>;
+  message: string;
+}
+
 export interface ElectronGameApi {
   detectAoe2Installation(): Promise<GameInstallationStatus>;
   detectAoe2Process(): Promise<GameProcessStatus>;
+  runSteamFamilyProbe(expectedSteamId?: string): Promise<SteamFamilyProbeResult>;
   closeAoe2(force: boolean): Promise<GameCloseResult>;
   launchAoe2(): Promise<GameLaunchResult>;
   focusAoe2(): Promise<GameFocusResult>;
