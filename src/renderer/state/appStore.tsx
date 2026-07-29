@@ -302,9 +302,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         const existingProcess = await window.electronApi.detectAoe2Process();
         if (existingProcess.running) {
-          const forcedClose = await window.electronApi.closeAoe2(true);
-          if (!forcedClose.closed) {
-            throw new Error(forcedClose.message ?? "AoE2 could not be closed.");
+          const gracefulClose = await window.electronApi.closeAoe2(false);
+          if (!gracefulClose.closed) {
+            const forcedClose = await window.electronApi.closeAoe2(true);
+            if (!forcedClose.closed) {
+              throw new Error(forcedClose.message ?? "AoE2 could not be closed.");
+            }
           }
         }
 
@@ -373,9 +376,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const existingProcess = await window.electronApi.detectAoe2Process();
       if (existingProcess.running && !existingProcess.owned) {
-        const forcedClose = await window.electronApi.closeAoe2(true);
-        if (!forcedClose.closed) {
-          throw new Error(forcedClose.message ?? "The existing AoE2 process could not be closed.");
+        const gracefulClose = await window.electronApi.closeAoe2(false);
+        if (!gracefulClose.closed) {
+          const forcedClose = await window.electronApi.closeAoe2(true);
+          if (!forcedClose.closed) {
+            throw new Error(forcedClose.message ?? "The existing AoE2 process could not be closed.");
+          }
         }
       }
 
@@ -407,6 +413,76 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (loadingNotificationId) dismissNotificationById(loadingNotificationId);
       setState((previous) => ({ ...previous, gameStatus: "installed" }));
       notify(error instanceof Error ? error.message : "AoE2 DE could not be launched.", "danger");
+      return false;
+    }
+  }
+
+  async function recoverAoe2AfterSetupDisconnect(): Promise<boolean> {
+    let recoveryNotificationId: string | null = null;
+    try {
+      if (!window.electronApi) throw new Error("The Electron game integration bridge is unavailable.");
+      lobbyAutomationRef.current = null;
+      await window.electronApi.setLobbyInputLock(false).catch(() => ({ locked: false }));
+      setState((previous) => ({
+        ...previous,
+        gameStatus: "loading",
+        transitionInputLocked: false,
+        roomSetupStartedAt: null,
+        roomSetupEstimateMs: null,
+        roomSetupMilestone: "Resetting AoE2 after disconnect"
+      }));
+      recoveryNotificationId = notify("Resetting AoE2 after the disconnect…", "loading", {
+        detail: "Closing the abandoned lobby before returning to matchmaking.",
+        durationMs: null,
+        dismissible: false
+      });
+
+      const process = await window.electronApi.detectAoe2Process();
+      if (process.running) {
+        const gracefulClose = await window.electronApi.closeAoe2(false);
+        if (!gracefulClose.closed) {
+          updateNotification(recoveryNotificationId, { detail: "AoE2 did not close normally; forcing it to exit." });
+          const forcedClose = await window.electronApi.closeAoe2(true);
+          if (!forcedClose.closed) {
+            throw new Error(forcedClose.message ?? "The abandoned AoE2 process could not be closed.");
+          }
+        }
+      }
+
+      const exited = await window.electronApi.detectAoe2Process();
+      if (exited.running) throw new Error("AoE2 was still running after the close operation.");
+
+      updateNotification(recoveryNotificationId, { detail: "Launching a clean AoE2 session." });
+      const launch = await window.electronApi.launchAoe2();
+      if (!launch.launched) {
+        throw new Error(launch.message ?? "Steam did not accept the AoE2 DE launch request.");
+      }
+      const ready = await waitForAoe2Window(120_000);
+      if (!ready) throw new Error("AoE2 restarted, but its game window did not become ready in time.");
+      updateNotification(recoveryNotificationId, { detail: "Finishing game startup." });
+      await delayForStartup(aoe2PostWindowReadyDelayMs);
+      setState((previous) => ({
+        ...previous,
+        gameStatus: "running",
+        roomSetupMilestone: null
+      }));
+      updateNotification(recoveryNotificationId, {
+        message: "AoE2 is ready",
+        tone: "success",
+        detail: "Returning to matchmaking.",
+        durationMs: 3000,
+        dismissible: true
+      });
+      return true;
+    } catch (error) {
+      if (recoveryNotificationId) dismissNotificationById(recoveryNotificationId);
+      setState((previous) => ({
+        ...previous,
+        gameStatus: "installed",
+        transitionInputLocked: false,
+        roomSetupMilestone: null
+      }));
+      notify(error instanceof Error ? error.message : "AoE2 could not be reset after the disconnect.", "danger");
       return false;
     }
   }
@@ -818,6 +894,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           completeResult(event.result);
         }
         if (event.type === "error") {
+          if (event.code === "MATCH_DISCONNECTED") {
+            void window.electronApi?.stopMatchFoundAlert();
+            clearRoomSetupWatchdog();
+            queueJoinInFlightRef.current = false;
+            matchedSessionRef.current = null;
+            if (ticketRef.current) {
+              void services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+              ticketRef.current = null;
+            }
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+            setState((previous) => ({
+              ...previous,
+              queueStatus: "cancelled",
+              activeMatch: null,
+              error: null,
+              transitionInputLocked: false
+            }));
+            notify(event.message, "warning", { durationMs: 5000, dismissible: false });
+            log("Opponent disconnected; resetting AoE2 before returning to queue");
+            void recoverAoe2AfterSetupDisconnect().then((recovered) => {
+              if (recovered) void startQueue(queue);
+            });
+            return;
+          }
           if (event.code === "MATCH_DECLINED") {
             void window.electronApi?.stopMatchFoundAlert();
             clearRoomSetupWatchdog();

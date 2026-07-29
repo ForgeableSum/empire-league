@@ -90,9 +90,14 @@ function deleteMatch(match) {
 
 function deleteDisconnectedTicket(ticket, message = "The other player disconnected from the match.") {
   if (tickets.get(ticket.id) !== ticket || ticket.eventSockets?.size) return false;
+  const match = ticket.matchId ? matches.get(ticket.matchId) : null;
+  if (match?.startedAt) {
+    clearTimeout(ticket.disconnectTimer);
+    ticket.disconnectTimer = undefined;
+    return false;
+  }
   clearTimeout(ticket.matchSearchTimer);
   clearTicketDisconnectTimer(ticket);
-  const match = ticket.matchId ? matches.get(ticket.matchId) : null;
   if (!match) {
     tickets.delete(ticket.id);
     console.warn(`[matchmaker] ${ticket.id}: disconnected ticket removed`);
@@ -101,7 +106,7 @@ function deleteDisconnectedTicket(ticket, message = "The other player disconnect
   const opponent = match.host.id === ticket.id ? match.guest : match.host;
   emit(opponent, {
     type: "error",
-    code: "MATCH_DECLINED",
+    code: "MATCH_DISCONNECTED",
     message
   });
   deleteMatch(match);
@@ -819,6 +824,7 @@ async function handleRequest(request, response) {
         matchResultTimeoutMs,
         "The match result was not reported before the match expired."
       );
+      match.startedAt = new Date().toISOString();
       emit(match.guest, { type: "game_started", matchId: match.id });
       return send(response, 200, { started: true });
     }
