@@ -1994,19 +1994,6 @@ export function registerGameHandlers(): void {
         const action = aoe2UiManifest.actions[actionName];
         const expectedState = expectedHostState[actionName];
         const performAction = async (attempt: number) => {
-          if (actionName === "multiplayer") {
-            for (let index = 1; index <= 6; index += 1) {
-              const tab = await sendAoe2Tab(process.pid as number);
-              emitLog(`STEP|${action.label}|Attempt=${attempt}|Tab=${index}/6|${tab.detail}`);
-              if (!tab.sent) throw new Error(`${action.label} could not be selected with Tab.`);
-              await delay(100);
-            }
-            const enter = await sendAoe2Enter(process.pid as number);
-            emitLog(`STEP|${action.label}|Attempt=${attempt}|Key=ENTER|${enter.detail}`);
-            if (!enter.sent) throw new Error(`${action.label} could not be activated.`);
-            await delay(action.settleMs);
-            return;
-          }
           await clickStep(action.label, action.point[0], action.point[1], {
             hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
             holdMs: "holdMs" in action ? action.holdMs : undefined,

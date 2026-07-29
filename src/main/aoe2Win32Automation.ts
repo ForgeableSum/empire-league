@@ -71,6 +71,16 @@ const CloseHandle = kernel32?.func("bool __stdcall CloseHandle(HANDLE handle)");
 type NativeHandle = bigint | null;
 type Point = { x: number; y: number };
 type Rect = { left: number; top: number; right: number; bottom: number };
+type DesignTransform = {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  viewportWidth: number;
+  viewportHeight: number;
+};
+
+const aoe2DesignWidth = 3840;
+const aoe2DesignHeight = 2160;
 
 export interface NativeInputResult {
   sent: boolean;
@@ -179,10 +189,8 @@ export async function clickAoe2DesignPoint(
   const height = rect.bottom - rect.top;
   if (width <= 0 || height <= 0) return { sent: false, detail: "INVALID_CLIENT_SIZE" };
 
-  const point: Point = {
-    x: Math.round(designX * width / 3840),
-    y: Math.round(designY * height / 2160)
-  };
+  const transform = designTransform(width, height);
+  const point = transformDesignPoint(designX, designY, transform);
   if (!ClientToScreen!(window, point)) return { sent: false, detail: "SCREEN_POINT_FAILED" };
 
   const alreadyForeground = sameHandle(GetForegroundWindow!(), window);
@@ -252,6 +260,7 @@ export async function clickAoe2DesignPoint(
       `Moved=${moved}`,
       `Restored=${restored}`,
       `Client=${width}x${height}`,
+      `Viewport=${formatViewport(transform)}`,
       `ScreenPoint=${point.x},${point.y}`,
       `OriginalPoint=${original.x},${original.y}`
     ].join("|")
@@ -274,8 +283,8 @@ export async function postAoe2DesignClick(
   const height = rect.bottom - rect.top;
   if (width <= 0 || height <= 0) return { sent: false, detail: "INVALID_CLIENT_SIZE" };
 
-  const x = Math.round(designX * width / 3840);
-  const y = Math.round(designY * height / 2160);
+  const transform = designTransform(width, height);
+  const { x, y } = transformDesignPoint(designX, designY, transform);
   const position = (y << 16) | (x & 0xffff);
   const hoverMs = timing.hoverMs ?? 100;
   const holdMs = timing.holdMs ?? 120;
@@ -308,6 +317,7 @@ export async function postAoe2DesignClick(
       sent ? "SENT" : "SEND_FAILED",
       `Mode=${synchronous ? "WindowMessageSync" : "WindowMessage"}`,
       `Client=${width}x${height}`,
+      `Viewport=${formatViewport(transform)}`,
       `ClientPoint=${x},${y}`,
       `DesignPoint=${designX},${designY}`,
       `HoverMs=${hoverMs}`,
@@ -488,8 +498,8 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
 
   // Sample a text-free area inside the Ready button. The button is green when
   // selected and red when unselected in both host and guest lobby layouts.
-  const x = Math.round(1500 * width / 3840);
-  const y = Math.round(designY * height / 2160);
+  const transform = designTransform(width, height);
+  const { x, y } = transformDesignPoint(1500, designY, transform);
   const dc = GetDC!(window) as NativeHandle;
   if (!dc) return { state: "unknown", detail: "WINDOW_DC_FAILED" };
   let color: number;
@@ -510,7 +520,13 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
       : "unknown";
   return {
     state,
-    detail: `State=${state}|Window=${String(window)}|ClientPoint=${x},${y}|RGB=${red},${green},${blue}`
+    detail: [
+      `State=${state}`,
+      `Window=${String(window)}`,
+      `Viewport=${formatViewport(transform)}`,
+      `ClientPoint=${x},${y}`,
+      `RGB=${red},${green},${blue}`
+    ].join("|")
   };
 }
 
@@ -527,22 +543,30 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
 
   const dc = GetDC!(window) as NativeHandle;
   if (!dc) return { state: "unknown", detail: "WINDOW_DC_FAILED" };
+  const transform = designTransform(width, height);
+  const upperLeftPoint = transformDesignPoint(825, 383, transform);
+  const upperCenterPoint = transformDesignPoint(1920, 495, transform);
+  const multiplayerPanelPoint = transformDesignPoint(2000, 1040, transform);
+  const lowerButtonPoint = transformDesignPoint(1500, 1979, transform);
   let upperLeft: [number, number, number] | null;
   let upperCenter: [number, number, number] | null;
+  let multiplayerPanel: [number, number, number] | null;
   let lowerButton: [number, number, number] | null;
   try {
-    upperLeft = readRgb(dc, Math.round(825 * width / 3840), Math.round(383 * height / 2160));
-    upperCenter = readRgb(dc, Math.round(1920 * width / 3840), Math.round(495 * height / 2160));
-    lowerButton = readRgb(dc, Math.round(1500 * width / 3840), Math.round(1979 * height / 2160));
+    upperLeft = readRgb(dc, upperLeftPoint.x, upperLeftPoint.y);
+    upperCenter = readRgb(dc, upperCenterPoint.x, upperCenterPoint.y);
+    multiplayerPanel = readRgb(dc, multiplayerPanelPoint.x, multiplayerPanelPoint.y);
+    lowerButton = readRgb(dc, lowerButtonPoint.x, lowerButtonPoint.y);
   } finally {
     ReleaseDC!(window, dc);
   }
-  if (!upperLeft || !upperCenter || !lowerButton) {
+  if (!upperLeft || !upperCenter || !multiplayerPanel || !lowerButton) {
     return { state: "unknown", detail: "PIXEL_READ_FAILED" };
   }
 
   const [leftRed, leftGreen, leftBlue] = upperLeft;
   const [centerRed, centerGreen, centerBlue] = upperCenter;
+  const [panelRed, panelGreen, panelBlue] = multiplayerPanel;
   const [buttonRed, buttonGreen] = lowerButton;
   const hasReadyButton = (buttonRed > buttonGreen * 2 && buttonRed > 80)
     || (buttonGreen > buttonRed * 2 && buttonGreen > 80);
@@ -551,10 +575,10 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
   // panels are stable in both layouts and distinct from the picker/dialog.
   const hasLobbyParchment = leftRed > 150 && leftGreen > 110 && leftBlue > 70
     && centerRed > 140 && centerGreen > 110 && centerBlue > 70;
+  const hasMultiplayerPanel = panelRed > 180 && panelGreen > 180 && panelBlue > 160;
   const state = hasReadyButton || hasLobbyParchment
     ? "lobby-room"
-    : centerRed < 50 && centerGreen < 50 && centerBlue < 50
-      && leftRed > 100 && leftGreen > 50 && leftBlue < 30
+    : hasMultiplayerPanel
       ? "multiplayer-menu"
       : centerRed > 150 && centerGreen > 150 && centerBlue > 140
         ? "main-menu"
@@ -567,8 +591,10 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
     detail: [
       `State=${state}`,
       `Window=${String(window)}`,
+      `Viewport=${formatViewport(transform)}`,
       `UpperLeftRGB=${upperLeft.join(",")}`,
       `UpperCenterRGB=${upperCenter.join(",")}`,
+      `MultiplayerPanelRGB=${multiplayerPanel.join(",")}`,
       `LowerButtonRGB=${lowerButton.join(",")}`
     ].join("|")
   };
@@ -592,6 +618,35 @@ function readWindowRgb(window: NativeHandle, x: number, y: number): [number, num
 
 function formatRgb(rgb: [number, number, number] | null): string {
   return rgb ? rgb.join(".") : "FAILED";
+}
+
+export function designTransform(clientWidth: number, clientHeight: number): DesignTransform {
+  const scale = Math.min(clientWidth / aoe2DesignWidth, clientHeight / aoe2DesignHeight);
+  const viewportWidth = aoe2DesignWidth * scale;
+  const viewportHeight = aoe2DesignHeight * scale;
+  return {
+    scale,
+    offsetX: (clientWidth - viewportWidth) / 2,
+    offsetY: (clientHeight - viewportHeight) / 2,
+    viewportWidth,
+    viewportHeight
+  };
+}
+
+function transformDesignPoint(designX: number, designY: number, transform: DesignTransform): Point {
+  return {
+    x: Math.round(transform.offsetX + designX * transform.scale),
+    y: Math.round(transform.offsetY + designY * transform.scale)
+  };
+}
+
+function formatViewport(transform: DesignTransform): string {
+  return [
+    Math.round(transform.offsetX),
+    Math.round(transform.offsetY),
+    Math.round(transform.viewportWidth),
+    Math.round(transform.viewportHeight)
+  ].join(",");
 }
 
 function findLargestProcessWindow(processId: number): NativeHandle {
