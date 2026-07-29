@@ -10,6 +10,7 @@ import {
   recordMatchResultConflict,
   recordVerifiedMatchResult
 } from "./database.mjs";
+import { replaySettingsAgree, validateRankedReplaySettings } from "./replayRules.mjs";
 import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
 import { normalizeQueueMapPreferences, publicMapCatalog, selectMapForMatch } from "./map-catalog.mjs";
 import {
@@ -250,6 +251,8 @@ function validateReplayReport(match, actingTicket, replay) {
   if (!Number.isSafeInteger(replay.fileSizeBytes) || replay.fileSizeBytes <= 0) {
     return "replay file size is required";
   }
+  const invalidSettings = validateRankedReplaySettings(replay.settings);
+  if (invalidSettings) return invalidSettings;
   if (replay.reporterProfileId !== actingTicket.player.aoeProfileId) {
     return "replay perspective does not match the reporting player";
   }
@@ -276,6 +279,7 @@ function replayReportsAgree(left, right) {
     || left.reason !== right.reason) {
     return false;
   }
+  if (!replaySettingsAgree(left.settings, right.settings)) return false;
 
   const normalizePlayers = (players) => [...players]
     .map((player) => ({

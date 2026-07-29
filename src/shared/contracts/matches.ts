@@ -20,12 +20,41 @@ export interface ReplayPlayerMetadata {
   resigned: boolean;
 }
 
+export interface ReplayGameSettings {
+  cheats: boolean;
+  replayCheatsEnabled: boolean;
+  instantBuild: boolean;
+  playerCount: number;
+  populationLimit: number;
+  recordGame: boolean;
+  gameType: number;
+  replayGameMode: number;
+  gameSpeedId: number;
+  gameSpeed: number;
+  startingAgeId: number;
+  startingResourcesId: number;
+  endingAgeId: number;
+  victoryTypeId: number;
+  victoryAmount: number;
+  revealMap: number;
+  lockTeams: boolean;
+  allTechs: boolean;
+  handicap: boolean;
+  sharedExploration: boolean;
+  teamBonusDisabled: boolean;
+  treatyLength: number;
+  selectedMapId: number;
+  resolvedMapId: number;
+  rmsStrings: string[];
+}
+
 export interface ReplayMatchMetadata {
   fileSizeBytes: number;
   build: number;
   recordedAt: number;
   durationMs: number;
   players: ReplayPlayerMetadata[];
+  settings: ReplayGameSettings;
   reporterProfileId: number;
   winnerProfileId: number;
   loserProfileId: number;

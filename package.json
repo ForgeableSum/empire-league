@@ -21,7 +21,8 @@
     "package": "npm run build && electron-builder --dir",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test:maps": "node --test src/map-catalog.test.mjs",
-    "test:civilizations": "node --test src/civilization-roll.test.mjs"
+    "test:civilizations": "node --test src/civilization-roll.test.mjs",
+    "test:replays": "node --test src/replay-rules.test.mjs"
   },
   "dependencies": {
     "aoe2rec-js": "^0.1.22",

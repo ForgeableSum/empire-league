@@ -34,6 +34,8 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
     throw new ReplayNotFinishedError();
   }
   const summary = parse_rec_summary(buffer);
+  const gameSettings = summary.header.game_settings;
+  const replaySettings = summary.header.replay;
   const players: ReplayPlayerMetadata[] = summary.teams.flatMap((team) =>
     team.players
       .filter((player) => player.profile_id > 0)
@@ -64,6 +66,33 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
     recordedAt: summary.header.timestamp,
     durationMs: summary.duration,
     players: players.sort((left, right) => left.profileId - right.profileId),
+    settings: {
+      cheats: gameSettings.cheats,
+      replayCheatsEnabled: replaySettings.cheats_enabled,
+      instantBuild: replaySettings.instant_build,
+      playerCount: gameSettings.n_players,
+      populationLimit: gameSettings.population_limit,
+      recordGame: gameSettings.record_game,
+      gameType: gameSettings.game_type,
+      replayGameMode: replaySettings.game_mode,
+      gameSpeedId: replaySettings.game_speed_id,
+      gameSpeed: replaySettings.game_speed,
+      startingAgeId: gameSettings.starting_age_id,
+      startingResourcesId: gameSettings.starting_resources_id,
+      endingAgeId: gameSettings.ending_age_id,
+      victoryTypeId: gameSettings.victory_type_id,
+      victoryAmount: gameSettings.victory_amount,
+      revealMap: gameSettings.reveal_map,
+      lockTeams: gameSettings.lock_teams,
+      allTechs: gameSettings.all_techs,
+      handicap: gameSettings.handicap,
+      sharedExploration: gameSettings.shared_exploration,
+      teamBonusDisabled: gameSettings.team_bonus_disabled,
+      treatyLength: gameSettings.treaty_length,
+      selectedMapId: gameSettings.selected_map_id,
+      resolvedMapId: gameSettings.resolved_map_id,
+      rmsStrings: [...gameSettings.rms_strings]
+    },
     reporterProfileId: reporter.profileId,
     winnerProfileId: winner.profile_id,
     loserProfileId: loser.profile_id,
