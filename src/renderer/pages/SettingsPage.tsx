@@ -14,8 +14,6 @@ export function SettingsPage() {
   const [lobbySequenceRunning, setLobbySequenceRunning] = useState(false);
   const [mouseCalibrationRunning, setMouseCalibrationRunning] = useState(false);
   const [mouseTestRunning, setMouseTestRunning] = useState(false);
-  const [steamProbeRunning, setSteamProbeRunning] = useState(false);
-  const [steamProbeLog, setSteamProbeLog] = useState("");
 
   useEffect(() => {
     return window.electronApi?.onAoe2AutomationLog((message) => {
@@ -53,35 +51,6 @@ export function SettingsPage() {
       });
     } finally {
       setDetecting(false);
-    }
-  }
-
-  async function runSteamFamilyTest(): Promise<void> {
-    if (!window.electronApi) {
-      setDetectionFeedback({ tone: "error", message: "The Steam probe is only available in the Electron app." });
-      return;
-    }
-
-    setSteamProbeRunning(true);
-    setSteamProbeLog("");
-    setDetectionFeedback({
-      tone: "success",
-      message: "Querying the local Steam client in AoE2's AppID context…"
-    });
-    try {
-      const result = await window.electronApi.runSteamFamilyProbe(state.currentUser.steamId);
-      setDetectionFeedback({
-        tone: result.status === "unknown" ? "error" : "success",
-        message: result.message
-      });
-      setSteamProbeLog(result.events.map((event) => JSON.stringify(event, null, 2)).join("\n"));
-    } catch (error) {
-      setDetectionFeedback({
-        tone: "error",
-        message: error instanceof Error ? error.message : "The Steam family probe failed unexpectedly."
-      });
-    } finally {
-      setSteamProbeRunning(false);
     }
   }
 
@@ -205,10 +174,6 @@ export function SettingsPage() {
         <button type="button" className="secondary" hidden disabled onClick={() => void toggleTabTest()}>
           {tabTestRunning ? "Stop Tab Test" : "Run 15-second Tab Test"}
         </button>
-        <button type="button" className="secondary" disabled={steamProbeRunning} onClick={() => void runSteamFamilyTest()}>
-          {steamProbeRunning ? "Testing Steam License…" : "Test Steam Family Sharing"}
-        </button>
-        {steamProbeLog && <pre className="steam-probe-log">{steamProbeLog}</pre>}
         <div className="game-input-controls" hidden>
           <button type="button" className="secondary" disabled onClick={() => void sendGameKey("TAB")}>Send Tab</button>
           <button type="button" className="secondary" disabled onClick={() => void sendGameKey("ENTER")}>Send Enter</button>

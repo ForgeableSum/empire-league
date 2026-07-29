@@ -154,6 +154,7 @@ function playerFromRow(row) {
     id: row.id,
     aoeProfileId: row.aoe_profile_id ? Number(row.aoe_profile_id) : 0,
     steamId: row.steam_id,
+    steamLicenseStatus: row.steam_license_status ?? "unknown",
     displayName: row.display_name,
     avatarUrl: row.avatar_url ?? undefined,
     countryCode: row.country_code ?? undefined,

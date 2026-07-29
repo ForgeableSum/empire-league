@@ -16,6 +16,10 @@ import type { Aoe2CivilizationSelection } from "../aoe2UiManifest.js";
 
 export interface SteamFamilyProbeResult {
   status: "owned" | "family_shared" | "unknown";
+  currentSteamId?: string;
+  ownerSteamId?: string;
+  familySharedFlag?: boolean;
+  identityMatchesLogin?: boolean;
   exitCode: number | null;
   logPath: string;
   events: Array<{

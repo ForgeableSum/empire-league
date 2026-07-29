@@ -4,6 +4,7 @@ export interface PlayerProfile {
   id: string;
   aoeProfileId: number;
   steamId?: string;
+  steamLicenseStatus?: "unknown" | "owned" | "family_shared";
   displayName: string;
   avatarUrl?: string;
   countryCode?: string;

@@ -9,7 +9,8 @@ export const authService = {
     if (!accessToken) return null;
     matchmakerTransport.setToken(accessToken);
     try {
-      return (await matchmakerTransport.request<{ player: PlayerProfile }>("/auth/me")).player;
+      const player = (await matchmakerTransport.request<{ player: PlayerProfile }>("/auth/me")).player;
+      return await this.reportSteamLicense(player);
     } catch {
       await this.logout(false);
       return null;
@@ -34,9 +35,27 @@ export const authService = {
       await window.electronApi.storeAuthToken(status.token);
       matchmakerTransport.setToken(status.token);
       const me = await matchmakerTransport.request<{ player: PlayerProfile }>("/auth/me");
-      return me.player;
+      return await this.reportSteamLicense(me.player);
     }
     throw new Error("Steam sign-in timed out.");
+  },
+
+  async reportSteamLicense(player: PlayerProfile): Promise<PlayerProfile> {
+    if (!window.electronApi || !player.steamId) return player;
+    const probe = await window.electronApi.runSteamFamilyProbe(player.steamId).catch(() => null);
+    if (!probe || probe.status === "unknown" || !probe.currentSteamId || !probe.ownerSteamId) return player;
+    const response = await matchmakerTransport.request<{ player: PlayerProfile; updated: boolean }>(
+      "/auth/steam-license",
+      {
+        method: "POST",
+        body: {
+          status: probe.status,
+          currentSteamId: probe.currentSteamId,
+          ownerSteamId: probe.ownerSteamId
+        }
+      }
+    ).catch(() => null);
+    return response?.player ?? player;
   },
 
   async logout(notifyServer = true): Promise<void> {

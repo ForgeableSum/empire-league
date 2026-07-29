@@ -2338,18 +2338,15 @@
   color: var(--danger);
 }
 
-.steam-probe-log {
-  max-height: 320px;
+.family-sharing-warning {
   margin: 0;
-  padding: 10px 12px;
-  overflow: auto;
-  border: 1px solid var(--line);
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 55%, var(--line));
   border-radius: var(--radius);
-  background: #0f0e0d;
-  color: var(--muted);
-  font: 11px/1.45 Consolas, monospace;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--danger) 10%, #1a1816);
+  color: var(--danger);
+  font-weight: 800;
+  line-height: 1.4;
 }
 
 .toggle-row {

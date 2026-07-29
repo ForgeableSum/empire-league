@@ -1523,13 +1523,35 @@ async function runSteamFamilyProbe(expectedSteamId?: string): Promise<SteamFamil
   const rawStatus = finished?.data?.status;
   const status: SteamFamilyProbeResult["status"] =
     rawStatus === "owned" || rawStatus === "family_shared" ? rawStatus : "unknown";
+  const currentSteamId = typeof finished?.data?.currentSteamId === "string"
+    ? finished.data.currentSteamId
+    : undefined;
+  const ownerSteamId = typeof finished?.data?.ownerSteamId === "string"
+    ? finished.data.ownerSteamId
+    : undefined;
+  const familySharedFlag = typeof finished?.data?.familySharedFlag === "boolean"
+    ? finished.data.familySharedFlag
+    : undefined;
+  const identityMatchesLogin = typeof finished?.data?.identityMatchesLogin === "boolean"
+    ? finished.data.identityMatchesLogin
+    : undefined;
   const message = status === "family_shared"
     ? `Family sharing detected. Raw diagnostics saved to ${logPath}`
     : status === "owned"
       ? `Steam reports that this account owns the selected AoE2 license. Raw diagnostics saved to ${logPath}`
       : `Steam could not determine AoE2 license ownership from the companion process. Raw diagnostics saved to ${logPath}`;
 
-  return { status, exitCode: childResult.exitCode, logPath, events, message };
+  return {
+    status,
+    currentSteamId,
+    ownerSteamId,
+    familySharedFlag,
+    identityMatchesLogin,
+    exitCode: childResult.exitCode,
+    logPath,
+    events,
+    message
+  };
 }
 
 type UiWidget = Record<string, unknown>;

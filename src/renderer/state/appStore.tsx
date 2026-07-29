@@ -5,6 +5,7 @@ import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runt
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MapDefinition, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
+import type { PlayerProfile } from "../../shared/contracts/players";
 import { getCatalogMap, mapCatalog } from "../../shared/mapCatalog";
 import { maps, currentUser } from "../mocks/mockPlayers";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
@@ -153,6 +154,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const startupPromptResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const replayResultInFlightRef = useRef(false);
+  const familySharingNoticeShownRef = useRef(false);
   const [startupGamePrompt, setStartupGamePrompt] = useState<AppContextValue["startupGamePrompt"]>(null);
   const [roomSetupFailed, setRoomSetupFailed] = useState(false);
   const [roomSetupFailureReason, setRoomSetupFailureReason] = useState<AppContextValue["roomSetupFailureReason"]>(null);
@@ -173,6 +175,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     void authService.restore().then((player) => {
       if (cancelled) return;
       if (player) {
+        showFamilySharingLoginNotice(player);
         void matchHistoryService.getMine().then((recentMatches) => {
           if (!cancelled) setState((previous) => ({ ...previous, currentUser: player, recentMatches }));
         }).catch(() => {
@@ -272,6 +275,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAuthError(null);
     try {
       const player = await authService.signIn();
+      showFamilySharingLoginNotice(player);
       const recentMatches = await matchHistoryService.getMine();
       setState((previous) => ({ ...previous, currentUser: player, recentMatches }));
       setAuthStatus("authenticated");
@@ -434,6 +438,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     roomSetupTimeoutRef.current = null;
   }
 
+  function showFamilySharingLoginNotice(player: PlayerProfile): void {
+    if (player.steamLicenseStatus !== "family_shared" || familySharingNoticeShownRef.current) return;
+    familySharingNoticeShownRef.current = true;
+    notify("Opponents may reject matches with you because you are using family share.", "warning", {
+      durationMs: null,
+      dismissible: true
+    });
+  }
+
   async function exitAfterRoomSetupFailure(restart: boolean): Promise<void> {
     clearRoomSetupWatchdog();
     unsubscribeRef.current?.();
@@ -498,7 +511,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         unsubscribeRef.current = null;
         ticketRef.current = null;
       }
-      const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: state.currentUser, canHost: true });
+      const currentUser = await authService.reportSteamLicense(state.currentUser);
+      showFamilySharingLoginNotice(currentUser);
+      if (currentUser !== state.currentUser) {
+        setState((previous) => ({ ...previous, currentUser }));
+      }
+      const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: currentUser, canHost: true });
       ticketRef.current = ticket.id;
       if (ticket.ignoredMapIds?.length) {
         notify("Your map pool was outdated. Retired maps were ignored; restart Empire League to update.", "warning", {

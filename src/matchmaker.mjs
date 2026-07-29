@@ -24,10 +24,13 @@ const publicBaseUrl = (process.env.PUBLIC_MATCHMAKER_URL ?? `http://127.0.0.1:${
 const tickets = new Map();
 const matches = new Map();
 const playersJoiningQueue = new Set();
+const rematchCooldowns = new Map();
 const minimumQueueTimeMs = 15_000;
+const declinedPairCooldownMs = 20 * 60 * 1000;
 const matchSetupTimeoutMs = Number(process.env.MATCH_SETUP_TIMEOUT_MS ?? 120_000);
 const matchResultTimeoutMs = Number(process.env.MATCH_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
 let eventSequence = 0;
+let rematchCooldownCleanupTimer;
 
 function send(response, status, body) {
   response.writeHead(status, {
@@ -74,6 +77,71 @@ function deleteMatch(match) {
     if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
     ticket.matchId = null;
   }
+}
+
+function rematchCooldownKey(firstPlayerId, secondPlayerId) {
+  return JSON.stringify([firstPlayerId, secondPlayerId].sort());
+}
+
+function clearExpiredRematchCooldowns(now = Date.now()) {
+  let removed = 0;
+  for (const [key, expiresAt] of rematchCooldowns) {
+    if (expiresAt <= now) {
+      rematchCooldowns.delete(key);
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
+async function retryWaitingTicketsAfterCooldown() {
+  for (const ticket of tickets.values()) {
+    if (!ticket.matchId && hasCompletedMinimumQueueTime(ticket)) await tryMatch(ticket);
+  }
+}
+
+function scheduleRematchCooldownCleanup() {
+  clearTimeout(rematchCooldownCleanupTimer);
+  rematchCooldownCleanupTimer = undefined;
+  if (!rematchCooldowns.size) return;
+
+  let nextExpiration = Number.POSITIVE_INFINITY;
+  for (const expiresAt of rematchCooldowns.values()) {
+    if (expiresAt < nextExpiration) nextExpiration = expiresAt;
+  }
+  rematchCooldownCleanupTimer = setTimeout(() => {
+    rematchCooldownCleanupTimer = undefined;
+    const removed = clearExpiredRematchCooldowns();
+    scheduleRematchCooldownCleanup();
+    if (removed) {
+      void retryWaitingTicketsAfterCooldown().catch((error) => {
+        console.error("[matchmaker] Failed to retry tickets after rematch cooldown cleanup:", error);
+      });
+    }
+  }, Math.max(0, nextExpiration - Date.now()));
+  rematchCooldownCleanupTimer.unref?.();
+}
+
+function addDeclinedPairCooldown(match) {
+  const firstPlayerId = match.host.player.id;
+  const secondPlayerId = match.guest.player.id;
+  const key = rematchCooldownKey(firstPlayerId, secondPlayerId);
+  const expiresAt = Date.now() + declinedPairCooldownMs;
+  rematchCooldowns.set(key, Math.max(rematchCooldowns.get(key) ?? 0, expiresAt));
+  scheduleRematchCooldownCleanup();
+  console.log(
+    `[matchmaker] ${match.id}: rematch blocked for ${firstPlayerId} and ${secondPlayerId} until ${new Date(expiresAt).toISOString()}`
+  );
+}
+
+function hasDeclinedPairCooldown(firstPlayerId, secondPlayerId, now = Date.now()) {
+  const key = rematchCooldownKey(firstPlayerId, secondPlayerId);
+  const expiresAt = rematchCooldowns.get(key);
+  if (!expiresAt) return false;
+  if (expiresAt > now) return true;
+  rematchCooldowns.delete(key);
+  scheduleRematchCooldownCleanup();
+  return false;
 }
 
 function expireActiveMatch(match, message) {
@@ -284,6 +352,7 @@ async function tryMatch(ticket) {
       && !candidate.matchId
       && hasCompletedMinimumQueueTime(candidate)
       && candidate.queueId === ticket.queueId
+      && !hasDeclinedPairCooldown(ticket.player.id, candidate.player.id)
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
       && (candidate.canHost || ticket.canHost)
   ).sort((left, right) => compareOpponentPreference(ticket, left, right))[0];
@@ -408,6 +477,41 @@ async function handleRequest(request, response) {
     const authenticatedPlayer = await authenticate(request);
     if (!authenticatedPlayer) return send(response, 401, { error: "authentication required" });
 
+    if (request.method === "POST" && url.pathname === "/auth/steam-license") {
+      const body = await readJson(request);
+      const status = body.status;
+      const currentSteamId = String(body.currentSteamId ?? "");
+      const ownerSteamId = String(body.ownerSteamId ?? "");
+      if (status === "unknown") {
+        return send(response, 200, { player: authenticatedPlayer, updated: false });
+      }
+      if (status !== "owned" && status !== "family_shared") {
+        return send(response, 400, { error: "invalid Steam license status" });
+      }
+      if (!/^\d{17}$/.test(currentSteamId) || currentSteamId !== authenticatedPlayer.steamId) {
+        return send(response, 400, { error: "Steam probe identity does not match the authenticated account" });
+      }
+      if (!/^\d{17}$/.test(ownerSteamId)) {
+        return send(response, 400, { error: "invalid Steam license owner" });
+      }
+      if (status === "owned" && ownerSteamId !== currentSteamId) {
+        return send(response, 400, { error: "owned Steam license must belong to the authenticated account" });
+      }
+      if (status === "family_shared" && ownerSteamId === currentSteamId) {
+        return send(response, 400, { error: "family-shared Steam license must identify a different owner" });
+      }
+      await database.execute(
+        `UPDATE players
+         SET steam_license_status = ?, steam_license_owner_id = ?, steam_license_checked_at = NOW(3)
+         WHERE id = ?`,
+        [status, ownerSteamId, authenticatedPlayer.id]
+      );
+      return send(response, 200, {
+        player: { ...authenticatedPlayer, steamLicenseStatus: status },
+        updated: true
+      });
+    }
+
     if (request.method === "GET" && url.pathname === "/online") {
       const playerIds = new Set(
         [...webSocketServer.clients]
@@ -515,6 +619,7 @@ async function handleRequest(request, response) {
           code: "MATCH_DECLINED",
           message: "The other player left the match."
         });
+        addDeclinedPairCooldown(match);
         deleteMatch(match);
         return send(response, 200, { ok: true });
       }
@@ -555,6 +660,7 @@ async function handleRequest(request, response) {
       clearTimeout(match.expirationTimer);
       const opponent = match.host.id === body.ticketId ? match.guest : match.host;
       emit(opponent, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
+      addDeclinedPairCooldown(match);
       deleteMatch(match);
       return send(response, 200, { declined: true });
     }
@@ -901,6 +1007,7 @@ server.listen(port, host, () => {
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     clearInterval(socketHeartbeat);
+    clearTimeout(rematchCooldownCleanupTimer);
     for (const socket of webSocketServer.clients) socket.close(1001, "Server shutting down");
     server.close(() => database.end().finally(() => process.exit(0)));
   });
