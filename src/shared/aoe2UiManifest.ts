@@ -36,6 +36,12 @@ export const aoe2UiManifest = {
       activation: "clickEnter",
       settleMs: 2_000
     },
+    playerCount: {
+      label: "Open Player Count",
+      point: [2133, 949],
+      activation: "click",
+      settleMs: 250
+    },
     createLobby: {
       label: "Create Lobby",
       point: [1688, 1614],

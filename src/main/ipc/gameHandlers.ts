@@ -45,6 +45,7 @@ import {
   readAoe2ReadyState,
   restoreAoe2NativeWindowBehind,
   sendAoe2Enter,
+  sendAoe2Home,
   sendAoe2Tab,
   sendAoe2Text
 } from "../aoe2Win32Automation.js";
@@ -2048,6 +2049,15 @@ export function registerGameHandlers(): void {
 
       await actionStep("multiplayer");
       await actionStep("hostGame");
+      await actionStep("playerCount");
+      const firstPlayerCount = await sendAoe2Home(process.pid);
+      emitLog(`STEP|Select 2 Players|Key=HOME|${firstPlayerCount.detail}`);
+      if (!firstPlayerCount.sent) throw new Error("The 2-player lobby size could not be selected.");
+      await delay(100);
+      const confirmPlayerCount = await sendAoe2Enter(process.pid);
+      emitLog(`STEP|Confirm 2 Players|Key=ENTER|${confirmPlayerCount.detail}`);
+      if (!confirmPlayerCount.sent) throw new Error("The 2-player lobby size could not be confirmed.");
+      await delay(250);
       await actionStep("createLobby");
       await clickStep("Reset Settings", 3101, 1976);
       await delay(lobbySetupTiming.resetFocusMs);
