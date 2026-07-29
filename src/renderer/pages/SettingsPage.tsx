@@ -10,9 +10,9 @@ export function SettingsPage() {
     <section className="settings-grid">
       <SettingsGroup title="Game">
         <Toggle
-          label="Launch game automatically"
-          checked={settings.autoLaunch}
-          onChange={(autoLaunch) => updateSettings({ autoLaunch })}
+          label="Launch AoE2 when Empire League starts"
+          checked={settings.launchAoe2OnStartup}
+          onChange={(launchAoe2OnStartup) => updateSettings({ launchAoe2OnStartup })}
         />
         <Toggle
           label="Enable replay detection"

@@ -60,7 +60,7 @@ const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
 const roomSetupTimeoutMs = 65_000;
 const defaultSettings: UserSettings = {
-  autoLaunch: true,
+  launchAoe2OnStartup: false,
   replayDetection: true,
   serverRegion: "US East",
   matchNotifications: true,
@@ -286,7 +286,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (import.meta.env.VITE_SKIP_AOE_AUTO_LAUNCH === "true") return;
-    if (!state.settings.autoLaunch) return;
+    if (!state.settings.launchAoe2OnStartup) return;
 
     let cancelled = false;
 
@@ -369,6 +369,48 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Auto-launch is intentionally evaluated once when the app starts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function launchAoe2ForMatchmaking(): Promise<boolean> {
+    let loadingNotificationId: string | null = null;
+    try {
+      if (!window.electronApi) throw new Error("The Electron game integration bridge is unavailable.");
+
+      const installation = await window.electronApi.detectAoe2Installation();
+      if (!installation.installed || !installation.path) {
+        throw new Error(installation.message ?? "AoE2 DE was not detected.");
+      }
+
+      setState((previous) => ({ ...previous, gameStatus: "loading" }));
+      loadingNotificationId = notify("Launching AoE2 DE…", "loading", {
+        detail: "Matchmaking will begin automatically when the game is ready.",
+        durationMs: null
+      });
+
+      const result = await window.electronApi.launchAoe2();
+      if (!result.launched) {
+        throw new Error(result.message ?? "Steam did not accept the AoE2 DE launch request.");
+      }
+
+      const ready = await waitForAoe2Window(120_000);
+      if (!ready) throw new Error("AoE2 started, but its game window did not become ready in time.");
+
+      updateNotification(loadingNotificationId, { detail: "Finishing game startup." });
+      await delayForStartup(aoe2PostWindowReadyDelayMs);
+      setState((previous) => ({ ...previous, gameStatus: "running" }));
+      updateNotification(loadingNotificationId, {
+        message: "AoE2 DE is ready",
+        tone: "success",
+        detail: "Starting matchmaking.",
+        durationMs: 3000
+      });
+      return true;
+    } catch (error) {
+      if (loadingNotificationId) dismissNotificationById(loadingNotificationId);
+      setState((previous) => ({ ...previous, gameStatus: "installed" }));
+      notify(error instanceof Error ? error.message : "AoE2 DE could not be launched.", "danger");
+      return false;
+    }
+  }
 
   function log(message: string): void {
     setState((previous) => ({ ...previous, eventLog: [nowLog(message), ...previous.eventLog].slice(0, 80) }));
@@ -483,9 +525,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       if (window.electronApi) {
         const gameProcess = await window.electronApi.detectAoe2Process();
-        if (!gameProcess.running || !gameProcess.owned) {
-          setRoomSetupFailureReason(gameProcess.running ? "game_not_owned" : "game_not_running");
+        if (!gameProcess.running) {
+          const launched = await launchAoe2ForMatchmaking();
+          if (!launched) {
+            queueJoinInFlightRef.current = false;
+            return;
+          }
+        } else if (!gameProcess.owned) {
+          setRoomSetupFailureReason("game_not_owned");
           setRoomSetupFailed(true);
+          queueJoinInFlightRef.current = false;
           return;
         }
       }
@@ -1273,7 +1322,9 @@ function loadSettings(): UserSettings {
     if (!raw) return defaultSettings;
     const saved = JSON.parse(raw) as Partial<UserSettings>;
     return {
-      autoLaunch: typeof saved.autoLaunch === "boolean" ? saved.autoLaunch : defaultSettings.autoLaunch,
+      launchAoe2OnStartup: typeof saved.launchAoe2OnStartup === "boolean"
+        ? saved.launchAoe2OnStartup
+        : defaultSettings.launchAoe2OnStartup,
       replayDetection: typeof saved.replayDetection === "boolean"
         ? saved.replayDetection
         : defaultSettings.replayDetection,

@@ -40,7 +40,7 @@ export interface NotificationItem {
 }
 
 export interface UserSettings {
-  autoLaunch: boolean;
+  launchAoe2OnStartup: boolean;
   replayDetection: boolean;
   serverRegion: string;
   matchNotifications: boolean;

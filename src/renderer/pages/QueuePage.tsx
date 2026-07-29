@@ -328,7 +328,7 @@ export function QueuePage() {
                     }
                   })}
                 >
-                  <Search size={22} /> {state.gameStatus === "loading" ? "Loading AoE2…" : "Find Match"}
+                  <Search size={22} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "Find Match"}
                 </button>
               </>
             )}
@@ -505,7 +505,7 @@ export function QueuePage() {
                     }
                   })}
                 >
-                  <Search size={22} /> {state.gameStatus === "loading" ? "Loading AoE2…" : "Find Match"}
+                  <Search size={22} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "Find Match"}
               </button>
             </aside>}
           </div>
