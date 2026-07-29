@@ -186,7 +186,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } catch (error) {
           if (error instanceof ReplayNotFinishedError) {
             replayResultInFlightRef.current = false;
-            log("Replay has no terminal operation yet; continuing to watch");
             return;
           }
           const message = error instanceof Error ? error.message : "Replay parsing failed.";

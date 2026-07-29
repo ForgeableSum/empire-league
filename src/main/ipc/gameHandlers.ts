@@ -167,7 +167,6 @@ function startReturnToMenuWatch(window: BrowserWindow): void {
       consecutiveMainMenuReads = state.state === "main-menu"
         ? consecutiveMainMenuReads + 1
         : 0;
-      console.info(`[AoE2 recovery] MENU_WATCH|Reads=${consecutiveMainMenuReads}|${state.detail}`);
       if (consecutiveMainMenuReads >= 2) {
         stopReturnToMenuWatch();
         focusMainWindowAfterReplay(window);
@@ -231,7 +230,6 @@ async function startReplayEndDetection(
           lastGrowthAt = Date.now();
           active = current;
           if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
-          console.info(`[AoE2 replay] INSPECT|Reason=Growth|File=${current.path}|Size=${current.size}`);
         } else if (current && observedGrowth) {
           const now = Date.now();
           const elapsedMs = now - startedAt;
