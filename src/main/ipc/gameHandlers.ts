@@ -44,6 +44,7 @@ import {
   readAoe2HostSetupState,
   readAoe2ReadyState,
   restoreAoe2NativeWindowBehind,
+  sendAoe2End,
   sendAoe2Enter,
   sendAoe2Home,
   sendAoe2Tab,
@@ -2049,6 +2050,15 @@ export function registerGameHandlers(): void {
 
       await actionStep("multiplayer");
       await actionStep("hostGame");
+      await actionStep("lobbyVisibility");
+      const privateVisibility = await sendAoe2End(process.pid);
+      emitLog(`STEP|Select Private Visibility|Key=END|${privateVisibility.detail}`);
+      if (!privateVisibility.sent) throw new Error("Private lobby visibility could not be selected.");
+      await delay(100);
+      const confirmVisibility = await sendAoe2Enter(process.pid);
+      emitLog(`STEP|Confirm Private Visibility|Key=ENTER|${confirmVisibility.detail}`);
+      if (!confirmVisibility.sent) throw new Error("Private lobby visibility could not be confirmed.");
+      await delay(250);
       await actionStep("playerCount");
       const firstPlayerCount = await sendAoe2Home(process.pid);
       emitLog(`STEP|Select 2 Players|Key=HOME|${firstPlayerCount.detail}`);
