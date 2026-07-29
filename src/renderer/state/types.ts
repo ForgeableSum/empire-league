@@ -40,24 +40,11 @@ export interface NotificationItem {
 }
 
 export interface UserSettings {
-  aoePath: string;
-  autoDetect: boolean;
   autoLaunch: boolean;
-  focusWhenReady: boolean;
-  displayMode: "Borderless" | "Fullscreen" | "Windowed";
   replayDetection: boolean;
   replayFolder: string;
   serverRegion: string;
-  acceptSound: boolean;
   matchNotifications: boolean;
-  maxInitialRange: number;
-  autoExpandRange: boolean;
-  rematchOffers: boolean;
-  soundVolume: number;
-  reducedMotion: boolean;
-  compactLayout: boolean;
-  minimizeOnStart: boolean;
-  startWithWindows: boolean;
 }
 
 export interface AppState {

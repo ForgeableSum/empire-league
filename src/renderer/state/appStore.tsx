@@ -60,24 +60,11 @@ const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
 const roomSetupTimeoutMs = 65_000;
 const defaultSettings: UserSettings = {
-  aoePath: "C:\\Program Files (x86)\\Steam\\steamapps\\common\\AoE2DE",
-  autoDetect: true,
   autoLaunch: true,
-  focusWhenReady: true,
-  displayMode: "Borderless",
   replayDetection: true,
   replayFolder: "",
   serverRegion: "US East",
-  acceptSound: true,
-  matchNotifications: true,
-  maxInitialRange: 50,
-  autoExpandRange: true,
-  rematchOffers: true,
-  soundVolume: 45,
-  reducedMotion: false,
-  compactLayout: false,
-  minimizeOnStart: false,
-  startWithWindows: false
+  matchNotifications: true
 };
 
 export const queueDefinitions: QueueDefinition[] = [
@@ -354,10 +341,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled) {
           setState((previous) => ({
             ...previous,
-            gameStatus: "running",
-            settings: { ...previous.settings, aoePath: installation.path as string }
+            gameStatus: "running"
           }));
-          window.localStorage.setItem(settingsKey, JSON.stringify({ ...state.settings, aoePath: installation.path }));
           if (loadingNotificationId) {
             updateNotification(loadingNotificationId, {
               message: "AoE2 DE is ready",
@@ -1270,7 +1255,19 @@ export function useAppStore(): AppContextValue {
 function loadSettings(): UserSettings {
   try {
     const raw = window.localStorage.getItem(settingsKey);
-    return raw ? { ...defaultSettings, ...JSON.parse(raw) } : defaultSettings;
+    if (!raw) return defaultSettings;
+    const saved = JSON.parse(raw) as Partial<UserSettings>;
+    return {
+      autoLaunch: typeof saved.autoLaunch === "boolean" ? saved.autoLaunch : defaultSettings.autoLaunch,
+      replayDetection: typeof saved.replayDetection === "boolean"
+        ? saved.replayDetection
+        : defaultSettings.replayDetection,
+      replayFolder: typeof saved.replayFolder === "string" ? saved.replayFolder : defaultSettings.replayFolder,
+      serverRegion: typeof saved.serverRegion === "string" ? saved.serverRegion : defaultSettings.serverRegion,
+      matchNotifications: typeof saved.matchNotifications === "boolean"
+        ? saved.matchNotifications
+        : defaultSettings.matchNotifications
+    };
   } catch {
     return defaultSettings;
   }
