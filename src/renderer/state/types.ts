@@ -42,7 +42,6 @@ export interface NotificationItem {
 export interface UserSettings {
   autoLaunch: boolean;
   replayDetection: boolean;
-  replayFolder: string;
   serverRegion: string;
   matchNotifications: boolean;
 }

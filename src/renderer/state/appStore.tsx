@@ -62,7 +62,6 @@ const roomSetupTimeoutMs = 65_000;
 const defaultSettings: UserSettings = {
   autoLaunch: true,
   replayDetection: true,
-  replayFolder: "",
   serverRegion: "US East",
   matchNotifications: true
 };
@@ -1012,7 +1011,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function openAoe2(): Promise<void> {
     if (window.electronApi && state.settings.replayDetection) {
-      const detection = await window.electronApi.startReplayEndDetection(state.settings.replayFolder || undefined);
+      const detection = await window.electronApi.startReplayEndDetection();
       if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
     }
     await stopYouTubeShorts();
@@ -1127,7 +1126,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await delayForLobbyInput(lobbySetupTiming.revealAfterStartMs);
     if (stateRef.current.settings.replayDetection) {
       const settings = stateRef.current.settings;
-      const detection = await window.electronApi.startReplayEndDetection(settings.replayFolder || undefined);
+      const detection = await window.electronApi.startReplayEndDetection();
       if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
     }
     await stopYouTubeShorts();
@@ -1262,7 +1261,6 @@ function loadSettings(): UserSettings {
       replayDetection: typeof saved.replayDetection === "boolean"
         ? saved.replayDetection
         : defaultSettings.replayDetection,
-      replayFolder: typeof saved.replayFolder === "string" ? saved.replayFolder : defaultSettings.replayFolder,
       serverRegion: typeof saved.serverRegion === "string" ? saved.serverRegion : defaultSettings.serverRegion,
       matchNotifications: typeof saved.matchNotifications === "boolean"
         ? saved.matchNotifications

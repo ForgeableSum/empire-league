@@ -18,14 +18,6 @@ export function SettingsPage() {
           checked={settings.replayDetection}
           onChange={(replayDetection) => updateSettings({ replayDetection })}
         />
-        <label>
-          Recorded-game folder
-          <input
-            value={settings.replayFolder}
-            onChange={(event) => updateSettings({ replayFolder: event.target.value })}
-            placeholder="Not configured"
-          />
-        </label>
       </SettingsGroup>
 
       <SettingsGroup title="Matchmaking">
