@@ -38,8 +38,8 @@ export function SettingsPage() {
         />
         <label>
           <span className="setting-label">
-            Maximum opponent rating below yours
-            <HelpTooltip text="Restricting lower-rated opponents may make matchmaking take longer." />
+            Maximum 1v1 opponent rating below yours
+            <HelpTooltip text="This applies only to 1v1. Restricting lower-rated opponents may make matchmaking take longer." />
           </span>
           <select
             value={settings.maximumLowerOpponentRatingGap}

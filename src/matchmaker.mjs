@@ -34,12 +34,19 @@ const declinedPairCooldownMs = 30 * 1000;
 const matchSetupTimeoutMs = Number(process.env.MATCH_SETUP_TIMEOUT_MS ?? 120_000);
 const matchResultTimeoutMs = Number(process.env.MATCH_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
 const ticketDisconnectGraceMs = Number(process.env.TICKET_DISCONNECT_GRACE_MS ?? 20_000);
-const ratingRangeSchedule = [
+const soloRatingRangeSchedule = [
   { afterMs: 0, spread: 50 },
   { afterMs: 20_000, spread: 75 },
   { afterMs: 40_000, spread: 100 },
   { afterMs: 60_000, spread: 150 },
   { afterMs: 90_000, spread: 250 }
+];
+const teamRatingRangeSchedule = [
+  { afterMs: 0, spread: 100 },
+  { afterMs: 20_000, spread: 150 },
+  { afterMs: 40_000, spread: 225 },
+  { afterMs: 60_000, spread: 325 },
+  { afterMs: 90_000, spread: 500 }
 ];
 let eventSequence = 0;
 let rematchCooldownCleanupTimer;
@@ -423,10 +430,15 @@ function compareOpponentPreference(ticket, left, right) {
     || left.id.localeCompare(right.id);
 }
 
+function ratingRangeScheduleForTicket(ticket) {
+  return ticket.queue.format === "team" ? teamRatingRangeSchedule : soloRatingRangeSchedule;
+}
+
 function ratingSpreadForTicket(ticket, now = Date.now()) {
   const elapsed = Math.max(0, now - new Date(ticket.joinedAt).getTime());
-  return [...ratingRangeSchedule].reverse().find((step) => elapsed >= step.afterMs)?.spread
-    ?? ratingRangeSchedule[0].spread;
+  const schedule = ratingRangeScheduleForTicket(ticket);
+  return [...schedule].reverse().find((step) => elapsed >= step.afterMs)?.spread
+    ?? schedule[0].spread;
 }
 
 function emitRatingRange(ticket, now = Date.now()) {
@@ -446,7 +458,7 @@ function ratingsAreInRange(ticket, candidate, now = Date.now()) {
 
 function scheduleRatingRanges(ticket) {
   emitRatingRange(ticket);
-  ticket.ratingRangeTimers = ratingRangeSchedule.slice(1).map((step) => setTimeout(() => {
+  ticket.ratingRangeTimers = ratingRangeScheduleForTicket(ticket).slice(1).map((step) => setTimeout(() => {
     if (tickets.get(ticket.id) !== ticket || ticket.matchId) return;
     emitRatingRange(ticket);
     void tryMatch(ticket).catch((error) => {
@@ -464,10 +476,57 @@ function normalizeMaximumLowerOpponentRatingGap(value) {
 }
 
 function allowsOpponentRating(ticket, candidate) {
+  if (ticket.queue.format === "team") return true;
   const maximumGap = ticket.maximumLowerOpponentRatingGap;
   return maximumGap === 0
     || playerRatingForQueue(candidate.player, candidate.queueId)
       >= playerRatingForQueue(ticket.player, ticket.queueId) - maximumGap;
+}
+
+function balancedTeamAssignments(participants, host, teamSize) {
+  const ranked = [...participants].sort((left, right) =>
+    playerRatingForQueue(right.player, right.queueId) - playerRatingForQueue(left.player, left.queueId));
+  if (teamSize === 1) {
+    return [[host], ranked.filter((participant) => participant.id !== host.id)];
+  }
+
+  const candidates = ranked.filter((participant) => participant.id !== host.id);
+  const hostRating = playerRatingForQueue(host.player, host.queueId);
+  let bestTeamOne = null;
+  let bestDifference = Number.POSITIVE_INFINITY;
+
+  function considerTeamOne(teammates) {
+    const teamOneIds = new Set([host.id, ...teammates.map((participant) => participant.id)]);
+    const teamTwo = ranked.filter((participant) => !teamOneIds.has(participant.id));
+    const teamOneTotal = hostRating + teammates.reduce(
+      (total, participant) => total + playerRatingForQueue(participant.player, participant.queueId),
+      0
+    );
+    const teamTwoTotal = teamTwo.reduce(
+      (total, participant) => total + playerRatingForQueue(participant.player, participant.queueId),
+      0
+    );
+    const difference = Math.abs(teamOneTotal - teamTwoTotal);
+    if (difference < bestDifference) {
+      bestDifference = difference;
+      bestTeamOne = teammates;
+    }
+  }
+
+  function chooseTeammates(start, selected) {
+    if (selected.length === teamSize - 1) {
+      considerTeamOne(selected);
+      return;
+    }
+    for (let index = start; index <= candidates.length - (teamSize - 1 - selected.length); index += 1) {
+      chooseTeammates(index + 1, [...selected, candidates[index]]);
+    }
+  }
+
+  chooseTeammates(0, []);
+  const teamOne = [host, ...bestTeamOne];
+  const teamOneIds = new Set(teamOne.map((participant) => participant.id));
+  return [teamOne, ranked.filter((participant) => !teamOneIds.has(participant.id))];
 }
 
 function sessionFor(match, ticket) {
@@ -563,17 +622,7 @@ async function tryMatch(ticket) {
   }));
   const sharedCivilizationBans = participants.flatMap((participant) =>
     civilizationBansForMapGroup(effectivePreferences.get(participant.id), mapGroupId));
-  const ranked = [...participants].sort((left, right) =>
-    playerRatingForQueue(right.player, right.queueId) - playerRatingForQueue(left.player, left.queueId));
-  let teamOne = ranked.filter((_, index) => index % 2 === 0);
-  let teamTwo = ranked.filter((_, index) => index % 2 === 1);
-  if (!teamOne.some((participant) => participant.id === host.id)) {
-    [teamOne, teamTwo] = [teamTwo, teamOne];
-  }
-  teamOne = [
-    host,
-    ...teamOne.filter((participant) => participant.id !== host.id)
-  ];
+  const [teamOne, teamTwo] = balancedTeamAssignments(participants, host, teamSize);
   const ordered = [...teamOne, ...teamTwo];
   const assignments = new Map(ordered.map((participant, index) => [
     participant.id,
