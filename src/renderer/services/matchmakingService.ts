@@ -35,7 +35,11 @@ export class LocalMatchmakingService implements MatchmakingService {
   async joinQueue(request: JoinQueueRequest): Promise<QueueTicket> {
     return matchmakerTransport.request<QueueTicket>("/queue", {
       method: "POST",
-      body: { queue: request.queue, canHost: request.canHost }
+      body: {
+        queue: request.queue,
+        canHost: request.canHost,
+        maximumLowerOpponentRatingGap: request.maximumLowerOpponentRatingGap
+      }
     });
   }
 
@@ -128,6 +132,7 @@ export class MockMatchmakingService implements MatchmakingService {
   private listeners = new Map<string, QueueEventListener>();
   private timers = new Map<string, number[]>();
   private queuedDefinitions = new Map<string, NonNullable<JoinQueueRequest["queue"]>>();
+  private lowerRatingLimits = new Map<string, number>();
 
   constructor(private readonly getConfig: () => MockServiceConfig) {}
 
@@ -139,6 +144,7 @@ export class MockMatchmakingService implements MatchmakingService {
     if (!request.queue?.mapPool.length) throw new Error("At least one selected map is required.");
     const ticket = { id: `ticket-${crypto.randomUUID()}`, queueId: request.queueId, joinedAt: new Date().toISOString() };
     this.queuedDefinitions.set(ticket.id, request.queue);
+    this.lowerRatingLimits.set(ticket.id, request.maximumLowerOpponentRatingGap ?? 0);
     return ticket;
   }
 
@@ -154,6 +160,7 @@ export class MockMatchmakingService implements MatchmakingService {
     this.clearTimers(ticketId);
     this.listeners.delete(ticketId);
     this.queuedDefinitions.delete(ticketId);
+    this.lowerRatingLimits.delete(ticketId);
   }
 
   subscribeToQueue(ticketId: string, listener: QueueEventListener): UnsubscribeFunction {
@@ -179,7 +186,12 @@ export class MockMatchmakingService implements MatchmakingService {
             favoriteMapIds: {}
           }
         };
-        const opponent = matchmakingOpponents[Math.floor(Math.random() * matchmakingOpponents.length)];
+        const maximumGap = this.lowerRatingLimits.get(ticketId) ?? 0;
+        const eligibleOpponents = maximumGap > 0
+          ? matchmakingOpponents.filter((opponent) => opponent.rating >= currentUser.rating - maximumGap)
+          : matchmakingOpponents;
+        const opponent = eligibleOpponents[Math.floor(Math.random() * eligibleOpponents.length)];
+        if (!opponent) return;
         const selectedMap = selectMapFromQueues(
           currentDefinition ?? { mapPool: selectedMaps },
           opponentDefinition
@@ -233,6 +245,7 @@ export class MockMatchmakingService implements MatchmakingService {
       this.clearTimers(ticketId);
       this.listeners.delete(ticketId);
       this.queuedDefinitions.delete(ticketId);
+      this.lowerRatingLimits.delete(ticketId);
     };
   }
 

@@ -36,6 +36,21 @@ export function SettingsPage() {
           checked={settings.autoRejectFamilySharing}
           onChange={(autoRejectFamilySharing) => updateSettings({ autoRejectFamilySharing })}
         />
+        <label>
+          <span className="setting-label">
+            Maximum opponent rating below yours
+            <HelpTooltip text="Restricting lower-rated opponents may make matchmaking take longer." />
+          </span>
+          <select
+            value={settings.maximumLowerOpponentRatingGap}
+            onChange={(event) => updateSettings({ maximumLowerOpponentRatingGap: Number(event.target.value) })}
+          >
+            <option value={0}>Off</option>
+            {[200, 300, 400, 500].map((rating) => (
+              <option key={rating} value={rating}>{rating} Elo</option>
+            ))}
+          </select>
+        </label>
       </SettingsGroup>
 
       <SettingsGroup title="Account">

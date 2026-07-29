@@ -186,6 +186,7 @@ export interface JoinQueueRequest {
   queue?: QueueDefinition;
   player: PlayerProfile;
   canHost?: boolean;
+  maximumLowerOpponentRatingGap?: number;
 }
 
 export interface QueueTicket {

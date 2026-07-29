@@ -319,6 +319,20 @@ function compareOpponentPreference(ticket, left, right) {
     || left.id.localeCompare(right.id);
 }
 
+function normalizeMaximumLowerOpponentRatingGap(value) {
+  const gap = Number(value ?? 0);
+  if (![0, 200, 300, 400, 500].includes(gap)) {
+    throw new Error("maximum lower opponent rating gap must be Off or an increment from 200 to 500");
+  }
+  return gap;
+}
+
+function allowsOpponentRating(ticket, candidate) {
+  const maximumGap = ticket.maximumLowerOpponentRatingGap;
+  return maximumGap === 0
+    || Number(candidate.player.rating) >= Number(ticket.player.rating) - maximumGap;
+}
+
 function sessionFor(match, ticket) {
   const opponent = match.host.id === ticket.id ? match.guest : match.host;
   const playerCivilizationPreference = match.civilizationPreferences.get(ticket.id);
@@ -353,6 +367,8 @@ async function tryMatch(ticket) {
       && hasCompletedMinimumQueueTime(candidate)
       && candidate.queueId === ticket.queueId
       && !hasDeclinedPairCooldown(ticket.player.id, candidate.player.id)
+      && allowsOpponentRating(ticket, candidate)
+      && allowsOpponentRating(candidate, ticket)
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
       && (candidate.canHost || ticket.canHost)
   ).sort((left, right) => compareOpponentPreference(ticket, left, right))[0];
@@ -538,6 +554,9 @@ async function handleRequest(request, response) {
         ignoredMapIds = body.queue.ignoredMapIds;
         delete body.queue.ignoredMapIds;
         body.queue.civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
+        body.maximumLowerOpponentRatingGap = normalizeMaximumLowerOpponentRatingGap(
+          body.maximumLowerOpponentRatingGap
+        );
       } catch (error) {
         return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });
       }
@@ -557,6 +576,7 @@ async function handleRequest(request, response) {
         queue: body.queue,
         player: authenticatedPlayer,
         canHost: body.canHost !== false,
+        maximumLowerOpponentRatingGap: body.maximumLowerOpponentRatingGap,
         joinedAt: new Date().toISOString(),
         matchId: null,
         events: []

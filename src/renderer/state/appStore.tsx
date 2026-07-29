@@ -61,7 +61,8 @@ const defaultSettings: UserSettings = {
   launchAoe2OnStartup: false,
   serverRegion: "US East",
   matchNotifications: true,
-  autoRejectFamilySharing: false
+  autoRejectFamilySharing: false,
+  maximumLowerOpponentRatingGap: 0
 };
 
 export const queueDefinitions: QueueDefinition[] = [
@@ -529,7 +530,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (currentUser !== state.currentUser) {
         setState((previous) => ({ ...previous, currentUser }));
       }
-      const ticket = await services.matchmaking.joinQueue({ queueId: queue.id, queue, player: currentUser, canHost: true });
+      const ticket = await services.matchmaking.joinQueue({
+        queueId: queue.id,
+        queue,
+        player: currentUser,
+        canHost: true,
+        maximumLowerOpponentRatingGap: state.settings.maximumLowerOpponentRatingGap
+      });
       ticketRef.current = ticket.id;
       if (ticket.ignoredMapIds?.length) {
         notify("Your map pool was outdated. Retired maps were ignored; restart Empire League to update.", "warning", {
@@ -1305,7 +1312,12 @@ function loadSettings(): UserSettings {
         : defaultSettings.matchNotifications,
       autoRejectFamilySharing: typeof saved.autoRejectFamilySharing === "boolean"
         ? saved.autoRejectFamilySharing
-        : defaultSettings.autoRejectFamilySharing
+        : defaultSettings.autoRejectFamilySharing,
+      maximumLowerOpponentRatingGap: [0, 200, 300, 400, 500].includes(
+        Number(saved.maximumLowerOpponentRatingGap)
+      )
+        ? Number(saved.maximumLowerOpponentRatingGap)
+        : defaultSettings.maximumLowerOpponentRatingGap
     };
   } catch {
     return defaultSettings;

@@ -44,6 +44,7 @@ export interface UserSettings {
   serverRegion: string;
   matchNotifications: boolean;
   autoRejectFamilySharing: boolean;
+  maximumLowerOpponentRatingGap: number;
 }
 
 export interface AppState {
