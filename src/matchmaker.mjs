@@ -29,6 +29,7 @@ const minimumQueueTimeMs = 15_000;
 const declinedPairCooldownMs = 20 * 60 * 1000;
 const matchSetupTimeoutMs = Number(process.env.MATCH_SETUP_TIMEOUT_MS ?? 120_000);
 const matchResultTimeoutMs = Number(process.env.MATCH_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
+const ticketDisconnectGraceMs = Number(process.env.TICKET_DISCONNECT_GRACE_MS ?? 20_000);
 let eventSequence = 0;
 let rematchCooldownCleanupTimer;
 
@@ -70,13 +71,51 @@ function clearMatchTimers(match) {
   match.lifecycleTimer = undefined;
 }
 
+function clearTicketDisconnectTimer(ticket) {
+  clearTimeout(ticket.disconnectTimer);
+  ticket.disconnectTimer = undefined;
+  ticket.disconnectedAt = undefined;
+}
+
 function deleteMatch(match) {
   clearMatchTimers(match);
   matches.delete(match.id);
   for (const ticket of [match.host, match.guest]) {
+    clearTimeout(ticket.matchSearchTimer);
+    clearTicketDisconnectTimer(ticket);
     if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
     ticket.matchId = null;
   }
+}
+
+function deleteDisconnectedTicket(ticket, message = "The other player disconnected from the match.") {
+  if (tickets.get(ticket.id) !== ticket || ticket.eventSockets?.size) return false;
+  clearTimeout(ticket.matchSearchTimer);
+  clearTicketDisconnectTimer(ticket);
+  const match = ticket.matchId ? matches.get(ticket.matchId) : null;
+  if (!match) {
+    tickets.delete(ticket.id);
+    console.warn(`[matchmaker] ${ticket.id}: disconnected ticket removed`);
+    return true;
+  }
+  const opponent = match.host.id === ticket.id ? match.guest : match.host;
+  emit(opponent, {
+    type: "error",
+    code: "MATCH_DECLINED",
+    message
+  });
+  deleteMatch(match);
+  console.warn(`[matchmaker] ${match.id}: disconnected player ${ticket.player.id} removed`);
+  return true;
+}
+
+function scheduleTicketDisconnectCleanup(ticket) {
+  clearTimeout(ticket.disconnectTimer);
+  ticket.disconnectedAt = Date.now();
+  ticket.disconnectTimer = setTimeout(() => {
+    deleteDisconnectedTicket(ticket);
+  }, ticketDisconnectGraceMs);
+  ticket.disconnectTimer.unref?.();
 }
 
 function rematchCooldownKey(firstPlayerId, secondPlayerId) {
@@ -562,7 +601,13 @@ async function handleRequest(request, response) {
       }
       for (const [ticketId, ticket] of tickets) {
         if (ticket.player.id === authenticatedPlayer.id && ticket.matchId && matches.get(ticket.matchId)?.resultResolved) {
+          clearTicketDisconnectTimer(ticket);
           tickets.delete(ticketId);
+        }
+      }
+      for (const ticket of tickets.values()) {
+        if (ticket.player.id === authenticatedPlayer.id && ticket.disconnectedAt) {
+          deleteDisconnectedTicket(ticket, "The other player restarted or left the match.");
         }
       }
       const alreadyActive = [...tickets.values()].some((ticket) => ticket.player.id === authenticatedPlayer.id);
@@ -869,7 +914,11 @@ function sendSocket(socket, message) {
 
 function unsubscribeSocket(socket) {
   const session = socketSessions.get(socket);
-  if (session?.ticketId) tickets.get(session.ticketId)?.eventSockets?.delete(socket);
+  if (session?.ticketId) {
+    const ticket = tickets.get(session.ticketId);
+    ticket?.eventSockets?.delete(socket);
+    if (ticket && !ticket.eventSockets?.size) scheduleTicketDisconnectCleanup(ticket);
+  }
   if (session) session.ticketId = null;
 }
 
@@ -929,6 +978,7 @@ webSocketServer.on("connection", (socket) => {
         session.ticketId = ticketId;
         ticket.eventSockets ??= new Set();
         ticket.eventSockets.add(socket);
+        clearTicketDisconnectTimer(ticket);
         const after = Number.isSafeInteger(message.after) && message.after >= 0 ? message.after : 0;
         for (const item of ticket.events.filter((candidate) => candidate.sequence > after)) {
           sendSocket(socket, { type: "event", ticketId, ...item });
@@ -972,6 +1022,21 @@ webSocketServer.on("connection", (socket) => {
         } catch {
           body = { error: "Matchmaker returned an invalid RPC response." };
           status = 500;
+        }
+        if (
+          message.method.toUpperCase() === "POST"
+          && new URL(message.path, "http://localhost").pathname === "/queue"
+          && status === 201
+          && typeof body?.id === "string"
+        ) {
+          const ticket = tickets.get(body.id);
+          if (ticket && ticket.player.id === session.player?.id) {
+            unsubscribeSocket(socket);
+            session.ticketId = ticket.id;
+            ticket.eventSockets ??= new Set();
+            ticket.eventSockets.add(socket);
+            clearTicketDisconnectTimer(ticket);
+          }
         }
         sendSocket(socket, { type: "response", id: message.id, status, body });
         if (message.method.toUpperCase() === "POST" && new URL(message.path, "http://localhost").pathname === "/auth/logout" && status < 400) {
