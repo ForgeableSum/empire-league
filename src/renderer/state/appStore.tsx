@@ -63,7 +63,8 @@ const defaultSettings: UserSettings = {
   autoLaunch: true,
   replayDetection: true,
   serverRegion: "US East",
-  matchNotifications: true
+  matchNotifications: true,
+  autoRejectFamilySharing: false
 };
 
 export const queueDefinitions: QueueDefinition[] = [
@@ -528,6 +529,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setState((previous) => ({ ...previous, searchRange: { min: event.minRating, max: event.maxRating } }));
         }
         if (event.type === "match_found") {
+          const shouldAutoRejectFamilySharing = state.settings.autoRejectFamilySharing
+            && event.match.queue.id === "ranked-rm-1v1"
+            && event.match.opponent.steamLicenseStatus === "family_shared";
+          if (shouldAutoRejectFamilySharing) {
+            log(`Automatically declining family-shared opponent: ${event.match.id}`);
+            notify("Automatically declined a Family Share opponent.", "warning");
+            void declineMatchById(event.match.id);
+            return;
+          }
           const matchedSession = {
             ...event.match,
             player: state.currentUser,
@@ -894,19 +904,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function declineMatch(): Promise<void> {
+  async function declineMatchById(matchId?: string): Promise<void> {
     void window.electronApi?.stopMatchFoundAlert();
     clearRoomSetupWatchdog();
-    if (state.activeMatch) {
-      await services.matchmaking.declineMatch(state.activeMatch.id);
-    }
-    if (ticketRef.current) await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
     unsubscribeRef.current?.();
     unsubscribeRef.current = null;
-    ticketRef.current = null;
-    queueJoinInFlightRef.current = false;
-    setState((previous) => ({ ...previous, queueStatus: "cancelled", activeMatch: null }));
+    try {
+      if (matchId) await services.matchmaking.declineMatch(matchId);
+    } finally {
+      if (ticketRef.current) await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+      ticketRef.current = null;
+      queueJoinInFlightRef.current = false;
+      matchedSessionRef.current = null;
+      setState((previous) => ({ ...previous, queueStatus: "cancelled", activeMatch: null }));
+    }
     log("Match declined");
+  }
+
+  async function declineMatch(): Promise<void> {
+    await declineMatchById(state.activeMatch?.id);
   }
 
   async function prepareLobby(matchOverride?: MatchSession): Promise<void> {
@@ -1264,7 +1280,10 @@ function loadSettings(): UserSettings {
       serverRegion: typeof saved.serverRegion === "string" ? saved.serverRegion : defaultSettings.serverRegion,
       matchNotifications: typeof saved.matchNotifications === "boolean"
         ? saved.matchNotifications
-        : defaultSettings.matchNotifications
+        : defaultSettings.matchNotifications,
+      autoRejectFamilySharing: typeof saved.autoRejectFamilySharing === "boolean"
+        ? saved.autoRejectFamilySharing
+        : defaultSettings.autoRejectFamilySharing
     };
   } catch {
     return defaultSettings;

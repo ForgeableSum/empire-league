@@ -2337,6 +2337,16 @@
   min-height: 18px;
 }
 
+.setting-with-note {
+  display: grid;
+  gap: 3px;
+}
+
+.setting-with-note small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 .settings-group input[type="checkbox"],
 .settings-group input[type="range"] {
   accent-color: var(--accent);

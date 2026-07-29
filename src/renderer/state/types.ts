@@ -44,6 +44,7 @@ export interface UserSettings {
   replayDetection: boolean;
   serverRegion: string;
   matchNotifications: boolean;
+  autoRejectFamilySharing: boolean;
 }
 
 export interface AppState {

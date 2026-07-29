@@ -33,6 +33,14 @@ export function SettingsPage() {
           checked={settings.matchNotifications}
           onChange={(matchNotifications) => updateSettings({ matchNotifications })}
         />
+        <div className="setting-with-note">
+          <Toggle
+            label="Automatically reject Family Share accounts"
+            checked={settings.autoRejectFamilySharing}
+            onChange={(autoRejectFamilySharing) => updateSettings({ autoRejectFamilySharing })}
+          />
+          <small>Family Share accounts have a higher likelihood of being smurfs.</small>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title="Account">
