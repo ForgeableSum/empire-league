@@ -194,6 +194,8 @@ function scheduleRematchCooldownCleanup() {
 }
 
 function addDeclinedPairCooldown(match) {
+  if (match.teamSize !== 1) return;
+
   const expiresAt = Date.now() + declinedPairCooldownMs;
   const players = matchTickets(match);
   for (let left = 0; left < players.length; left += 1) {
