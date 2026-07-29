@@ -59,6 +59,8 @@ export interface ReplayMatchMetadata {
   reporterProfileId: number;
   winnerProfileId: number;
   loserProfileId: number;
+  winningProfileIds: number[];
+  losingProfileIds: number[];
   reason: "resignation" | "defeat" | "disconnect" | "unknown";
 }
 

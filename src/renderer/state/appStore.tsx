@@ -83,7 +83,8 @@ export const queueDefinitions: QueueDefinition[] = [
     id: "team-games",
     name: "Team Games",
     description: "Find a match for solo, two-player, or three-player teams.",
-    format: "1v1",
+    format: "team",
+    teamSizes: [2, 4],
     ruleset: "Random Map",
     mapPool: maps,
     mapPreferences: {
@@ -181,7 +182,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       void (async () => {
         let replay: Awaited<ReturnType<typeof parseReplayMetadata>>;
         try {
-          replay = await parseReplayMetadata(filePath);
+          replay = await parseReplayMetadata(filePath, match.queue.format === "team");
         } catch (error) {
           if (error instanceof ReplayNotFinishedError) {
             replayResultInFlightRef.current = false;
@@ -712,7 +713,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 startRoomSetupWatchdog();
                 log("Starting AoE2 lobby automation");
                 return window.electronApi!.runAoe2CreateLobbySequence(
-                  getLobbyMapName(acceptedSession.selectedMap)
+                  getLobbyMapName(acceptedSession.selectedMap),
+                  acceptedSession.queue.format === "team"
+                    ? ((acceptedSession.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
+                    : 2
                 );
               });
             void prepareLobby(acceptedSession);
@@ -739,10 +743,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 const preference = matchedSessionRef.current?.queue.civilizationPreference;
                 const selection = aoe2SelectionForPreference(preference);
                 if (selection) {
-                  log(`Selecting ${selection} for guest lobby slot 2`);
+                  const lobbySlot = matchedSessionRef.current?.lobbySlot ?? 2;
+                  log(`Selecting ${selection} for guest lobby slot ${lobbySlot}`);
                   const selected = await window.electronApi!.selectAoe2Civilization(
                     selection,
-                    2
+                    lobbySlot
                   );
                   if (!selected.sent) throw new Error(selected.message);
                   if (selected.usedRandomCivilizationFallback) {
@@ -751,6 +756,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   } else {
                     log(`${selection} selected in AoE2`);
                   }
+                }
+                const teamSession = matchedSessionRef.current;
+                if (teamSession?.queue.format === "team") {
+                  const lobbySlot = teamSession.lobbySlot ?? 2;
+                  const team = teamSession.team ?? 2;
+                  log(`Selecting Team ${team} for guest lobby slot ${lobbySlot}`);
+                  const selectedTeam = await window.electronApi!.selectAoe2Team(team, lobbySlot);
+                  if (!selectedTeam.sent) throw new Error(selectedTeam.message);
                 }
                 log("Guest lobby opened; reporting join to the host");
                 await services.matchmaking.reportGuestLobbyJoined(event.matchId);
@@ -1073,7 +1086,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (window.electronApi) {
         const automation = await (
           lobbyAutomationRef.current
-          ?? window.electronApi.runAoe2CreateLobbySequence(getLobbyMapName(match.selectedMap))
+          ?? window.electronApi.runAoe2CreateLobbySequence(
+            getLobbyMapName(match.selectedMap),
+            match.queue.format === "team" ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8 : 2
+          )
         );
         lobbyAutomationRef.current = null;
         if (!automation.sent) throw new Error(automation.message);
@@ -1096,13 +1112,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             log(`${selection} selected in AoE2`);
           }
         }
+        if (match.queue.format === "team") {
+          const lobbySlot = match.lobbySlot ?? 1;
+          const team = match.team ?? 1;
+          log(`Selecting Team ${team} for host lobby slot ${lobbySlot}`);
+          const selectedTeam = await window.electronApi.selectAoe2Team(team, lobbySlot);
+          if (!selectedTeam.sent) throw new Error(selectedTeam.message);
+        }
         log(`Lobby URI discovered: ${automation.lobbyUri}`);
         const lobbyResult = await services.game.createLobby({
           matchId: match.id,
           hostProfileId: match.player.aoeProfileId,
           guestProfileId: match.opponent.aoeProfileId,
           map: match.selectedMap,
-          serverRegion: state.settings.serverRegion
+          serverRegion: state.settings.serverRegion,
+          playerCount: match.queue.format === "team"
+            ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
+            : 2
         });
         const discoveredLobby = { ...lobbyResult.lobby, platformLobbyId: automation.lobbyUri };
         log(`Lobby created: ${discoveredLobby.platformLobbyId}`);
@@ -1122,7 +1148,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         hostProfileId: match.player.aoeProfileId,
         guestProfileId: match.opponent.aoeProfileId,
         map: match.selectedMap,
-        serverRegion: state.settings.serverRegion
+        serverRegion: state.settings.serverRegion,
+        playerCount: match.queue.format === "team"
+          ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
+          : 2
       });
       log(`Lobby created: ${lobbyResult.lobby.platformLobbyId ?? "pending"}`);
       await services.matchmaking.publishLobby(match.id, lobbyResult.lobby);

@@ -1,13 +1,18 @@
 import type { ReplayMatchMetadata, ReplayPlayerMetadata } from "../../shared/contracts/matches";
 
 export class ReplayNotFinishedError extends Error {
-  constructor() {
-    super("The replay does not contain a PostGame or Resign operation yet.");
+  constructor(teamGame = false) {
+    super(teamGame
+      ? "The team replay does not contain final PostGame results yet."
+      : "The replay does not contain a PostGame or Resign operation yet.");
     this.name = "ReplayNotFinishedError";
   }
 }
 
-export async function parseReplayMetadata(filePath: string): Promise<ReplayMatchMetadata> {
+export async function parseReplayMetadata(
+  filePath: string,
+  teamGame = false
+): Promise<ReplayMatchMetadata> {
   if (!window.electronApi) throw new Error("Replay files are only available in the desktop app.");
   const { parse_rec, parse_rec_summary } = await import("aoe2rec-js");
   const bytes = await window.electronApi.readReplayFile(filePath);
@@ -30,7 +35,9 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
     .filter((resign): resign is Record<string, unknown> => typeof resign === "object" && resign !== null)
     .map((resign) => resign.player_id)
     .find((playerId): playerId is number => typeof playerId === "number");
-  if (!hasPostGame && resignPlayerNumber === undefined) {
+  if (!teamGame && !hasPostGame && resignPlayerNumber === undefined) {
+    // Preserve the original 1v1 behavior: do not attempt to summarize an
+    // actively written replay until it has a terminal operation.
     throw new ReplayNotFinishedError();
   }
   const summary = parse_rec_summary(buffer);
@@ -46,19 +53,23 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
         resigned: player.resigned
       }))
   );
+  const isTeamGame = teamGame || players.length > 2;
+  if (isTeamGame && !hasPostGame) {
+    throw new ReplayNotFinishedError(true);
+  }
   const winningPlayers = summary.teams.filter((team) => team.winner).flatMap((team) => team.players);
   const losingPlayers = summary.teams.filter((team) => !team.winner).flatMap((team) => team.players);
   const allPlayers = summary.teams.flatMap((team) => team.players).filter((player) => player.profile_id > 0);
   const resignedPlayer = resignPlayerNumber === undefined
     ? undefined
     : allPlayers.find((player) => player.player_number === resignPlayerNumber);
-  const winner = resignedPlayer
+  const winner = !isTeamGame && resignedPlayer
     ? allPlayers.find((player) => player.player_number !== resignPlayerNumber)
     : winningPlayers.find((player) => player.profile_id > 0);
-  const loser = resignedPlayer ?? losingPlayers.find((player) => player.profile_id > 0);
+  const loser = (!isTeamGame && resignedPlayer) || losingPlayers.find((player) => player.profile_id > 0);
   const reporter = players.find((player) => player.playerNumber === summary.header.replay.rec_player);
-  if (players.length !== 2 || !winner || !loser || !reporter) {
-    throw new Error("The replay does not contain one identifiable winner and loser.");
+  if (![2, 4, 8].includes(players.length) || !winner || !loser || !reporter) {
+    throw new Error("The replay does not contain identifiable winning and losing teams.");
   }
   return {
     fileSizeBytes: bytes.byteLength,
@@ -96,6 +107,12 @@ export async function parseReplayMetadata(filePath: string): Promise<ReplayMatch
     reporterProfileId: reporter.profileId,
     winnerProfileId: winner.profile_id,
     loserProfileId: loser.profile_id,
-    reason: resignPlayerNumber !== undefined || loser.resigned ? "resignation" : "defeat"
+    winningProfileIds: winningPlayers.map((player) => player.profile_id).filter((profileId) => profileId > 0).sort(),
+    losingProfileIds: losingPlayers.map((player) => player.profile_id).filter((profileId) => profileId > 0).sort(),
+    reason: isTeamGame
+      ? (losingPlayers.filter((player) => player.profile_id > 0).every((player) => player.resigned)
+        ? "resignation"
+        : "defeat")
+      : resignPlayerNumber !== undefined || loser.resigned ? "resignation" : "defeat"
   };
 }

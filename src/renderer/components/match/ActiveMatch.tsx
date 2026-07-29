@@ -10,7 +10,7 @@ export function ActiveMatch() {
       <span className="eyebrow">{state.queueStatus === "verifying_result" ? "Result verification" : "Match in progress"}</span>
       <h2>{match.player.displayName} vs {match.opponent.displayName}</h2>
       {state.queueStatus === "verifying_result" && (
-        <p>Replay metadata submitted. Waiting for both clients to agree on the result.</p>
+        <p>Replay metadata submitted. Waiting for one valid report from each team.</p>
       )}
       <div className="metrics-grid compact">
         <div><span>Map</span><strong>{match.selectedMap?.name}</strong></div>

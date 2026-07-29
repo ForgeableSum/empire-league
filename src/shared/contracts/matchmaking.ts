@@ -116,7 +116,8 @@ export interface QueueDefinition {
   id: string;
   name: string;
   description: string;
-  format: "1v1";
+  format: "1v1" | "team";
+  teamSizes?: Array<2 | 4>;
   ruleset: "Random Map" | "Empire Wars";
   mapPool: MapDefinition[];
   mapPreferences?: MapPreferences;
@@ -129,7 +130,7 @@ export interface QueueDefinition {
 }
 
 export interface LobbySettings {
-  playerCount: 2;
+  playerCount: 2 | 4 | 8;
   gameMode: "Random Map";
   speed: "Normal";
   startingAge: "Dark Age";
@@ -171,6 +172,8 @@ export interface MatchSession {
   player: PlayerProfile;
   opponent: PlayerProfile;
   role?: "host" | "guest";
+  lobbySlot?: number;
+  team?: 1 | 2;
   hostPlayerId?: number;
   acceptedByPlayer: boolean;
   acceptedByOpponent: boolean;

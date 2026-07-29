@@ -62,6 +62,23 @@ async function insertDurableMatch(connection, match, status, completedAt = null,
       completedAt
     ]
   );
+  if (match.teamSize > 1 && match.participants?.length) {
+    for (const ticket of match.participants) {
+      const assignment = match.assignments.get(ticket.id);
+      await connection.execute(
+        `INSERT INTO match_participants
+          (match_id, player_id, lobby_slot, team_number, civilization)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          match.id,
+          ticket.player.id,
+          assignment.slot,
+          assignment.team,
+          civilizations[ticket.id] || null
+        ]
+      );
+    }
+  }
 }
 
 export async function linkPlayerAoeProfile(playerId, profileId) {
@@ -87,68 +104,72 @@ export async function recordVerifiedMatchResult(match, replay) {
   try {
     await connection.beginTransaction();
     const fields = ratingFieldsForQueue(match.host.queueId);
+    const participantTickets = match.participants ?? [match.host, match.guest];
+    const placeholders = participantTickets.map(() => "?").join(", ");
     const [players] = await connection.execute(
       `SELECT id, aoe_profile_id, ${fields.rating} AS active_rating
        FROM players
-       WHERE id IN (?, ?)
+       WHERE id IN (${placeholders})
        FOR UPDATE`,
-      [match.host.player.id, match.guest.player.id]
+      participantTickets.map((ticket) => ticket.player.id)
     );
-    if (players.length !== 2) throw new Error("Both matched players must exist before recording a result.");
-    const winner = players.find((player) => Number(player.aoe_profile_id) === replay.winnerProfileId);
-    const loser = players.find((player) => Number(player.aoe_profile_id) !== replay.winnerProfileId);
-    if (!winner || !loser) throw new Error("The reported winner is not a player in this match.");
-
-    const expectedWinner = 1 / (1 + 10 ** ((Number(loser.active_rating) - Number(winner.active_rating)) / 400));
+    if (players.length !== participantTickets.length) {
+      throw new Error("Every matched player must exist before recording a result.");
+    }
+    const winningProfileIds = new Set(replay.winningProfileIds?.length
+      ? replay.winningProfileIds
+      : [replay.winnerProfileId]);
+    const winners = players.filter((player) => winningProfileIds.has(Number(player.aoe_profile_id)));
+    const losers = players.filter((player) => !winningProfileIds.has(Number(player.aoe_profile_id)));
+    if (!winners.length || winners.length !== losers.length) {
+      throw new Error("The replay must identify two equally sized teams.");
+    }
+    const average = (team) => team.reduce((sum, player) => sum + Number(player.active_rating), 0) / team.length;
+    const expectedWinner = 1 / (1 + 10 ** ((average(losers) - average(winners)) / 400));
     const winnerChange = Math.round(32 * (1 - expectedWinner));
     const loserChange = -winnerChange;
-    const winnerAfter = Number(winner.active_rating) + winnerChange;
-    const loserAfter = Number(loser.active_rating) + loserChange;
-    const result = winner.id === match.host.player.id ? "host_win" : "guest_win";
+    const hostWon = winners.some((player) => player.id === match.host.player.id);
+    const result = hostWon ? "host_win" : "guest_win";
     const completedAt = new Date();
 
     const civilizationFor = (ticket) => civilizationNameFromId(
       replay.players.find((player) => player.profileId === ticket.player.aoeProfileId)?.civilizationId
     );
-    await insertDurableMatch(connection, match, "completed", completedAt, {
-      host: civilizationFor(match.host),
-      guest: civilizationFor(match.guest)
-    });
+    const civilizations = Object.fromEntries(participantTickets.map((ticket) => [ticket.id, civilizationFor(ticket)]));
+    civilizations.host = civilizationFor(match.host);
+    civilizations.guest = civilizationFor(match.guest);
+    await insertDurableMatch(connection, match, "completed", completedAt, civilizations);
     await connection.execute(
       `INSERT INTO match_results
         (match_id, winner_player_id, result, verification_status, verified_at)
       VALUES (?, ?, ?, 'verified', ?)`,
-      [match.id, winner.id, result, completedAt]
+      [match.id, winners[0].id, result, completedAt]
     );
-    await connection.execute(
-      `UPDATE players
-       SET ${fields.rating} = ?, ${fields.peakRating} = GREATEST(${fields.peakRating}, ?),
-           ${fields.wins} = ${fields.wins} + 1,
-           ${fields.streak} = IF(${fields.streak} >= 0, ${fields.streak} + 1, 1)
-       WHERE id = ?`,
-      [winnerAfter, winnerAfter, winner.id]
-    );
-    await connection.execute(
-      `UPDATE players
-       SET ${fields.rating} = ?, ${fields.losses} = ${fields.losses} + 1,
-           ${fields.streak} = IF(${fields.streak} <= 0, ${fields.streak} - 1, -1)
-       WHERE id = ?`,
-      [loserAfter, loser.id]
-    );
-    await connection.execute(
-      `INSERT INTO rating_history
-        (player_id, match_id, rating_pool, rating_before, rating_after, rating_change)
-       VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)`,
-      [
-        winner.id, match.id, fields.pool, Number(winner.active_rating), winnerAfter, winnerChange,
-        loser.id, match.id, fields.pool, Number(loser.active_rating), loserAfter, loserChange
-      ]
-    );
+    const ratings = {};
+    for (const player of players) {
+      const won = winners.includes(player);
+      const change = won ? winnerChange : loserChange;
+      const before = Number(player.active_rating);
+      const after = before + change;
+      await connection.execute(
+        `UPDATE players
+         SET ${fields.rating} = ?, ${fields.peakRating} = GREATEST(${fields.peakRating}, ?),
+             ${won ? fields.wins : fields.losses} = ${won ? fields.wins : fields.losses} + 1,
+             ${fields.streak} = IF(${fields.streak} ${won ? ">=" : "<="} 0,
+               ${fields.streak} ${won ? "+" : "-"} 1, ${won ? "1" : "-1"})
+         WHERE id = ?`,
+        [after, after, player.id]
+      );
+      await connection.execute(
+        `INSERT INTO rating_history
+          (player_id, match_id, rating_pool, rating_before, rating_after, rating_change)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [player.id, match.id, fields.pool, before, after, change]
+      );
+      ratings[player.id] = { oldRating: before, newRating: after, ratingChange: change };
+    }
     await connection.commit();
-    return {
-      [winner.id]: { oldRating: Number(winner.active_rating), newRating: winnerAfter, ratingChange: winnerChange },
-      [loser.id]: { oldRating: Number(loser.active_rating), newRating: loserAfter, ratingChange: loserChange }
-    };
+    return ratings;
   } catch (error) {
     await connection.rollback();
     throw error;

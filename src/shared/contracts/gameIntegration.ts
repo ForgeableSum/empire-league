@@ -63,6 +63,7 @@ export interface CreateLobbyRequest {
   guestProfileId: number;
   map: MapDefinition;
   serverRegion: string;
+  playerCount: 2 | 4 | 8;
 }
 
 export interface CreateLobbyResult {

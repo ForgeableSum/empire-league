@@ -63,6 +63,7 @@ export function QueuePage() {
       return {};
     }
   });
+  const [selectedTeamSizes, setSelectedTeamSizes] = useState<Array<2 | 4>>([2, 4]);
   const [civilizationMode, setCivilizationMode] = useState<CivilizationMode>(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(civilizationPreferenceKey) ?? "{}");
@@ -228,6 +229,9 @@ export function QueuePage() {
   const civilizationSummary = civilizationMode === "pick"
     ? civilization
     : civilizationModes.find((mode) => mode.id === civilizationMode)?.label;
+  const selectedQueueHeading = selectedQueue?.format === "team"
+    ? `${selectedQueue.name} - ${selectedTeamSizes.map((size) => `${size}v${size}`).join(" or ")}`
+    : selectedQueue?.name;
 
   useEffect(() => {
     if (!state.queueStartedAt || state.queueStatus !== "searching") return;
@@ -246,6 +250,7 @@ export function QueuePage() {
     const timer = window.setTimeout(() => {
       void updateActiveQueue({
         ...selectedQueue,
+        teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
         mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
         mapPreferences: {
           enabledGroupIds: enabledGroups[selectedQueue.id] ?? [],
@@ -261,7 +266,7 @@ export function QueuePage() {
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [civilization, civilizationBans, civilizationMode, enabledGroups, favoriteMaps, isSearching, preferRandom, selectedMaps, selectedQueue]);
+  }, [civilization, civilizationBans, civilizationMode, enabledGroups, favoriteMaps, isSearching, preferRandom, selectedMaps, selectedQueue, selectedTeamSizes]);
 
   if (["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus)) {
     return <LobbyPreparation />;
@@ -283,7 +288,10 @@ export function QueuePage() {
                 <div className="search-orbit"><Search size={34} /></div>
                 <h2>Searching for an opponent</h2>
                 <div className="metrics-grid compact">
-                  <div><span>Your rating</span><strong>{state.currentUser.rating}</strong></div>
+                  <div>
+                    <span>Your {selectedQueue.format === "team" ? "team " : ""}rating</span>
+                    <strong>{selectedQueue.format === "team" ? state.currentUser.teamRating : state.currentUser.rating}</strong>
+                  </div>
                   <div><span>Current search range</span><strong>{state.searchRange.min}-{state.searchRange.max}</strong></div>
                   <div><span>Time searching</span><strong>{formatTime(elapsed)}</strong></div>
                   <div><span>Estimated wait</span><strong>{state.selectedQueue?.estimatedWaitSeconds}s</strong></div>
@@ -295,7 +303,7 @@ export function QueuePage() {
               </>
             ) : (
               <>
-                <h2>{selectedQueue.name}</h2>
+                <h2>{selectedQueueHeading}</h2>
                 <div className="queue-stats">
                   <span><Search size={18} /><strong>{selectedQueue.playersSearching}</strong> searching</span>
                   <span><Clock size={18} /><strong>~{selectedQueue.estimatedWaitSeconds}s</strong> wait</span>
@@ -314,6 +322,7 @@ export function QueuePage() {
                   disabled={!canStartQueue || activeMapIds.length === 0}
                   onClick={() => void startQueue({
                     ...selectedQueue,
+                    teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
                     mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
                     mapPreferences: {
                       enabledGroupIds: enabledGroups[selectedQueue.id] ?? [],
@@ -364,6 +373,37 @@ export function QueuePage() {
                     );
                   })}
                 </div>
+                {selectedQueue.format === "team" && (
+                  <>
+                    <span className="eyebrow">Team size</span>
+                    <div className="match-type-options" aria-label="Team game sizes">
+                      {([2, 4] as const).map((size) => {
+                        const selected = selectedTeamSizes.includes(size);
+                        return (
+                          <button
+                            className={selected ? "civilization-mode active" : "civilization-mode"}
+                            type="button"
+                            key={size}
+                            aria-pressed={selected}
+                            disabled={isSearching || preferencesLocked}
+                            onClick={() => setSelectedTeamSizes((current) => {
+                              if (current.includes(size)) {
+                                return current.length === 1 ? current : current.filter((item) => item !== size);
+                              }
+                              return [...current, size].sort() as Array<2 | 4>;
+                            })}
+                          >
+                            <Users size={20} />
+                            <span>
+                              <strong>{size}v{size}</strong>
+                              <small>{size * 2} players</small>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
               <div className="preference-section">
                 <div className="preference-heading civilization-preference-heading">
@@ -467,7 +507,7 @@ export function QueuePage() {
               </div>
             </article>
             {false && <aside className="queue-card queue-action-panel">
-              <h2>{selectedQueue.name}</h2>
+              <h2>{selectedQueueHeading}</h2>
               <div className="queue-stats">
                 <span><Search size={18} /><strong>{selectedQueue.playersSearching}</strong> searching</span>
                 <span><Clock size={18} /><strong>~{selectedQueue.estimatedWaitSeconds}s</strong> wait</span>
@@ -489,6 +529,7 @@ export function QueuePage() {
                   disabled={!canStartQueue || activeMapIds.length === 0}
                   onClick={() => void startQueue({
                     ...selectedQueue,
+                    teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
                     mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
                     mapPreferences: {
                       enabledGroupIds: enabledGroups[selectedQueue.id] ?? [],

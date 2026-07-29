@@ -60,7 +60,7 @@ export class MockGameIntegrationService implements GameIntegrationService {
         map: config.map,
         serverRegion: config.serverRegion,
         settings: {
-          playerCount: 2,
+          playerCount: config.playerCount,
           gameMode: "Random Map",
           speed: "Normal",
           startingAge: "Dark Age",

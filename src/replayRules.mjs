@@ -22,9 +22,10 @@ const requiredRankedSettings = Object.freeze({
   treatyLength: 0
 });
 
-export function validateRankedReplaySettings(settings) {
+export function validateRankedReplaySettings(settings, expectedPlayerCount = 2) {
   if (!settings || typeof settings !== "object") return "replay game settings are required";
-  for (const [field, expected] of Object.entries(requiredRankedSettings)) {
+  for (const [field, configuredExpected] of Object.entries(requiredRankedSettings)) {
+    const expected = field === "playerCount" ? expectedPlayerCount : configuredExpected;
     if (settings[field] !== expected) {
       return `replay setting ${field} must be ${JSON.stringify(expected)}`;
     }

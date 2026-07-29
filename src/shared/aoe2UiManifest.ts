@@ -109,6 +109,12 @@ export const aoe2UiManifest = {
     activation: "click",
     settleMs: 1_500
   },
+  teamSlotButtons: {
+    x: 2093,
+    rowCenters: [555, 645, 735, 825, 915, 1005, 1095, 1185],
+    initialSelection: "?",
+    cycle: ["?", "-", "1", "2", "3", "4"]
+  },
   civilizationPicker: {
     searchPoint: [375, 300] as const,
     filteredCivilizationPoint: [1259, 515] as const,
@@ -231,4 +237,10 @@ export function civilizationSlotDesignPoint(slot: number): readonly [number, num
   const y = aoe2UiManifest.civilizationSlotButtons.rowCenters[slot - 1];
   if (y === undefined) throw new Error(`AoE2 lobby slot ${slot} is outside the supported 1-8 range.`);
   return [aoe2UiManifest.civilizationSlotButtons.x, y];
+}
+
+export function teamSlotDesignPoint(slot: number): readonly [number, number] {
+  const y = aoe2UiManifest.teamSlotButtons.rowCenters[slot - 1];
+  if (y === undefined) throw new Error(`AoE2 lobby slot ${slot} is outside the supported 1-8 range.`);
+  return [aoe2UiManifest.teamSlotButtons.x, y];
 }

@@ -36,6 +36,13 @@ export function civilizationBansForMapGroup(preference, mapGroupId) {
   return Array.isArray(bans) ? bans : [];
 }
 
+export function effectiveCivilizationPreference(preference, otherPreferences = []) {
+  const anotherPlayerSelectedRandom = otherPreferences.some((other) => other?.mode === "random");
+  return preference?.mode === "pick" && preference.preferRandom && anotherPlayerSelectedRandom
+    ? { ...preference, mode: "random" }
+    : preference;
+}
+
 export function rollCivilizationPreference(
   preference,
   mapGroupId,

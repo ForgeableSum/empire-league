@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   civilizationNameFromId,
   civilizations,
+  effectiveCivilizationPreference,
   normalizeCivilizationPreference,
   rollCivilizationPreference
 } from "./civilization-roll.mjs";
@@ -44,6 +45,23 @@ test("an opponent's bans are excluded from the random roll", () => {
 test("non-random preferences are unchanged", () => {
   const preference = { mode: "pick", civilization: "Byzantines" };
   assert.equal(rollCivilizationPreference(preference, "land-open"), preference);
+});
+
+test("prefer-random becomes random when the 1v1 opponent selects random", () => {
+  const preference = {
+    mode: "pick",
+    civilization: "Byzantines",
+    preferRandom: true,
+    openLandBans: ["Franks"]
+  };
+  assert.deepEqual(
+    effectiveCivilizationPreference(preference, [{ mode: "random" }]),
+    { ...preference, mode: "random" }
+  );
+  assert.equal(
+    effectiveCivilizationPreference(preference, [{ mode: "pick", civilization: "Mayans" }]),
+    preference
+  );
 });
 
 test("normalization limits each map-style list to five known unique civilizations", () => {

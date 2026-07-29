@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { playerRatingForQueue, ratingPoolForQueue } from "./rating-pool.mjs";
+import { replayPlayerWon } from "./replay-result.mjs";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   database,
@@ -16,6 +17,7 @@ import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revo
 import { normalizeQueueMapPreferences, publicMapCatalog, selectMapForMatch } from "./map-catalog.mjs";
 import {
   civilizationBansForMapGroup,
+  effectiveCivilizationPreference,
   normalizeCivilizationPreference,
   rollCivilizationPreference
 } from "./civilization-roll.mjs";
@@ -79,10 +81,24 @@ function clearTicketDisconnectTimer(ticket) {
   ticket.disconnectedAt = undefined;
 }
 
+function matchTickets(match) {
+  return match.participants ?? [match.host, match.guest];
+}
+
+function matchGuests(match) {
+  return matchTickets(match).filter((ticket) => ticket.id !== match.host.id);
+}
+
+function emitToMatch(match, event, exceptTicketId) {
+  for (const ticket of matchTickets(match)) {
+    if (ticket.id !== exceptTicketId) emit(ticket, event);
+  }
+}
+
 function deleteMatch(match) {
   clearMatchTimers(match);
   matches.delete(match.id);
-  for (const ticket of [match.host, match.guest]) {
+  for (const ticket of matchTickets(match)) {
     clearTimeout(ticket.matchSearchTimer);
     clearTicketDisconnectTimer(ticket);
     if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
@@ -105,12 +121,7 @@ function deleteDisconnectedTicket(ticket, message = "The other player disconnect
     console.warn(`[matchmaker] ${ticket.id}: disconnected ticket removed`);
     return true;
   }
-  const opponent = match.host.id === ticket.id ? match.guest : match.host;
-  emit(opponent, {
-    type: "error",
-    code: "MATCH_DISCONNECTED",
-    message
-  });
+  emitToMatch(match, { type: "error", code: "MATCH_DISCONNECTED", message }, ticket.id);
   deleteMatch(match);
   console.warn(`[matchmaker] ${match.id}: disconnected player ${ticket.player.id} removed`);
   return true;
@@ -169,15 +180,16 @@ function scheduleRematchCooldownCleanup() {
 }
 
 function addDeclinedPairCooldown(match) {
-  const firstPlayerId = match.host.player.id;
-  const secondPlayerId = match.guest.player.id;
-  const key = rematchCooldownKey(firstPlayerId, secondPlayerId);
   const expiresAt = Date.now() + declinedPairCooldownMs;
-  rematchCooldowns.set(key, Math.max(rematchCooldowns.get(key) ?? 0, expiresAt));
+  const players = matchTickets(match);
+  for (let left = 0; left < players.length; left += 1) {
+    for (let right = left + 1; right < players.length; right += 1) {
+      const key = rematchCooldownKey(players[left].player.id, players[right].player.id);
+      rematchCooldowns.set(key, Math.max(rematchCooldowns.get(key) ?? 0, expiresAt));
+    }
+  }
   scheduleRematchCooldownCleanup();
-  console.log(
-    `[matchmaker] ${match.id}: rematch blocked for ${firstPlayerId} and ${secondPlayerId} until ${new Date(expiresAt).toISOString()}`
-  );
+  console.log(`[matchmaker] ${match.id}: participant rematches blocked until ${new Date(expiresAt).toISOString()}`);
 }
 
 function hasDeclinedPairCooldown(firstPlayerId, secondPlayerId, now = Date.now()) {
@@ -192,8 +204,7 @@ function hasDeclinedPairCooldown(firstPlayerId, secondPlayerId, now = Date.now()
 
 function expireActiveMatch(match, message, code = "MATCH_EXPIRED") {
   if (!matches.has(match.id)) return;
-  emit(match.host, { type: "error", code, message });
-  emit(match.guest, { type: "error", code, message });
+  emitToMatch(match, { type: "error", code, message });
   deleteMatch(match);
   console.warn(`[matchmaker] ${match.id}: ${message}`);
 }
@@ -229,9 +240,9 @@ async function reconcileReplayPlayerLinks(match, actingTicket, replay) {
     }
   }
 
-  const matchTickets = [match.host, match.guest];
-  const missing = matchTickets.filter((ticket) => !ticket.player.aoeProfileId);
-  const known = new Set(matchTickets.map((ticket) => ticket.player.aoeProfileId).filter(Boolean));
+  const participants = matchTickets(match);
+  const missing = participants.filter((ticket) => !ticket.player.aoeProfileId);
+  const known = new Set(participants.map((ticket) => ticket.player.aoeProfileId).filter(Boolean));
   const remaining = [...reportedProfileIds].filter((profileId) => !known.has(profileId));
   if (missing.length === 1 && remaining.length === 1 && [...known].every((profileId) => reportedProfileIds.has(profileId))) {
     const linked = await linkPlayerAoeProfile(missing[0].player.id, remaining[0]);
@@ -252,19 +263,35 @@ function validateReplayReport(match, actingTicket, replay) {
   if (!Number.isSafeInteger(replay.fileSizeBytes) || replay.fileSizeBytes <= 0) {
     return "replay file size is required";
   }
-  const invalidSettings = validateRankedReplaySettings(replay.settings);
+  const invalidSettings = validateRankedReplaySettings(replay.settings, matchTickets(match).length);
   if (invalidSettings) return invalidSettings;
   if (replay.reporterProfileId !== actingTicket.player.aoeProfileId) {
     return "replay perspective does not match the reporting player";
   }
-  const expected = [match.host.player.aoeProfileId, match.guest.player.aoeProfileId].sort((a, b) => a - b);
+  const expected = matchTickets(match).map((ticket) => ticket.player.aoeProfileId).sort((a, b) => a - b);
   const reported = replay.players.map((player) => player.profileId).sort((a, b) => a - b);
-  if (reported.length !== 2 || expected.some((profileId, index) => profileId !== reported[index])) {
+  if (reported.length !== expected.length || expected.some((profileId, index) => profileId !== reported[index])) {
     return "replay players do not match the matched players";
   }
   if (!expected.includes(replay.winnerProfileId) || !expected.includes(replay.loserProfileId)
     || replay.winnerProfileId === replay.loserProfileId) {
     return "replay winner and loser do not match the match";
+  }
+  if (match.teamSize > 1) {
+    const winning = new Set(replay.winningProfileIds);
+    const losing = new Set(replay.losingProfileIds);
+    if (winning.size !== match.teamSize || losing.size !== match.teamSize
+      || [...winning, ...losing].some((profileId) => !expected.includes(profileId))) {
+      return "replay winning and losing teams do not match the team size";
+    }
+    const expectedTeams = [1, 2].map((team) => new Set(
+      matchTickets(match)
+        .filter((ticket) => match.assignments.get(ticket.id).team === team)
+        .map((ticket) => ticket.player.aoeProfileId)
+    ));
+    const matchesAssignedTeam = expectedTeams.some((team) =>
+      team.size === winning.size && [...team].every((profileId) => winning.has(profileId)));
+    if (!matchesAssignedTeam) return "replay teams do not match the assigned lobby teams";
   }
   return null;
 }
@@ -278,6 +305,11 @@ function replayReportsAgree(left, right) {
     || left.winnerProfileId !== right.winnerProfileId
     || left.loserProfileId !== right.loserProfileId
     || left.reason !== right.reason) {
+    return false;
+  }
+  const normalizeTeam = (profileIds) => [...(profileIds ?? [])].sort((a, b) => a - b);
+  if (JSON.stringify(normalizeTeam(left.winningProfileIds)) !== JSON.stringify(normalizeTeam(right.winningProfileIds))
+    || JSON.stringify(normalizeTeam(left.losingProfileIds)) !== JSON.stringify(normalizeTeam(right.losingProfileIds))) {
     return false;
   }
   if (!replaySettingsAgree(left.settings, right.settings)) return false;
@@ -296,7 +328,7 @@ function replayReportsAgree(left, right) {
 
 function resultForTicket(match, ticket, replay, ratings) {
   const playerRatings = ratings[ticket.player.id];
-  const won = ticket.player.aoeProfileId === replay.winnerProfileId;
+  const won = replayPlayerWon(replay, ticket.player.aoeProfileId);
   return {
     ratingPool: ratingPoolForQueue(ticket.queueId),
     winnerProfileId: replay.winnerProfileId,
@@ -337,16 +369,13 @@ async function resolveContestedResult(match, detail, implicatedTicketIds, report
     reports
   });
   match.resultResolved = true;
-  emit(match.host, {
-    type: "result_contested",
-    matchId: match.id,
-    result: contestedResultForTicket(match.host)
-  });
-  emit(match.guest, {
-    type: "result_contested",
-    matchId: match.id,
-    result: contestedResultForTicket(match.guest)
-  });
+  for (const ticket of matchTickets(match)) {
+    emit(ticket, {
+      type: "result_contested",
+      matchId: match.id,
+      result: contestedResultForTicket(ticket)
+    });
+  }
   deleteMatch(match);
 }
 
@@ -394,7 +423,8 @@ function allowsOpponentRating(ticket, candidate) {
 }
 
 function sessionFor(match, ticket) {
-  const opponent = match.host.id === ticket.id ? match.guest : match.host;
+  const assignment = match.assignments.get(ticket.id);
+  const opponent = matchTickets(match).find((candidate) => match.assignments.get(candidate.id)?.team !== assignment.team);
   const playerCivilizationPreference = match.civilizationPreferences.get(ticket.id);
   const opponentCivilizationPreference = match.civilizationPreferences.get(opponent.id);
   return {
@@ -402,12 +432,15 @@ function sessionFor(match, ticket) {
     status: "match_found",
     queue: {
       ...ticket.queue,
+      teamSizes: ticket.queue.format === "team" ? [match.teamSize] : undefined,
       civilizationPreference: playerCivilizationPreference
     },
     opponentCivilizationPreference,
     player: ticket.player,
     opponent: opponent.player,
     role: match.host.id === ticket.id ? "host" : "guest",
+    lobbySlot: assignment.slot,
+    team: assignment.team,
     hostPlayerId: match.host.player.aoeProfileId,
     acceptedByPlayer: match.accepted.has(ticket.id),
     acceptedByOpponent: match.accepted.has(opponent.id),
@@ -420,7 +453,7 @@ function sessionFor(match, ticket) {
 async function tryMatch(ticket) {
   if (ticket.matchId || !tickets.has(ticket.id) || !hasCompletedMinimumQueueTime(ticket)) return;
 
-  const opponent = [...tickets.values()].filter((candidate) =>
+  const candidates = [...tickets.values()].filter((candidate) =>
     candidate.id !== ticket.id
       && candidate.player.id !== ticket.player.id
       && !candidate.matchId
@@ -430,70 +463,109 @@ async function tryMatch(ticket) {
       && allowsOpponentRating(ticket, candidate)
       && allowsOpponentRating(candidate, ticket)
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
-      && (candidate.canHost || ticket.canHost)
-  ).sort((left, right) => compareOpponentPreference(ticket, left, right))[0];
-  if (!opponent) return;
-
-  const host = opponent.canHost && ticket.canHost
-    ? (opponent.joinedAt <= ticket.joinedAt ? opponent : ticket)
-    : (opponent.canHost ? opponent : ticket);
-  const guest = host.id === opponent.id ? ticket : opponent;
-  const selectedMap = selectMapForMatch(host.queue, guest.queue);
+  ).sort((left, right) => compareOpponentPreference(ticket, left, right));
+  const possibleSizes = ticket.queue.format === "team"
+    ? [4, 2].filter((size) => ticket.queue.teamSizes?.includes(size))
+    : [1];
+  const teamSize = possibleSizes.find((size) => {
+    const required = size * 2;
+    return [ticket, ...candidates.filter((candidate) => candidate.queue.teamSizes?.includes(size))].length >= required;
+  });
+  if (!teamSize) return;
+  const participantCount = teamSize * 2;
+  const participants = [
+    ticket,
+    ...candidates.filter((candidate) =>
+      ticket.queue.format !== "team" || candidate.queue.teamSizes?.includes(teamSize))
+  ].slice(0, participantCount);
+  if (participants.length < participantCount) return;
+  const host = participants.filter((candidate) => candidate.canHost)
+    .sort((left, right) => new Date(left.joinedAt) - new Date(right.joinedAt))[0];
+  if (!host) return;
+  const guests = participants.filter((candidate) => candidate.id !== host.id);
+  const guest = guests[0];
+  let sharedMaps = participants[0].queue.mapPool;
+  for (const participant of participants.slice(1)) {
+    sharedMaps = sharedMapPool({ mapPool: sharedMaps }, participant.queue);
+  }
+  const selectedMap = selectMapForMatch(
+    { ...host.queue, mapPool: sharedMaps },
+    { ...guest.queue, mapPool: sharedMaps }
+  );
   if (!selectedMap) return;
   const mapGroupId = publicMapCatalog.maps.find((map) => map.id === selectedMap.id)?.groupId ?? null;
-  const hostSubmittedPreference = host.queue.civilizationPreference;
-  const guestSubmittedPreference = guest.queue.civilizationPreference;
-  const hostEffectivePreference = hostSubmittedPreference?.mode === "pick"
-    && hostSubmittedPreference.preferRandom
-    && guestSubmittedPreference?.mode === "random"
-    ? { ...hostSubmittedPreference, mode: "random" }
-    : hostSubmittedPreference;
-  const guestEffectivePreference = guestSubmittedPreference?.mode === "pick"
-    && guestSubmittedPreference.preferRandom
-    && hostSubmittedPreference?.mode === "random"
-    ? { ...guestSubmittedPreference, mode: "random" }
-    : guestSubmittedPreference;
-  const sharedCivilizationBans = [
-    ...civilizationBansForMapGroup(hostEffectivePreference, mapGroupId),
-    ...civilizationBansForMapGroup(guestEffectivePreference, mapGroupId)
+  const effectivePreferences = new Map(participants.map((participant) => {
+    const preference = participant.queue.civilizationPreference;
+    return [
+      participant.id,
+      effectiveCivilizationPreference(
+        preference,
+        participants
+          .filter((other) => other.id !== participant.id)
+          .map((other) => other.queue.civilizationPreference)
+      )
+    ];
+  }));
+  const sharedCivilizationBans = participants.flatMap((participant) =>
+    civilizationBansForMapGroup(effectivePreferences.get(participant.id), mapGroupId));
+  const ranked = [...participants].sort((left, right) =>
+    playerRatingForQueue(right.player, right.queueId) - playerRatingForQueue(left.player, left.queueId));
+  let teamOne = ranked.filter((_, index) => index % 2 === 0);
+  let teamTwo = ranked.filter((_, index) => index % 2 === 1);
+  if (!teamOne.some((participant) => participant.id === host.id)) {
+    [teamOne, teamTwo] = [teamTwo, teamOne];
+  }
+  teamOne = [
+    host,
+    ...teamOne.filter((participant) => participant.id !== host.id)
   ];
+  const ordered = [...teamOne, ...teamTwo];
+  const assignments = new Map(ordered.map((participant, index) => [
+    participant.id,
+    { slot: index + 1, team: index < teamSize ? 1 : 2 }
+  ]));
   const match = {
     id: `match-${randomUUID().slice(0, 8)}`,
     host,
     guest,
+    guests,
+    participants,
+    assignments,
+    teamSize,
     accepted: new Set(),
     selectedMap,
     createdAt: new Date().toISOString(),
     acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
     lobby: null,
-    guestContentAccepted: false,
-    guestLobbyReady: false,
+    guestLobbyJoined: new Set(),
+    guestContentAccepted: new Set(),
+    guestLobbyReady: new Set(),
     resultReports: new Map(),
     resultResolved: false,
     mapCatalogVersion: publicMapCatalog.version,
     mapGroupId,
-    civilizationPreferences: new Map([
-      [host.id, rollCivilizationPreference(hostEffectivePreference, mapGroupId, sharedCivilizationBans)],
-      [guest.id, rollCivilizationPreference(guestEffectivePreference, mapGroupId, sharedCivilizationBans)]
-    ])
+    civilizationPreferences: new Map(participants.map((participant) => [
+      participant.id,
+      rollCivilizationPreference(effectivePreferences.get(participant.id), mapGroupId, sharedCivilizationBans)
+    ]))
   };
-  host.matchId = match.id;
-  guest.matchId = match.id;
-  clearTimeout(host.matchSearchTimer);
-  clearTimeout(guest.matchSearchTimer);
+  for (const participant of participants) {
+    participant.matchId = match.id;
+    clearTimeout(participant.matchSearchTimer);
+  }
   matches.set(match.id, match);
-  emit(host, { type: "match_found", match: sessionFor(match, host) });
-  emit(guest, { type: "match_found", match: sessionFor(match, guest) });
+  for (const participant of participants) {
+    emit(participant, { type: "match_found", match: sessionFor(match, participant) });
+  }
   match.expirationTimer = setTimeout(() => {
     void expireMatch(match);
   }, Math.max(0, new Date(match.acceptDeadline).getTime() - Date.now()));
-  console.log(`[matchmaker] ${match.id}: host=${host.player.displayName}, guest=${guest.player.displayName}`);
+  console.log(`[matchmaker] ${match.id}: ${teamSize}v${teamSize}, host=${host.player.displayName}`);
 }
 
 async function expireMatch(match) {
-  if (match.accepted.size === 2 || !matches.has(match.id)) return;
-  emit(match.host, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
-  emit(match.guest, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
+  if (match.accepted.size === matchTickets(match).length || !matches.has(match.id)) return;
+  emitToMatch(match, { type: "error", code: "MATCH_EXPIRED", message: "The match acceptance window expired." });
   deleteMatch(match);
 }
 
@@ -699,15 +771,14 @@ async function handleRequest(request, response) {
       clearTimeout(ticket.matchSearchTimer);
       const match = ticket.matchId ? matches.get(ticket.matchId) : null;
       if (match) {
-        const opponent = match.host.id === ticket.id ? match.guest : match.host;
-        const setupStarted = match.accepted.size === 2;
-        emit(opponent, {
+        const setupStarted = match.accepted.size === matchTickets(match).length;
+        emitToMatch(match, {
           type: "error",
           code: setupStarted ? "MATCH_SETUP_FAILED" : "MATCH_DECLINED",
           message: setupStarted
             ? "The other player could not finish setting up the lobby."
             : "The other player left the match."
-        });
+        }, ticket.id);
         addDeclinedPairCooldown(match);
         deleteMatch(match);
         return send(response, 200, { ok: true });
@@ -721,7 +792,8 @@ async function handleRequest(request, response) {
       const match = matches.get(decodeURIComponent(acceptMatch[1]));
       const body = await readJson(request);
       const actingTicket = tickets.get(body.ticketId);
-      if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id || ![match.host.id, match.guest.id].includes(body.ticketId)) {
+      if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id
+        || !matchTickets(match).some((item) => item.id === body.ticketId)) {
         return send(response, 404, { error: "match or ticket not found" });
       }
       if (Date.now() >= new Date(match.acceptDeadline).getTime()) {
@@ -729,13 +801,21 @@ async function handleRequest(request, response) {
         return send(response, 410, { error: "match acceptance window expired" });
       }
       match.accepted.add(body.ticketId);
-      if (match.accepted.size === 2) {
+      if (match.accepted.size === matchTickets(match).length) {
         clearTimeout(match.expirationTimer);
         refreshMatchSetupTimeout(match);
-        emit(match.host, { type: "opponent_accepted", matchId: match.id, role: "host" });
-        emit(match.guest, { type: "opponent_accepted", matchId: match.id, role: "guest" });
+        for (const participant of matchTickets(match)) {
+          emit(participant, {
+            type: "opponent_accepted",
+            matchId: match.id,
+            role: participant.id === match.host.id ? "host" : "guest"
+          });
+        }
       }
-      return send(response, 200, { accepted: true, bothAccepted: match.accepted.size === 2 });
+      return send(response, 200, {
+        accepted: true,
+        bothAccepted: match.accepted.size === matchTickets(match).length
+      });
     }
 
     const declineMatch = url.pathname.match(/^\/matches\/([^/]+)\/decline$/);
@@ -743,12 +823,16 @@ async function handleRequest(request, response) {
       const match = matches.get(decodeURIComponent(declineMatch[1]));
       const body = await readJson(request);
       const actingTicket = tickets.get(body.ticketId);
-      if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id || ![match.host.id, match.guest.id].includes(body.ticketId)) {
+      if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id
+        || !matchTickets(match).some((item) => item.id === body.ticketId)) {
         return send(response, 404, { error: "match or ticket not found" });
       }
       clearTimeout(match.expirationTimer);
-      const opponent = match.host.id === body.ticketId ? match.guest : match.host;
-      emit(opponent, { type: "error", code: "MATCH_DECLINED", message: "The other player declined the match." });
+      emitToMatch(match, {
+        type: "error",
+        code: "MATCH_DECLINED",
+        message: "Another player declined the match."
+      }, body.ticketId);
       addDeclinedPairCooldown(match);
       deleteMatch(match);
       return send(response, 200, { declined: true });
@@ -763,7 +847,9 @@ async function handleRequest(request, response) {
       }
       match.lobby = body.lobby;
       refreshMatchSetupTimeout(match);
-      emit(match.guest, { type: "lobby_ready", matchId: match.id, lobby: match.lobby });
+      const firstGuest = matchGuests(match)
+        .sort((left, right) => match.assignments.get(left.id).slot - match.assignments.get(right.id).slot)[0];
+      if (firstGuest) emit(firstGuest, { type: "lobby_ready", matchId: match.id, lobby: match.lobby });
       return send(response, 200, { published: true });
     }
 
@@ -771,14 +857,22 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && guestJoinedMatch) {
       const match = matches.get(decodeURIComponent(guestJoinedMatch[1]));
       const body = await readJson(request);
-      if (!match || body.ticketId !== match.guest.id || match.guest.player.id !== authenticatedPlayer.id) {
-        return send(response, 403, { error: "only the guest may report joining the lobby" });
+      const guestTicket = match && matchGuests(match).find((item) => item.id === body.ticketId);
+      if (!match || !guestTicket || guestTicket.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only a matched guest may report joining the lobby" });
       }
       if (!match.lobby) return send(response, 409, { error: "the lobby has not been published" });
-      if (!match.guestLobbyJoined) {
-        match.guestLobbyJoined = true;
+      if (!match.guestLobbyJoined.has(body.ticketId)) {
+        match.guestLobbyJoined.add(body.ticketId);
         refreshMatchSetupTimeout(match);
-        emit(match.host, { type: "guest_lobby_joined", matchId: match.id });
+        const orderedGuests = matchGuests(match)
+          .sort((left, right) => match.assignments.get(left.id).slot - match.assignments.get(right.id).slot);
+        const nextGuest = orderedGuests.find((item) => !match.guestLobbyJoined.has(item.id));
+        if (nextGuest) {
+          emit(nextGuest, { type: "lobby_ready", matchId: match.id, lobby: match.lobby });
+        } else {
+          emit(match.host, { type: "guest_lobby_joined", matchId: match.id });
+        }
       }
       return send(response, 200, { joined: true });
     }
@@ -790,11 +884,15 @@ async function handleRequest(request, response) {
       if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
         return send(response, 403, { error: "only the host may report lobby readiness" });
       }
-      if (!match.guestLobbyJoined) return send(response, 409, { error: "the guest has not joined the lobby" });
+      if (match.guestLobbyJoined.size !== matchGuests(match).length) {
+        return send(response, 409, { error: "not all guests have joined the lobby" });
+      }
       if (!match.hostLobbyReady) {
         match.hostLobbyReady = true;
         refreshMatchSetupTimeout(match);
-        emit(match.guest, { type: "host_lobby_ready", matchId: match.id });
+        for (const guestTicket of matchGuests(match)) {
+          emit(guestTicket, { type: "host_lobby_ready", matchId: match.id });
+        }
       }
       return send(response, 200, { ready: true });
     }
@@ -803,14 +901,17 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && guestContentAcceptedMatch) {
       const match = matches.get(decodeURIComponent(guestContentAcceptedMatch[1]));
       const body = await readJson(request);
-      if (!match || body.ticketId !== match.guest.id || match.guest.player.id !== authenticatedPlayer.id) {
-        return send(response, 403, { error: "only the guest may report accepting lobby content" });
+      const guestTicket = match && matchGuests(match).find((item) => item.id === body.ticketId);
+      if (!match || !guestTicket || guestTicket.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only a matched guest may report accepting lobby content" });
       }
       if (!match.hostLobbyReady) return send(response, 409, { error: "the host has not readied the lobby" });
-      if (!match.guestContentAccepted) {
-        match.guestContentAccepted = true;
+      if (!match.guestContentAccepted.has(body.ticketId)) {
+        match.guestContentAccepted.add(body.ticketId);
         refreshMatchSetupTimeout(match);
-        emit(match.host, { type: "guest_content_accepted", matchId: match.id });
+        if (match.guestContentAccepted.size === matchGuests(match).length) {
+          emit(match.host, { type: "guest_content_accepted", matchId: match.id });
+        }
       }
       return send(response, 200, { accepted: true });
     }
@@ -819,14 +920,17 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && guestReadyMatch) {
       const match = matches.get(decodeURIComponent(guestReadyMatch[1]));
       const body = await readJson(request);
-      if (!match || body.ticketId !== match.guest.id || match.guest.player.id !== authenticatedPlayer.id) {
-        return send(response, 403, { error: "only the guest may report lobby readiness" });
+      const guestTicket = match && matchGuests(match).find((item) => item.id === body.ticketId);
+      if (!match || !guestTicket || guestTicket.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only a matched guest may report lobby readiness" });
       }
       if (!match.lobby) return send(response, 409, { error: "the lobby has not been published" });
-      if (!match.guestLobbyReady) {
-        match.guestLobbyReady = true;
+      if (!match.guestLobbyReady.has(body.ticketId)) {
+        match.guestLobbyReady.add(body.ticketId);
         refreshMatchSetupTimeout(match);
-        emit(match.host, { type: "guest_lobby_ready", matchId: match.id });
+        if (match.guestLobbyReady.size === matchGuests(match).length) {
+          emit(match.host, { type: "guest_lobby_ready", matchId: match.id });
+        }
       }
       return send(response, 200, { ready: true });
     }
@@ -844,7 +948,9 @@ async function handleRequest(request, response) {
         "The match result was not reported before the match expired."
       );
       match.startedAt = new Date().toISOString();
-      emit(match.guest, { type: "game_started", matchId: match.id });
+      for (const guestTicket of matchGuests(match)) {
+        emit(guestTicket, { type: "game_started", matchId: match.id });
+      }
       return send(response, 200, { started: true });
     }
 
@@ -854,70 +960,94 @@ async function handleRequest(request, response) {
       const body = await readJson(request);
       const actingTicket = tickets.get(body.ticketId);
       if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id
-        || ![match.host.id, match.guest.id].includes(body.ticketId)) {
+        || !matchTickets(match).some((item) => item.id === body.ticketId)) {
         return send(response, 404, { error: "match or ticket not found" });
       }
       if (match.resultResolved) return send(response, 200, { accepted: true, resolved: true });
       if (typeof body.error === "string" && body.error.trim()) {
-        await resolveContestedResult(match, {
-          reason: "a client could not parse its replay",
-          reportingTicketId: body.ticketId,
-          error: body.error.trim().slice(0, 500)
-        }, [body.ticketId], { [body.ticketId]: { error: body.error.trim().slice(0, 500) } });
-        return send(response, 200, { accepted: true, resolved: true, contested: true });
+        const replayError = body.error.trim().slice(0, 500);
+        if (match.teamSize === 1) {
+          await resolveContestedResult(match, {
+            reason: "a client could not parse its replay",
+            reportingTicketId: body.ticketId,
+            error: replayError
+          }, [body.ticketId], { [body.ticketId]: { error: replayError } });
+          return send(response, 200, { accepted: true, resolved: true, contested: true });
+        }
+        console.warn(
+          `[matchmaker] ${match.id}: ignored replay error from ${body.ticketId}:`
+          + ` ${replayError}`
+        );
+        return send(response, 202, { accepted: false, resolved: false });
       }
       try {
         await reconcileReplayPlayerLinks(match, actingTicket, body.replay);
       } catch (error) {
-        await resolveContestedResult(match, {
-          reason: error instanceof Error ? error.message : "replay identity linking failed",
-          reportingTicketId: body.ticketId,
-          report: body.replay
-        }, [body.ticketId], { [body.ticketId]: body.replay });
-        return send(response, 200, { accepted: true, resolved: true, contested: true });
+        if (match.teamSize === 1) {
+          await resolveContestedResult(match, {
+            reason: error instanceof Error ? error.message : "replay identity linking failed",
+            reportingTicketId: body.ticketId,
+            report: body.replay
+          }, [body.ticketId], { [body.ticketId]: body.replay });
+          return send(response, 200, { accepted: true, resolved: true, contested: true });
+        }
+        console.warn(
+          `[matchmaker] ${match.id}: ignored replay identity failure from ${body.ticketId}:`,
+          error
+        );
+        return send(response, 202, { accepted: false, resolved: false });
       }
       const invalid = validateReplayReport(match, actingTicket, body.replay);
       if (invalid) {
-        await resolveContestedResult(match, {
-          reason: invalid,
-          reportingTicketId: body.ticketId,
-          report: body.replay
-        }, [body.ticketId], { [body.ticketId]: body.replay });
-        return send(response, 200, { accepted: true, resolved: true, contested: true });
+        if (match.teamSize === 1) {
+          await resolveContestedResult(match, {
+            reason: invalid,
+            reportingTicketId: body.ticketId,
+            report: body.replay
+          }, [body.ticketId], { [body.ticketId]: body.replay });
+          return send(response, 200, { accepted: true, resolved: true, contested: true });
+        }
+        console.warn(`[matchmaker] ${match.id}: ignored invalid replay from ${body.ticketId}: ${invalid}`);
+        return send(response, 202, { accepted: false, resolved: false });
       }
       match.resultReports.set(body.ticketId, body.replay);
-      if (match.resultReports.size < 2) {
+      const reportsByTeam = new Map();
+      for (const [ticketId, replay] of match.resultReports) {
+        const team = match.assignments.get(ticketId).team;
+        if (!reportsByTeam.has(team)) reportsByTeam.set(team, { ticketId, replay });
+      }
+      if (reportsByTeam.size < 2) {
         return send(response, 202, { accepted: true, resolved: false });
       }
 
-      const hostReplay = match.resultReports.get(match.host.id);
-      const guestReplay = match.resultReports.get(match.guest.id);
-      if (!replayReportsAgree(hostReplay, guestReplay)) {
+      const [teamOneReport, teamTwoReport] = [reportsByTeam.get(1), reportsByTeam.get(2)];
+      const qualifyingReports = {
+        [teamOneReport.ticketId]: teamOneReport.replay,
+        [teamTwoReport.ticketId]: teamTwoReport.replay
+      };
+      if (!replayReportsAgree(teamOneReport.replay, teamTwoReport.replay)) {
         await resolveContestedResult(match, {
-          reason: "client replay metadata did not agree",
-          hostReport: hostReplay,
-          guestReport: guestReplay
-        }, [match.host.id, match.guest.id], {
-          [match.host.id]: hostReplay,
-          [match.guest.id]: guestReplay
-        });
+          reason: "the qualifying Team 1 and Team 2 replay metadata did not agree",
+          reports: qualifyingReports
+        }, [teamOneReport.ticketId, teamTwoReport.ticketId], qualifyingReports);
         return send(response, 200, { accepted: true, resolved: true, contested: true });
       }
 
-      const ratings = await recordVerifiedMatchResult(match, hostReplay);
+      const verifiedReplay = teamOneReport.replay;
+      const ratings = await recordVerifiedMatchResult(match, verifiedReplay);
       match.resultResolved = true;
-      emit(match.host, {
-        type: "result_verified",
-        matchId: match.id,
-        result: resultForTicket(match, match.host, hostReplay, ratings)
-      });
-      emit(match.guest, {
-        type: "result_verified",
-        matchId: match.id,
-        result: resultForTicket(match, match.guest, hostReplay, ratings)
-      });
+      for (const participant of matchTickets(match)) {
+        emit(participant, {
+          type: "result_verified",
+          matchId: match.id,
+          result: resultForTicket(match, participant, verifiedReplay, ratings)
+        });
+      }
       deleteMatch(match);
-      console.log(`[matchmaker] ${match.id}: verified winner=${hostReplay.winnerProfileId}`);
+      console.log(
+        `[matchmaker] ${match.id}: verified from one replay per team;`
+        + ` winner=${verifiedReplay.winnerProfileId}`
+      );
       return send(response, 200, { accepted: true, resolved: true, contested: false });
     }
 

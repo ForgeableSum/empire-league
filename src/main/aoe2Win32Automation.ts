@@ -429,6 +429,29 @@ export async function sendAoe2End(processId: number): Promise<NativeInputResult>
   };
 }
 
+export async function sendAoe2Down(processId: number): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+  const down = sendWindowMessage(window, 0x0100, 0x28, 0x01500001);
+  await delay(15);
+  const up = sendWindowMessage(window, 0x0101, 0x28, -1051721727);
+  const sent = down.dispatched && up.dispatched;
+  return {
+    sent,
+    detail: [
+      sent ? "SENT" : "SEND_FAILED",
+      "Mode=WindowMessageSync",
+      "Key=DOWN",
+      `Window=${String(window)}`,
+      `Down=${down.dispatched}`,
+      `DownMs=${down.elapsedMs}`,
+      `Up=${up.dispatched}`,
+      `UpMs=${up.elapsedMs}`
+    ].join("|")
+  };
+}
+
 export async function sendAoe2Tab(processId: number): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);

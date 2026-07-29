@@ -37,6 +37,11 @@ test("accepts the ranked 1v1 replay rules", () => {
   assert.equal(validateRankedReplaySettings(validSettings()), null);
 });
 
+test("accepts ranked 2v2 and 4v4 player counts when requested", () => {
+  assert.equal(validateRankedReplaySettings(validSettings({ playerCount: 4 }), 4), null);
+  assert.equal(validateRankedReplaySettings(validSettings({ playerCount: 8 }), 8), null);
+});
+
 test("rejects either replay cheat flag and instant build", () => {
   assert.match(validateRankedReplaySettings(validSettings({ cheats: true })), /cheats/);
   assert.match(validateRankedReplaySettings(validSettings({ replayCheatsEnabled: true })), /replayCheatsEnabled/);

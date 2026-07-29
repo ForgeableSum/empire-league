@@ -12,6 +12,7 @@ import {
   civilizationDesignPoint,
   civilizationSlotDesignPoint,
   mapDesignPoint,
+  teamSlotDesignPoint,
   type Aoe2ActionName,
   type Aoe2CivilizationSelection,
   type Aoe2MapSelection
@@ -45,6 +46,7 @@ import {
   readAoe2ReadyState,
   restoreAoe2NativeWindowBehind,
   sendAoe2End,
+  sendAoe2Down,
   sendAoe2Enter,
   sendAoe2Home,
   sendAoe2Tab,
@@ -1948,7 +1950,11 @@ export function registerGameHandlers(): void {
     }
   });
 
-  ipcMain.handle("game:run-create-lobby-sequence", async (event, mapName: string) => {
+  ipcMain.handle("game:run-create-lobby-sequence", async (
+    event,
+    mapName: string,
+    playerCount: 2 | 4 | 8 = 2
+  ) => {
     stopTabTest();
     setMouseCoordinateOverlayEnabled(false);
     const normalizedMapName = typeof mapName === "string" ? mapName.trim() : "";
@@ -1957,6 +1963,9 @@ export function registerGameHandlers(): void {
     }
     if (!(normalizedMapName in aoe2UiManifest.mapPicker.entries)) {
       return { sent: false, message: "A supported AoE2 map name is required." };
+    }
+    if (![2, 4, 8].includes(playerCount)) {
+      return { sent: false, message: "The lobby must contain 2, 4, or 8 players." };
     }
 
     const emitLog = (message: string) => {
@@ -2048,12 +2057,18 @@ export function registerGameHandlers(): void {
       await delay(250);
       await actionStep("playerCount");
       const firstPlayerCount = await sendAoe2Home(process.pid);
-      emitLog(`STEP|Select 2 Players|Key=HOME|${firstPlayerCount.detail}`);
-      if (!firstPlayerCount.sent) throw new Error("The 2-player lobby size could not be selected.");
+      emitLog(`STEP|Select Player Count Base|Key=HOME|${firstPlayerCount.detail}`);
+      if (!firstPlayerCount.sent) throw new Error("The lobby player-count menu could not be reset.");
+      for (let count = 2; count < playerCount; count += 1) {
+        const nextPlayerCount = await sendAoe2Down(process.pid);
+        emitLog(`STEP|Select ${count + 1} Players|Key=DOWN|${nextPlayerCount.detail}`);
+        if (!nextPlayerCount.sent) throw new Error(`The ${playerCount}-player lobby size could not be selected.`);
+        await delay(75);
+      }
       await delay(100);
       const confirmPlayerCount = await sendAoe2Enter(process.pid);
       emitLog(`STEP|Confirm 2 Players|Key=ENTER|${confirmPlayerCount.detail}`);
-      if (!confirmPlayerCount.sent) throw new Error("The 2-player lobby size could not be confirmed.");
+      if (!confirmPlayerCount.sent) throw new Error(`The ${playerCount}-player lobby size could not be confirmed.`);
       await delay(250);
       await actionStep("createLobby");
       await clickStep("Reset Settings", 3101, 1976);
@@ -2337,6 +2352,49 @@ export function registerGameHandlers(): void {
     }
   });
 
+  ipcMain.handle("game:select-team", async (event, team: 1 | 2, slot: number) => {
+    if (process.platform !== "win32"
+      || (team !== 1 && team !== 2)
+      || !Number.isInteger(slot)
+      || slot < 1
+      || slot > aoe2UiManifest.teamSlotButtons.rowCenters.length) {
+      return { sent: false, message: "That team selection is not supported." };
+    }
+    const emitLog = (message: string) => {
+      console.info(`[AoE2 automation] ${message}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+    };
+    const appWindow = BrowserWindow.fromWebContents(event.sender);
+    if (appWindow) showMainWindowAsGameCover(appWindow);
+    setMainWindowGameCoverClickThrough(false);
+    try {
+      const gameProcess = await detectAoe2Process();
+      if (!gameProcess.running || !gameProcess.pid) {
+        return { sent: false, message: "The AoE2 process was not found." };
+      }
+      const [x, y] = teamSlotDesignPoint(slot);
+      // AoE initializes the selector at "?": first click is "-", second is Team 1.
+      const clicks = team + 1;
+      for (let index = 0; index < clicks; index += 1) {
+        const result = await postAoe2DesignClick(gameProcess.pid, x, y, {
+          synchronous: true,
+          hoverMs: 100,
+          holdMs: 100
+        });
+        emitLog(`TEAM_SELECT|Slot=${slot}|Team=${team}|Click=${index + 1}/${clicks}|${result.detail}`);
+        if (!result.sent) throw new Error(`Team ${team} could not be selected for lobby slot ${slot}.`);
+        await delay(150);
+      }
+      return { sent: true, message: `Team ${team} selected for AoE2 lobby slot ${slot}.` };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Team selection failed.";
+      emitLog(`TEAM_SELECT|Complete=False|Error=${detail}`);
+      return { sent: false, message: detail };
+    } finally {
+      setMainWindowGameCoverClickThrough(false);
+    }
+  });
+
   ipcMain.handle("game:test-host-game-mouse-click", async (event) => {
     if (process.platform !== "win32") {
       return { sent: false, message: "Background mouse testing is only supported on Windows." };
@@ -2424,7 +2482,7 @@ export function registerGameHandlers(): void {
         map: request.map,
         serverRegion: request.serverRegion,
         settings: {
-          playerCount: 2,
+          playerCount: request.playerCount,
           gameMode: "Random Map",
           speed: "Normal",
           startingAge: "Dark Age",

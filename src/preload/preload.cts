@@ -33,9 +33,11 @@ const electronApi: ElectronGameApi = {
   startAoe2TabTest: () => ipcRenderer.invoke("game:start-tab-test"),
   stopAoe2TabTest: () => ipcRenderer.invoke("game:stop-tab-test"),
   sendAoe2Key: (key) => ipcRenderer.invoke("game:send-background-key", key),
-  runAoe2CreateLobbySequence: (mapName) => ipcRenderer.invoke("game:run-create-lobby-sequence", mapName),
+  runAoe2CreateLobbySequence: (mapName, playerCount) =>
+    ipcRenderer.invoke("game:run-create-lobby-sequence", mapName, playerCount),
   runAoe2LobbyCursorAction: (target) => ipcRenderer.invoke("game:run-lobby-cursor-action", target),
   selectAoe2Civilization: (civilization, slot) => ipcRenderer.invoke("game:select-civilization", civilization, slot),
+  selectAoe2Team: (team, slot) => ipcRenderer.invoke("game:select-team", team, slot),
   testAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:test-host-game-mouse-click"),
   calibrateAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:calibrate-host-game-mouse-click"),
   testAoe2FakeActivationMouseClick: () => ipcRenderer.invoke("game:test-fake-activation-mouse-click"),
