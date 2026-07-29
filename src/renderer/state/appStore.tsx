@@ -49,8 +49,6 @@ interface AppContextValue {
   authError: string | null;
   signInWithSteam: () => Promise<void>;
   signOut: () => Promise<void>;
-  startupGamePrompt: "force-close" | null;
-  respondToStartupGamePrompt: (confirmed: boolean) => void;
   roomSetupFailed: boolean;
   roomSetupFailureReason: "lobby_setup" | "game_not_running" | "game_not_owned" | null;
   exitAfterRoomSetupFailure: (restart: boolean) => Promise<void>;
@@ -138,10 +136,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const lobbyAutomationRef = useRef<Promise<GameInputResult> | null>(null);
   const matchedSessionRef = useRef<MatchSession | null>(null);
   const roomSetupTimeoutRef = useRef<number | null>(null);
-  const startupPromptResolverRef = useRef<((confirmed: boolean) => void) | null>(null);
   const replayResultInFlightRef = useRef(false);
   const familySharingNoticeShownRef = useRef(false);
-  const [startupGamePrompt, setStartupGamePrompt] = useState<AppContextValue["startupGamePrompt"]>(null);
   const [roomSetupFailed, setRoomSetupFailed] = useState(false);
   const [roomSetupFailureReason, setRoomSetupFailureReason] = useState<AppContextValue["roomSetupFailureReason"]>(null);
 
@@ -285,7 +281,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (import.meta.env.VITE_SKIP_AOE_AUTO_LAUNCH === "true") return;
-    if (!state.settings.launchAoe2OnStartup) return;
 
     let cancelled = false;
 
@@ -306,17 +301,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         const existingProcess = await window.electronApi.detectAoe2Process();
         if (existingProcess.running) {
-          const shouldRestart = await requestStartupGameConfirmation("force-close");
-          if (!shouldRestart) {
-            await window.electronApi.quitApp();
-            return;
-          }
-
           const forcedClose = await window.electronApi.closeAoe2(true);
           if (!forcedClose.closed) {
             throw new Error(forcedClose.message ?? "AoE2 could not be closed.");
           }
         }
+
+        if (!state.settings.launchAoe2OnStartup) return;
 
         setState((previous) => ({ ...previous, gameStatus: "loading" }));
         loadingNotificationId = notify("Loading AoE2 DE…", "loading", {
@@ -379,6 +370,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         throw new Error(installation.message ?? "AoE2 DE was not detected.");
       }
 
+      const existingProcess = await window.electronApi.detectAoe2Process();
+      if (existingProcess.running && !existingProcess.owned) {
+        const forcedClose = await window.electronApi.closeAoe2(true);
+        if (!forcedClose.closed) {
+          throw new Error(forcedClose.message ?? "The existing AoE2 process could not be closed.");
+        }
+      }
+
       setState((previous) => ({ ...previous, gameStatus: "loading" }));
       loadingNotificationId = notify("Launching AoE2 DE…", "loading", {
         detail: "Matchmaking will begin automatically when the game is ready.",
@@ -433,20 +432,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }, ...previous.notifications].slice(0, 4)
     }));
     return id;
-  }
-
-  function requestStartupGameConfirmation(prompt: NonNullable<AppContextValue["startupGamePrompt"]>): Promise<boolean> {
-    return new Promise((resolve) => {
-      startupPromptResolverRef.current = resolve;
-      setStartupGamePrompt(prompt);
-    });
-  }
-
-  function respondToStartupGamePrompt(confirmed: boolean): void {
-    const resolve = startupPromptResolverRef.current;
-    startupPromptResolverRef.current = null;
-    setStartupGamePrompt(null);
-    resolve?.(confirmed);
   }
 
   function startRoomSetupWatchdog(): void {
@@ -524,17 +509,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       if (window.electronApi) {
         const gameProcess = await window.electronApi.detectAoe2Process();
-        if (!gameProcess.running) {
+        if (!gameProcess.running || !gameProcess.owned) {
           const launched = await launchAoe2ForMatchmaking();
           if (!launched) {
             queueJoinInFlightRef.current = false;
             return;
           }
-        } else if (!gameProcess.owned) {
-          setRoomSetupFailureReason("game_not_owned");
-          setRoomSetupFailed(true);
-          queueJoinInFlightRef.current = false;
-          return;
         }
       }
 
@@ -1247,8 +1227,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     authError,
     signInWithSteam,
     signOut,
-    startupGamePrompt,
-    respondToStartupGamePrompt,
     roomSetupFailed,
     roomSetupFailureReason,
     exitAfterRoomSetupFailure

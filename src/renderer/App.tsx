@@ -7,7 +7,6 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { Shell } from "./components/layout/Shell";
 import { MatchFoundOverlay } from "./components/match/MatchFoundOverlay";
 import { Toasts } from "./components/common/Toasts";
-import { StartupGamePrompt } from "./components/common/StartupGamePrompt";
 import { RoomSetupRecoveryPrompt } from "./components/common/RoomSetupRecoveryPrompt";
 import { WindowControls } from "./components/layout/WindowControls";
 import { useAppStore } from "./state/appStore";
@@ -44,7 +43,6 @@ export function App() {
             </div>
           </div>
         </main>
-        <StartupGamePrompt />
         <RoomSetupRecoveryPrompt />
       </>
     );
@@ -71,7 +69,6 @@ export function App() {
             {authStatus === "authenticating" && <span>Complete sign-in in your browser.</span>}
           </div>
         </main>
-        <StartupGamePrompt />
         <RoomSetupRecoveryPrompt />
       </>
     );
@@ -90,7 +87,6 @@ export function App() {
       </Shell>
       {state.queueStatus === "match_found" && state.activeMatch && <MatchFoundOverlay />}
       <Toasts />
-      <StartupGamePrompt />
       <RoomSetupRecoveryPrompt />
       {mouseTestActive && <TestOverlay />}
     </>
