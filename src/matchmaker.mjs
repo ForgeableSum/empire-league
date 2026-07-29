@@ -469,7 +469,11 @@ async function tryMatch(ticket) {
     : [1];
   const teamSize = possibleSizes.find((size) => {
     const required = size * 2;
-    return [ticket, ...candidates.filter((candidate) => candidate.queue.teamSizes?.includes(size))].length >= required;
+    return [
+      ticket,
+      ...candidates.filter((candidate) =>
+        ticket.queue.format !== "team" || candidate.queue.teamSizes?.includes(size))
+    ].length >= required;
   });
   if (!teamSize) return;
   const participantCount = teamSize * 2;
