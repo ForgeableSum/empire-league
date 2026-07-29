@@ -132,6 +132,7 @@ export class MockMatchmakingService implements MatchmakingService {
   private listeners = new Map<string, QueueEventListener>();
   private timers = new Map<string, number[]>();
   private queuedDefinitions = new Map<string, NonNullable<JoinQueueRequest["queue"]>>();
+  private queueRatings = new Map<string, number>();
   private lowerRatingLimits = new Map<string, number>();
 
   constructor(private readonly getConfig: () => MockServiceConfig) {}
@@ -144,6 +145,10 @@ export class MockMatchmakingService implements MatchmakingService {
     if (!request.queue?.mapPool.length) throw new Error("At least one selected map is required.");
     const ticket = { id: `ticket-${crypto.randomUUID()}`, queueId: request.queueId, joinedAt: new Date().toISOString() };
     this.queuedDefinitions.set(ticket.id, request.queue);
+    this.queueRatings.set(
+      ticket.id,
+      request.queue.format === "team" ? request.player.teamRating : request.player.rating
+    );
     this.lowerRatingLimits.set(ticket.id, request.maximumLowerOpponentRatingGap ?? 0);
     return ticket;
   }
@@ -160,6 +165,7 @@ export class MockMatchmakingService implements MatchmakingService {
     this.clearTimers(ticketId);
     this.listeners.delete(ticketId);
     this.queuedDefinitions.delete(ticketId);
+    this.queueRatings.delete(ticketId);
     this.lowerRatingLimits.delete(ticketId);
   }
 
@@ -172,7 +178,8 @@ export class MockMatchmakingService implements MatchmakingService {
       timers.push(
         window.setTimeout(() => {
           const spread = [50, 75, 100, 150, 250][index];
-          listener({ type: "range", minRating: 1426 - spread, maxRating: 1426 + spread });
+          const rating = this.queueRatings.get(ticketId) ?? currentUser.rating;
+          listener({ type: "range", minRating: rating - spread, maxRating: rating + spread });
         }, at)
       );
     });

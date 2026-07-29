@@ -34,6 +34,13 @@ const declinedPairCooldownMs = 30 * 1000;
 const matchSetupTimeoutMs = Number(process.env.MATCH_SETUP_TIMEOUT_MS ?? 120_000);
 const matchResultTimeoutMs = Number(process.env.MATCH_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
 const ticketDisconnectGraceMs = Number(process.env.TICKET_DISCONNECT_GRACE_MS ?? 20_000);
+const ratingRangeSchedule = [
+  { afterMs: 0, spread: 50 },
+  { afterMs: 20_000, spread: 75 },
+  { afterMs: 40_000, spread: 100 },
+  { afterMs: 60_000, spread: 150 },
+  { afterMs: 90_000, spread: 250 }
+];
 let eventSequence = 0;
 let rematchCooldownCleanupTimer;
 
@@ -81,6 +88,13 @@ function clearTicketDisconnectTimer(ticket) {
   ticket.disconnectedAt = undefined;
 }
 
+function clearTicketSearchTimers(ticket) {
+  clearTimeout(ticket.matchSearchTimer);
+  for (const timer of ticket.ratingRangeTimers ?? []) clearTimeout(timer);
+  ticket.matchSearchTimer = undefined;
+  ticket.ratingRangeTimers = [];
+}
+
 function matchTickets(match) {
   return match.participants ?? [match.host, match.guest];
 }
@@ -99,7 +113,7 @@ function deleteMatch(match) {
   clearMatchTimers(match);
   matches.delete(match.id);
   for (const ticket of matchTickets(match)) {
-    clearTimeout(ticket.matchSearchTimer);
+    clearTicketSearchTimers(ticket);
     clearTicketDisconnectTimer(ticket);
     if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
     ticket.matchId = null;
@@ -114,7 +128,7 @@ function deleteDisconnectedTicket(ticket, message = "The other player disconnect
     ticket.disconnectTimer = undefined;
     return false;
   }
-  clearTimeout(ticket.matchSearchTimer);
+  clearTicketSearchTimers(ticket);
   clearTicketDisconnectTimer(ticket);
   if (!match) {
     tickets.delete(ticket.id);
@@ -407,6 +421,38 @@ function compareOpponentPreference(ticket, left, right) {
     || left.id.localeCompare(right.id);
 }
 
+function ratingSpreadForTicket(ticket, now = Date.now()) {
+  const elapsed = Math.max(0, now - new Date(ticket.joinedAt).getTime());
+  return [...ratingRangeSchedule].reverse().find((step) => elapsed >= step.afterMs)?.spread
+    ?? ratingRangeSchedule[0].spread;
+}
+
+function emitRatingRange(ticket, now = Date.now()) {
+  const rating = playerRatingForQueue(ticket.player, ticket.queueId);
+  const spread = ratingSpreadForTicket(ticket, now);
+  emit(ticket, { type: "range", minRating: rating - spread, maxRating: rating + spread });
+}
+
+function ratingsAreInRange(ticket, candidate, now = Date.now()) {
+  const difference = Math.abs(
+    playerRatingForQueue(ticket.player, ticket.queueId)
+      - playerRatingForQueue(candidate.player, candidate.queueId)
+  );
+  return difference <= ratingSpreadForTicket(ticket, now)
+    && difference <= ratingSpreadForTicket(candidate, now);
+}
+
+function scheduleRatingRanges(ticket) {
+  emitRatingRange(ticket);
+  ticket.ratingRangeTimers = ratingRangeSchedule.slice(1).map((step) => setTimeout(() => {
+    if (tickets.get(ticket.id) !== ticket || ticket.matchId) return;
+    emitRatingRange(ticket);
+    void tryMatch(ticket).catch((error) => {
+      console.error(`[matchmaker] Failed to match expanded-range ticket ${ticket.id}:`, error);
+    });
+  }, step.afterMs));
+}
+
 function normalizeMaximumLowerOpponentRatingGap(value) {
   const gap = Number(value ?? 0);
   if (![0, 200, 300, 400, 500].includes(gap)) {
@@ -460,6 +506,7 @@ async function tryMatch(ticket) {
       && hasCompletedMinimumQueueTime(candidate)
       && candidate.queueId === ticket.queueId
       && !hasDeclinedPairCooldown(ticket.player.id, candidate.player.id)
+      && ratingsAreInRange(ticket, candidate)
       && allowsOpponentRating(ticket, candidate)
       && allowsOpponentRating(candidate, ticket)
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
@@ -467,22 +514,24 @@ async function tryMatch(ticket) {
   const possibleSizes = ticket.queue.format === "team"
     ? [4, 2].filter((size) => ticket.queue.teamSizes?.includes(size))
     : [1];
-  const teamSize = possibleSizes.find((size) => {
+  let teamSize;
+  let participants;
+  for (const size of possibleSizes) {
     const required = size * 2;
-    return [
-      ticket,
-      ...candidates.filter((candidate) =>
-        ticket.queue.format !== "team" || candidate.queue.teamSizes?.includes(size))
-    ].length >= required;
-  });
-  if (!teamSize) return;
-  const participantCount = teamSize * 2;
-  const participants = [
-    ticket,
-    ...candidates.filter((candidate) =>
-      ticket.queue.format !== "team" || candidate.queue.teamSizes?.includes(teamSize))
-  ].slice(0, participantCount);
-  if (participants.length < participantCount) return;
+    const compatible = [ticket];
+    for (const candidate of candidates) {
+      if (ticket.queue.format === "team" && !candidate.queue.teamSizes?.includes(size)) continue;
+      if (!compatible.every((participant) => ratingsAreInRange(participant, candidate))) continue;
+      compatible.push(candidate);
+      if (compatible.length === required) break;
+    }
+    if (compatible.length === required) {
+      teamSize = size;
+      participants = compatible;
+      break;
+    }
+  }
+  if (!teamSize || !participants) return;
   const host = participants.filter((candidate) => candidate.canHost)
     .sort((left, right) => new Date(left.joinedAt) - new Date(right.joinedAt))[0];
   if (!host) return;
@@ -555,7 +604,7 @@ async function tryMatch(ticket) {
   };
   for (const participant of participants) {
     participant.matchId = match.id;
-    clearTimeout(participant.matchSearchTimer);
+    clearTicketSearchTimers(participant);
   }
   matches.set(match.id, match);
   for (const participant of participants) {
@@ -724,6 +773,7 @@ async function handleRequest(request, response) {
         events: []
       };
       tickets.set(ticket.id, ticket);
+      scheduleRatingRanges(ticket);
       ticket.matchSearchTimer = setTimeout(() => {
         void tryMatch(ticket).catch((error) => {
           console.error(`[matchmaker] Failed to match matured ticket ${ticket.id}:`, error);
@@ -772,7 +822,7 @@ async function handleRequest(request, response) {
       const ticketId = decodeURIComponent(ticketMatch[1]);
       const ticket = tickets.get(ticketId);
       if (!ticket || ticket.player.id !== authenticatedPlayer.id) return send(response, 404, { error: "ticket not found" });
-      clearTimeout(ticket.matchSearchTimer);
+      clearTicketSearchTimers(ticket);
       const match = ticket.matchId ? matches.get(ticket.matchId) : null;
       if (match) {
         const setupStarted = match.accepted.size === matchTickets(match).length;

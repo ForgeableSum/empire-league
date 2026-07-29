@@ -639,6 +639,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState((previous) => ({
         ...previous,
         selectedQueue: queue,
+        searchRange: {
+          min: (queue.format === "team" ? currentUser.teamRating : currentUser.rating) - 50,
+          max: (queue.format === "team" ? currentUser.teamRating : currentUser.rating) + 50
+        },
         queueStartedAt: ticket.joinedAt,
         roomSetupStartedAt: null,
         roomSetupEstimateMs: null,
