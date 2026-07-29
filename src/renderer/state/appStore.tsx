@@ -49,9 +49,6 @@ interface AppContextValue {
   authError: string | null;
   signInWithSteam: () => Promise<void>;
   signOut: () => Promise<void>;
-  roomSetupFailed: boolean;
-  roomSetupFailureReason: "lobby_setup" | "game_not_running" | "game_not_owned" | null;
-  exitAfterRoomSetupFailure: (restart: boolean) => Promise<void>;
 }
 
 const settingsKey = "empire-league-settings";
@@ -135,12 +132,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const queueJoinInFlightRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const lobbyAutomationRef = useRef<Promise<GameInputResult> | null>(null);
+  const lobbyRecoveryInFlightRef = useRef(false);
   const matchedSessionRef = useRef<MatchSession | null>(null);
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const replayResultInFlightRef = useRef(false);
   const familySharingNoticeShownRef = useRef(false);
-  const [roomSetupFailed, setRoomSetupFailed] = useState(false);
-  const [roomSetupFailureReason, setRoomSetupFailureReason] = useState<AppContextValue["roomSetupFailureReason"]>(null);
 
   const services = useMemo(
     () => ({
@@ -417,7 +413,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function recoverAoe2AfterSetupDisconnect(): Promise<boolean> {
+  async function recoverAoe2AfterLobbyFailure(): Promise<boolean> {
     let recoveryNotificationId: string | null = null;
     try {
       if (!window.electronApi) throw new Error("The Electron game integration bridge is unavailable.");
@@ -515,9 +511,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     clearRoomSetupWatchdog();
     roomSetupTimeoutRef.current = window.setTimeout(() => {
       roomSetupTimeoutRef.current = null;
-      setRoomSetupFailureReason("lobby_setup");
-      setRoomSetupFailed(true);
+      const queue = stateRef.current.selectedQueue;
+      if (queue) {
+        void handleLobbySetupFailure(queue, "Lobby setup stopped making progress for 65 seconds.");
+      }
     }, roomSetupTimeoutMs);
+  }
+
+  async function handleLobbySetupFailure(queue: QueueDefinition, message: string): Promise<void> {
+    if (lobbyRecoveryInFlightRef.current) return;
+    lobbyRecoveryInFlightRef.current = true;
+    void window.electronApi?.stopMatchFoundAlert();
+    clearRoomSetupWatchdog();
+    queueJoinInFlightRef.current = false;
+    matchedSessionRef.current = null;
+    lobbyAutomationRef.current = null;
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    const ticketId = ticketRef.current;
+    ticketRef.current = null;
+    setState((previous) => ({
+      ...previous,
+      queueStatus: "cancelled",
+      activeMatch: null,
+      error: null,
+      transitionInputLocked: false,
+      roomSetupStartedAt: null,
+      roomSetupEstimateMs: null,
+      roomSetupMilestone: null
+    }));
+    notify(message, "warning", { durationMs: 5000, dismissible: false });
+    log("Lobby setup failed; resetting AoE2 before returning to queue");
+    if (ticketId) await services.matchmaking.leaveQueue(ticketId).catch(() => undefined);
+    const recovered = await recoverAoe2AfterLobbyFailure();
+    lobbyRecoveryInFlightRef.current = false;
+    if (recovered) await startQueue(queue);
   }
 
   function clearRoomSetupWatchdog(): void {
@@ -533,19 +561,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       durationMs: null,
       dismissible: true
     });
-  }
-
-  async function exitAfterRoomSetupFailure(restart: boolean): Promise<void> {
-    clearRoomSetupWatchdog();
-    unsubscribeRef.current?.();
-    unsubscribeRef.current = null;
-    if (ticketRef.current) {
-      await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
-      ticketRef.current = null;
-    }
-    if (!window.electronApi) return;
-    if (restart) await window.electronApi.restartApp();
-    else await window.electronApi.quitApp();
   }
 
   function dismissNotificationById(id: string): void {
@@ -620,8 +635,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           durationMs: 10_000
         });
       }
-      setRoomSetupFailed(false);
-      setRoomSetupFailureReason(null);
       setState((previous) => ({
         ...previous,
         selectedQueue: queue,
@@ -746,12 +759,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   ...previous,
                   roomSetupMilestone: "Waiting for host to finalize lobby files"
                 }));
-              } else {
-                notify("The host lobby could not be opened", "danger");
-              }
+              } else throw new Error("The host lobby URI was rejected.");
             }).catch((error: unknown) => {
-              log(`Opening the host lobby failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-              notify("The host lobby could not be opened", "danger");
+              const message = error instanceof Error ? error.message : "The host lobby could not be opened.";
+              log(`Opening the host lobby failed: ${message}`);
+              void handleLobbySetupFailure(queue, message);
             });
           }
         }
@@ -774,8 +786,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 roomSetupMilestone: "Waiting for opponent file transfer"
               }));
             } catch (error) {
-              log(`Automated host Ready failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-              notify("The host could not finalize the lobby", "danger");
+              const message = error instanceof Error ? error.message : "The host could not finalize the lobby.";
+              log(`Automated host Ready failed: ${message}`);
+              void handleLobbySetupFailure(queue, message);
             }
           })();
         }
@@ -815,8 +828,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 roomSetupMilestone: "Ready — waiting for the host to start"
               }));
             } catch (error) {
-              log(`Guest file transfer or Ready failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-              notify("Lobby file transfer did not complete", "danger");
+              const message = error instanceof Error ? error.message : "Lobby file transfer did not complete.";
+              log(`Guest file transfer or Ready failed: ${message}`);
+              void handleLobbySetupFailure(queue, message);
             }
           })();
         }
@@ -841,8 +855,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 roomSetupMilestone: "Waiting for opponent file transfer"
               }));
             } catch (error) {
-              log(`Second host Ready failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-              notify("The host could not resume the lobby file transfer", "danger");
+              const message = error instanceof Error ? error.message : "The host could not resume the lobby file transfer.";
+              log(`Second host Ready failed: ${message}`);
+              void handleLobbySetupFailure(queue, message);
             }
           })();
         }
@@ -871,8 +886,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               await services.matchmaking.reportGameStarted(event.matchId);
               void revealAoe2AfterGameStart();
             } catch (error) {
-              log(`Automated host start failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-              notify("The automated game start failed", "danger");
+              const message = error instanceof Error ? error.message : "The automated game start failed.";
+              log(`Automated host start failed: ${message}`);
+              void handleLobbySetupFailure(queue, message);
             }
           })();
         }
@@ -894,29 +910,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           completeResult(event.result);
         }
         if (event.type === "error") {
-          if (event.code === "MATCH_DISCONNECTED") {
-            void window.electronApi?.stopMatchFoundAlert();
-            clearRoomSetupWatchdog();
-            queueJoinInFlightRef.current = false;
-            matchedSessionRef.current = null;
-            if (ticketRef.current) {
-              void services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
-              ticketRef.current = null;
-            }
-            unsubscribeRef.current?.();
-            unsubscribeRef.current = null;
-            setState((previous) => ({
-              ...previous,
-              queueStatus: "cancelled",
-              activeMatch: null,
-              error: null,
-              transitionInputLocked: false
-            }));
-            notify(event.message, "warning", { durationMs: 5000, dismissible: false });
-            log("Opponent disconnected; resetting AoE2 before returning to queue");
-            void recoverAoe2AfterSetupDisconnect().then((recovered) => {
-              if (recovered) void startQueue(queue);
-            });
+          if (event.code === "MATCH_DISCONNECTED" || event.code === "MATCH_SETUP_FAILED") {
+            void handleLobbySetupFailure(queue, event.message);
             return;
           }
           if (event.code === "MATCH_DECLINED") {
@@ -1152,12 +1147,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : null
       }));
     } catch (error) {
-      setError({
-        code: "LOBBY_PREPARATION_FAILED",
-        message: "We could not create the AoE2 lobby.",
-        technicalDetails: error instanceof Error ? error.message : undefined,
-        retryable: true
-      });
+      const message = error instanceof Error ? error.message : "We could not create the AoE2 lobby.";
+      log(`Lobby preparation failed: ${message}`);
+      const queue = match.queue;
+      void handleLobbySetupFailure(queue, message);
     }
   }
 
@@ -1335,9 +1328,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     authError,
     signInWithSteam,
     signOut,
-    roomSetupFailed,
-    roomSetupFailureReason,
-    exitAfterRoomSetupFailure
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

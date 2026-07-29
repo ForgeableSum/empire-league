@@ -7,7 +7,6 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { Shell } from "./components/layout/Shell";
 import { MatchFoundOverlay } from "./components/match/MatchFoundOverlay";
 import { Toasts } from "./components/common/Toasts";
-import { RoomSetupRecoveryPrompt } from "./components/common/RoomSetupRecoveryPrompt";
 import { WindowControls } from "./components/layout/WindowControls";
 import { useAppStore } from "./state/appStore";
 import { LogIn } from "lucide-react";
@@ -43,7 +42,6 @@ export function App() {
             </div>
           </div>
         </main>
-        <RoomSetupRecoveryPrompt />
       </>
     );
   }
@@ -69,7 +67,6 @@ export function App() {
             {authStatus === "authenticating" && <span>Complete sign-in in your browser.</span>}
           </div>
         </main>
-        <RoomSetupRecoveryPrompt />
       </>
     );
   }
@@ -87,7 +84,6 @@ export function App() {
       </Shell>
       {state.queueStatus === "match_found" && state.activeMatch && <MatchFoundOverlay />}
       <Toasts />
-      <RoomSetupRecoveryPrompt />
       {mouseTestActive && <TestOverlay />}
     </>
   );

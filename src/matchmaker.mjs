@@ -188,10 +188,10 @@ function hasDeclinedPairCooldown(firstPlayerId, secondPlayerId, now = Date.now()
   return false;
 }
 
-function expireActiveMatch(match, message) {
+function expireActiveMatch(match, message, code = "MATCH_EXPIRED") {
   if (!matches.has(match.id)) return;
-  emit(match.host, { type: "error", code: "MATCH_EXPIRED", message });
-  emit(match.guest, { type: "error", code: "MATCH_EXPIRED", message });
+  emit(match.host, { type: "error", code, message });
+  emit(match.guest, { type: "error", code, message });
   deleteMatch(match);
   console.warn(`[matchmaker] ${match.id}: ${message}`);
 }
@@ -203,11 +203,15 @@ function scheduleMatchLifecycleTimeout(match, timeoutMs, message) {
 }
 
 function refreshMatchSetupTimeout(match) {
-  scheduleMatchLifecycleTimeout(
-    match,
-    matchSetupTimeoutMs,
-    "The lobby setup timed out before the game started."
-  );
+  clearTimeout(match.lifecycleTimer);
+  match.lifecycleTimer = setTimeout(() => {
+    expireActiveMatch(
+      match,
+      "The lobby setup timed out before the game started.",
+      "MATCH_SETUP_FAILED"
+    );
+  }, matchSetupTimeoutMs);
+  match.lifecycleTimer.unref?.();
 }
 
 async function reconcileReplayPlayerLinks(match, actingTicket, replay) {
@@ -684,10 +688,13 @@ async function handleRequest(request, response) {
       const match = ticket.matchId ? matches.get(ticket.matchId) : null;
       if (match) {
         const opponent = match.host.id === ticket.id ? match.guest : match.host;
+        const setupStarted = match.accepted.size === 2;
         emit(opponent, {
           type: "error",
-          code: "MATCH_DECLINED",
-          message: "The other player left the match."
+          code: setupStarted ? "MATCH_SETUP_FAILED" : "MATCH_DECLINED",
+          message: setupStarted
+            ? "The other player could not finish setting up the lobby."
+            : "The other player left the match."
         });
         addDeclinedPairCooldown(match);
         deleteMatch(match);
