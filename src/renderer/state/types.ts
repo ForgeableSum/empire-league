@@ -41,7 +41,6 @@ export interface NotificationItem {
 
 export interface UserSettings {
   launchAoe2OnStartup: boolean;
-  replayDetection: boolean;
   serverRegion: string;
   matchNotifications: boolean;
   autoRejectFamilySharing: boolean;

@@ -61,7 +61,6 @@ const aoe2PostWindowReadyDelayMs = 7000;
 const roomSetupTimeoutMs = 65_000;
 const defaultSettings: UserSettings = {
   launchAoe2OnStartup: false,
-  replayDetection: true,
   serverRegion: "US East",
   matchNotifications: true,
   autoRejectFamilySharing: false
@@ -1075,7 +1074,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function openAoe2(): Promise<void> {
-    if (window.electronApi && state.settings.replayDetection) {
+    if (window.electronApi) {
       const detection = await window.electronApi.startReplayEndDetection();
       if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
     }
@@ -1189,11 +1188,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   async function revealAoe2AfterGameStart(): Promise<void> {
     if (!window.electronApi) return;
     await delayForLobbyInput(lobbySetupTiming.revealAfterStartMs);
-    if (stateRef.current.settings.replayDetection) {
-      const settings = stateRef.current.settings;
-      const detection = await window.electronApi.startReplayEndDetection();
-      if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
-    }
+    const detection = await window.electronApi.startReplayEndDetection();
+    if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
     await stopYouTubeShorts();
     await window.electronApi.focusAoe2();
     const completedState = stateRef.current;
@@ -1325,9 +1321,6 @@ function loadSettings(): UserSettings {
       launchAoe2OnStartup: typeof saved.launchAoe2OnStartup === "boolean"
         ? saved.launchAoe2OnStartup
         : defaultSettings.launchAoe2OnStartup,
-      replayDetection: typeof saved.replayDetection === "boolean"
-        ? saved.replayDetection
-        : defaultSettings.replayDetection,
       serverRegion: typeof saved.serverRegion === "string" ? saved.serverRegion : defaultSettings.serverRegion,
       matchNotifications: typeof saved.matchNotifications === "boolean"
         ? saved.matchNotifications

@@ -14,11 +14,6 @@ export function SettingsPage() {
           checked={settings.launchAoe2OnStartup}
           onChange={(launchAoe2OnStartup) => updateSettings({ launchAoe2OnStartup })}
         />
-        <Toggle
-          label="Enable replay detection"
-          checked={settings.replayDetection}
-          onChange={(replayDetection) => updateSettings({ replayDetection })}
-        />
       </SettingsGroup>
 
       <SettingsGroup title="Matchmaking">
