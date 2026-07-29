@@ -1,6 +1,7 @@
 import type { MatchOutcome } from "./matchmaking.js";
 
 export interface MatchResult {
+  ratingPool: "solo" | "team";
   winnerProfileId: number;
   loserProfileId: number;
   outcome: MatchOutcome;

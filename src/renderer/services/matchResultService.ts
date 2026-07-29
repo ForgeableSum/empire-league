@@ -45,6 +45,7 @@ export class MockMatchResultService implements MatchResultService {
     const forced = this.getConfig().forcedResult ?? (Math.random() > 0.38 ? "win" : "loss");
     const ratingChange = forced === "win" ? 16 : forced === "loss" ? -14 : 0;
     return {
+      ratingPool: "solo",
       winnerProfileId: forced === "loss" ? 990011 : 12345678,
       loserProfileId: forced === "loss" ? 12345678 : 990011,
       outcome: forced,

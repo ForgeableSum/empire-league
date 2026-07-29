@@ -1,5 +1,6 @@
 import mysql from "mysql2/promise";
 import { civilizationNameFromId } from "./civilization-roll.mjs";
+import { ratingFieldsForQueue } from "./rating-pool.mjs";
 
 const databaseName = process.env.DB_NAME ?? "empire_league";
 
@@ -85,8 +86,9 @@ export async function recordVerifiedMatchResult(match, replay) {
   const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
+    const fields = ratingFieldsForQueue(match.host.queueId);
     const [players] = await connection.execute(
-      `SELECT id, aoe_profile_id, rating
+      `SELECT id, aoe_profile_id, ${fields.rating} AS active_rating
        FROM players
        WHERE id IN (?, ?)
        FOR UPDATE`,
@@ -97,11 +99,11 @@ export async function recordVerifiedMatchResult(match, replay) {
     const loser = players.find((player) => Number(player.aoe_profile_id) !== replay.winnerProfileId);
     if (!winner || !loser) throw new Error("The reported winner is not a player in this match.");
 
-    const expectedWinner = 1 / (1 + 10 ** ((Number(loser.rating) - Number(winner.rating)) / 400));
+    const expectedWinner = 1 / (1 + 10 ** ((Number(loser.active_rating) - Number(winner.active_rating)) / 400));
     const winnerChange = Math.round(32 * (1 - expectedWinner));
     const loserChange = -winnerChange;
-    const winnerAfter = Number(winner.rating) + winnerChange;
-    const loserAfter = Number(loser.rating) + loserChange;
+    const winnerAfter = Number(winner.active_rating) + winnerChange;
+    const loserAfter = Number(loser.active_rating) + loserChange;
     const result = winner.id === match.host.player.id ? "host_win" : "guest_win";
     const completedAt = new Date();
 
@@ -120,30 +122,32 @@ export async function recordVerifiedMatchResult(match, replay) {
     );
     await connection.execute(
       `UPDATE players
-       SET rating = ?, peak_rating = GREATEST(peak_rating, ?), wins = wins + 1,
-           streak = IF(streak >= 0, streak + 1, 1)
+       SET ${fields.rating} = ?, ${fields.peakRating} = GREATEST(${fields.peakRating}, ?),
+           ${fields.wins} = ${fields.wins} + 1,
+           ${fields.streak} = IF(${fields.streak} >= 0, ${fields.streak} + 1, 1)
        WHERE id = ?`,
       [winnerAfter, winnerAfter, winner.id]
     );
     await connection.execute(
       `UPDATE players
-       SET rating = ?, losses = losses + 1, streak = IF(streak <= 0, streak - 1, -1)
+       SET ${fields.rating} = ?, ${fields.losses} = ${fields.losses} + 1,
+           ${fields.streak} = IF(${fields.streak} <= 0, ${fields.streak} - 1, -1)
        WHERE id = ?`,
       [loserAfter, loser.id]
     );
     await connection.execute(
       `INSERT INTO rating_history
-        (player_id, match_id, rating_before, rating_after, rating_change)
-       VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)`,
+        (player_id, match_id, rating_pool, rating_before, rating_after, rating_change)
+       VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)`,
       [
-        winner.id, match.id, Number(winner.rating), winnerAfter, winnerChange,
-        loser.id, match.id, Number(loser.rating), loserAfter, loserChange
+        winner.id, match.id, fields.pool, Number(winner.active_rating), winnerAfter, winnerChange,
+        loser.id, match.id, fields.pool, Number(loser.active_rating), loserAfter, loserChange
       ]
     );
     await connection.commit();
     return {
-      [winner.id]: { oldRating: Number(winner.rating), newRating: winnerAfter, ratingChange: winnerChange },
-      [loser.id]: { oldRating: Number(loser.rating), newRating: loserAfter, ratingChange: loserChange }
+      [winner.id]: { oldRating: Number(winner.active_rating), newRating: winnerAfter, ratingChange: winnerChange },
+      [loser.id]: { oldRating: Number(loser.active_rating), newRating: loserAfter, ratingChange: loserChange }
     };
   } catch (error) {
     await connection.rollback();
@@ -192,7 +196,8 @@ export async function recordMatchResultConflict(match, { reason, implicatedTicke
 
 export async function getPlayerMatchHistory(playerId) {
   const [rows] = await database.execute(
-    `SELECT m.id, opponent.display_name AS opponent, opponent.rating AS opponent_rating,
+    `SELECT m.id, opponent.display_name AS opponent,
+       CASE WHEN m.queue_id = 'team-games' THEN opponent.team_rating ELSE opponent.rating END AS opponent_rating,
        m.selected_map_name AS map_name, m.queue_id AS queue_type,
        CASE WHEN m.host_player_id = ? THEN m.host_civilization ELSE m.guest_civilization END AS civilization,
        CASE WHEN m.host_player_id = ? THEN m.guest_civilization ELSE m.host_civilization END AS opponent_civilization,

@@ -1192,19 +1192,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     void window.electronApi?.stopReplayEndDetection();
     setState((previous) => {
       const activeMatch = previous.activeMatch ? { ...previous.activeMatch, result, status: "completed" as const } : null;
-      const wins = result.outcome === "win" ? previous.currentUser.wins + 1 : previous.currentUser.wins;
-      const losses = result.outcome === "loss" ? previous.currentUser.losses + 1 : previous.currentUser.losses;
+      const isTeamRating = result.ratingPool === "team";
+      const wins = !isTeamRating && result.outcome === "win"
+        ? previous.currentUser.wins + 1
+        : previous.currentUser.wins;
+      const losses = !isTeamRating && result.outcome === "loss"
+        ? previous.currentUser.losses + 1
+        : previous.currentUser.losses;
       const updatedUser = {
         ...previous.currentUser,
-        rating: result.verified ? result.newRating : previous.currentUser.rating,
-        peakRating: result.verified
+        rating: result.verified && !isTeamRating ? result.newRating : previous.currentUser.rating,
+        peakRating: result.verified && !isTeamRating
           ? Math.max(previous.currentUser.peakRating, result.newRating)
           : previous.currentUser.peakRating,
-        division: result.verified ? getDivisionForRating(result.newRating) : previous.currentUser.division,
+        teamRating: result.verified && isTeamRating ? result.newRating : previous.currentUser.teamRating,
+        teamPeakRating: result.verified && isTeamRating
+          ? Math.max(previous.currentUser.teamPeakRating, result.newRating)
+          : previous.currentUser.teamPeakRating,
+        division: result.verified && !isTeamRating
+          ? getDivisionForRating(result.newRating)
+          : previous.currentUser.division,
         wins,
         losses,
         winRate: wins + losses > 0 ? Number(((wins / (wins + losses)) * 100).toFixed(1)) : 0,
-        streak: result.outcome === "win"
+        streak: isTeamRating
+          ? previous.currentUser.streak
+          : result.outcome === "win"
           ? Math.max(1, previous.currentUser.streak + 1)
           : result.outcome === "loss"
             ? Math.min(-1, previous.currentUser.streak - 1)
@@ -1214,7 +1227,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ? {
             id: activeMatch.id,
             opponent: activeMatch.opponent.displayName,
-            opponentRating: activeMatch.opponent.rating,
+            opponentRating: isTeamRating
+              ? activeMatch.opponent.teamRating
+              : activeMatch.opponent.rating,
             outcome: result.outcome,
             map: activeMatch.selectedMap?.name ?? "Arabia",
             civilization: activeMatch.queue.civilizationPreference?.civilization ?? "",

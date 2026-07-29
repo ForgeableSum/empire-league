@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { playerRatingForQueue, ratingPoolForQueue } from "./rating-pool.mjs";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   database,
@@ -297,6 +298,7 @@ function resultForTicket(match, ticket, replay, ratings) {
   const playerRatings = ratings[ticket.player.id];
   const won = ticket.player.aoeProfileId === replay.winnerProfileId;
   return {
+    ratingPool: ratingPoolForQueue(ticket.queueId),
     winnerProfileId: replay.winnerProfileId,
     loserProfileId: replay.loserProfileId,
     outcome: won ? "win" : "loss",
@@ -311,13 +313,15 @@ function resultForTicket(match, ticket, replay, ratings) {
 }
 
 function contestedResultForTicket(ticket) {
+  const currentRating = playerRatingForQueue(ticket.player, ticket.queueId);
   return {
+    ratingPool: ratingPoolForQueue(ticket.queueId),
     winnerProfileId: 0,
     loserProfileId: 0,
     outcome: "no_contest",
     reason: "unknown",
-    oldRating: ticket.player.rating,
-    newRating: ticket.player.rating,
+    oldRating: currentRating,
+    newRating: currentRating,
     ratingChange: 0,
     verified: false,
     verificationSource: "replay",
@@ -356,7 +360,10 @@ function hasCompletedMinimumQueueTime(ticket, now = Date.now()) {
 }
 
 function opponentPreference(ticket, candidate) {
-  const ratingDifference = Math.abs(Number(candidate.player.rating) - Number(ticket.player.rating));
+  const ratingDifference = Math.abs(
+    playerRatingForQueue(candidate.player, candidate.queueId)
+      - playerRatingForQueue(ticket.player, ticket.queueId)
+  );
   return [
     Number.isFinite(ratingDifference) ? ratingDifference : Number.MAX_SAFE_INTEGER,
     new Date(candidate.joinedAt).getTime()
@@ -382,7 +389,8 @@ function normalizeMaximumLowerOpponentRatingGap(value) {
 function allowsOpponentRating(ticket, candidate) {
   const maximumGap = ticket.maximumLowerOpponentRatingGap;
   return maximumGap === 0
-    || Number(candidate.player.rating) >= Number(ticket.player.rating) - maximumGap;
+    || playerRatingForQueue(candidate.player, candidate.queueId)
+      >= playerRatingForQueue(ticket.player, ticket.queueId) - maximumGap;
 }
 
 function sessionFor(match, ticket) {
