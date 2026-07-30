@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, History, Home, LogOut, Play, Settings, User, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, Gamepad2, History, Home, LogOut, Swords, Settings, User, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import appIcon from "../../assets/el_icon_no_plume.png";
 import { presenceService } from "../../services/presenceService";
@@ -7,7 +7,8 @@ import { WindowControls } from "./WindowControls";
 
 const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
   { page: "home", label: "Home", icon: <Home size={18} /> },
-  { page: "play", label: "Play", icon: <Play size={18} /> },
+  { page: "ranked", label: "Ranked", icon: <Swords size={18} /> },
+  { page: "custom", label: "Custom", icon: <Gamepad2 size={18} /> },
   { page: "match-history", label: "Match History", icon: <History size={18} /> },
   { page: "leaderboard", label: "Leaderboard", icon: <BarChart3 size={18} /> },
   { page: "profile", label: "Profile", icon: <User size={18} /> },
@@ -58,7 +59,7 @@ export function Shell({ children }: { children: ReactNode }) {
             >
               {item.icon}
               <span>{item.label}</span>
-              {item.page === "play" && state.queueStatus === "searching" && (
+              {item.page === "ranked" && state.queueStatus === "searching" && (
                 <span className="medieval-loader nav-search-loader" role="status" aria-label="Searching for a match">
                   <span aria-hidden="true" />
                   <span aria-hidden="true" />
@@ -120,7 +121,8 @@ export function Shell({ children }: { children: ReactNode }) {
 function titleFor(page: AppPage): string {
   return {
     home: "Home",
-    play: "Play",
+    ranked: "Ranked",
+    custom: "Custom",
     "match-history": "Match History",
     leaderboard: "Leaderboard",
     profile: "Player Profile",

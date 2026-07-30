@@ -13,6 +13,7 @@ import type {
   OpenLobbyResult
 } from "./gameIntegration.js";
 import type { Aoe2CivilizationSelection } from "../aoe2UiManifest.js";
+import type { LocalCustomContentCatalog } from "./customLobby.js";
 
 export interface SteamFamilyProbeResult {
   status: "owned" | "family_shared" | "unknown";
@@ -32,6 +33,7 @@ export interface SteamFamilyProbeResult {
 }
 
 export interface ElectronGameApi {
+  scanLocalCustomContent(): Promise<LocalCustomContentCatalog>;
   detectAoe2Installation(): Promise<GameInstallationStatus>;
   detectAoe2Process(): Promise<GameProcessStatus>;
   runSteamFamilyProbe(expectedSteamId?: string): Promise<SteamFamilyProbeResult>;

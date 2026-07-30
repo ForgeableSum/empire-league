@@ -18,7 +18,7 @@ export function HomePage() {
           <div className="rating-display">{user.rating}</div>
           <p>{formatDivisionForRating(user.rating)} · Global Rank #{user.rank.toLocaleString()}</p>
         </div>
-        <button className="primary large" type="button" onClick={() => setPage("play")}>
+        <button className="primary large" type="button" onClick={() => setPage("ranked")}>
           <Play size={20} /> Play 1v1
         </button>
       </div>

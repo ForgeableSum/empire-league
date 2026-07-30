@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, ipcMain, screen, shell } from "electron"
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
@@ -73,6 +73,148 @@ let replayEndPoller: NodeJS.Timeout | undefined;
 let replayFocusTimers: NodeJS.Timeout[] = [];
 let returnToMenuPoller: NodeJS.Timeout | undefined;
 let replayDetectionGeneration = 0;
+
+function selectScenarioVariants(
+  modName: string,
+  files: Array<{ path: string; name: string; size: number }>
+): Array<{ path: string; variant: string }> {
+  const targetVersion = Number(modName.match(/\bv(\d+)\b/i)?.[1] ?? 0);
+  const candidates = files
+    .filter((file) => file.size > 10_000 && !/(test|working|detached)/i.test(file.name))
+    .map((file) => {
+      const version = Number(file.name.match(/v\D*(\d+)/i)?.[1] ?? 0);
+      const variant = /random\s*position/i.test(file.name)
+        ? "Random Position"
+        : /team\s*free/i.test(file.name)
+          ? "Team Free"
+          : "Standard";
+      return { ...file, version, variant };
+    })
+    .filter((file) => {
+      if (file.variant !== "Standard") return true;
+      const suffix = file.name.replace(/^.*?v\D*\d+/i, "");
+      return !/[a-z]/i.test(suffix);
+    });
+
+  return ["Standard", "Random Position", "Team Free"].flatMap((variant) => {
+    const matching = candidates.filter((file) => file.variant === variant);
+    const exact = matching.filter((file) => file.version === targetVersion);
+    const eligible = exact.length
+      ? exact
+      : matching.filter((file) => !targetVersion || file.version <= targetVersion);
+    const selected = eligible.sort((left, right) => right.version - left.version || right.size - left.size)[0];
+    return selected ? [{ path: selected.path, variant }] : [];
+  });
+}
+
+async function scanLocalCustomContent() {
+  const profilesRoot = join(homedir(), "Games", "Age of Empires 2 DE");
+  const roots: string[] = [];
+  const maps: Array<{ id: string; name: string; kind: "map"; path: string; source: string }> = [];
+  const dataMods: Array<{ id: string; name: string; kind: "data_mod"; path: string; source: string }> = [];
+  const seen = new Set<string>();
+
+  const add = (kind: "map" | "data_mod", path: string, source: string, label?: string) => {
+    const name = (label || basename(path, extname(path))).trim();
+    const normalizedName = name.toLowerCase().replace(/\s+/g, " ");
+    const key = `${kind}:${normalizedName}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const item = {
+      id: Buffer.from(`${key}:${path.toLowerCase()}`).toString("base64url"),
+      name,
+      kind,
+      path,
+      source
+    };
+    (kind === "map" ? maps : dataMods).push(item as never);
+  };
+
+  const walk = async (
+    root: string,
+    source: string,
+    options: { modRoot?: string; modName?: string; scenarioFiles?: Array<{ path: string; name: string; size: number }> } = {},
+    depth = 0
+  ): Promise<void> => {
+    if (depth > 6) return;
+    let entries;
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const path = join(root, entry.name);
+      if (entry.isDirectory()) {
+        await walk(path, source, options, depth + 1);
+        continue;
+      }
+      const lower = entry.name.toLowerCase();
+      if (lower.endsWith(".rms")) add("map", path, source);
+      if (lower.endsWith(".aoe2scenario") && options.modRoot && options.scenarioFiles) {
+        const details = await stat(path).catch(() => null);
+        if (details) options.scenarioFiles.push({ path, name: basename(path, extname(path)), size: details.size });
+      }
+      if (lower.endsWith(".aoe2scenario") && !options.modRoot) add("map", path, source);
+      if (lower === "empires2_x2_p1.dat" || lower === "empires2_x2_p1.json") {
+        const modRoot = options.modRoot
+          ?? path.slice(0, Math.max(0, path.toLowerCase().lastIndexOf(`${join("resources", "_common").toLowerCase()}`)));
+        add("data_mod", modRoot || dirname(path), source, options.modName ?? basename(modRoot || dirname(path)));
+      }
+    }
+  };
+
+  const scanModsDirectory = async (modsRoot: string, source: string): Promise<void> => {
+    let modDirectories;
+    try {
+      modDirectories = await readdir(modsRoot, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    roots.push(modsRoot);
+    for (const mod of modDirectories) {
+      if (!mod.isDirectory()) continue;
+      const modRoot = join(modsRoot, mod.name);
+      const modName = mod.name.replace(/^\d+_/, "").trim();
+      const scenarioFiles: Array<{ path: string; name: string; size: number }> = [];
+      await walk(modRoot, source, { modRoot, modName, scenarioFiles });
+      for (const scenario of selectScenarioVariants(modName, scenarioFiles)) {
+        add("map", scenario.path, source, `${modName} — ${scenario.variant}`);
+      }
+    }
+  };
+
+  try {
+    for (const profile of await readdir(profilesRoot, { withFileTypes: true })) {
+      if (!profile.isDirectory()) continue;
+      const profileRoot = join(profilesRoot, profile.name);
+      for (const category of ["local", "subscribed"]) {
+        await scanModsDirectory(
+          join(profileRoot, "mods", category),
+          `${profile.name}/mods/${category}`
+        );
+      }
+      for (const candidate of [
+        join(profileRoot, "resources", "_common", "random-map-scripts"),
+        join(profileRoot, "resources", "_common", "scenario")
+      ]) {
+        try {
+          if ((await stat(candidate)).isDirectory()) {
+            roots.push(candidate);
+            await walk(candidate, relative(profilesRoot, candidate));
+          }
+        } catch {
+          // Custom content folders are optional.
+        }
+      }
+    }
+  } catch {
+    // AoE2 has not created a local profile directory yet.
+  }
+
+  const byName = <T extends { name: string }>(left: T, right: T) => left.name.localeCompare(right.name);
+  return { maps: maps.sort(byName), dataMods: dataMods.sort(byName), scannedRoots: roots, scannedAt: new Date().toISOString() };
+}
 
 const replayPollIntervalMs = 1500;
 const replayStartupWindowMs = 60_000;
@@ -1711,6 +1853,7 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 }
 
 export function registerGameHandlers(): void {
+  ipcMain.handle("game:scan-local-custom-content", scanLocalCustomContent);
   ipcMain.handle("game:set-lobby-input-lock", async (event, locked: boolean) => {
     const requested = locked === true;
     const applied = setWindowsInputBlocked(requested);

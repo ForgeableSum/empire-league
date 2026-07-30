@@ -20,7 +20,7 @@ import { estimateLobbySetupMs, recordLobbySetupDuration } from "../services/lobb
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
 
-type AppPage = "home" | "play" | "match-history" | "leaderboard" | "profile" | "social" | "settings";
+type AppPage = "home" | "ranked" | "custom" | "match-history" | "leaderboard" | "profile" | "social" | "settings";
 
 interface AppContextValue {
   state: AppState;
@@ -669,7 +669,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         activeMatch: null,
         error: null
       }));
-      setPage("play");
+      setPage("ranked");
       log(`Joined queue ${queue.id}`);
       unsubscribeRef.current = services.matchmaking.subscribeToQueue(ticket.id, (event) => {
         if (event.type === "range") {
@@ -691,7 +691,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             status: "match_found" as const
           };
           matchedSessionRef.current = matchedSession;
-          setPage("play");
+          setPage("ranked");
           setState((previous) => ({
             ...previous,
             queueStatus: "match_found",
@@ -1095,7 +1095,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const match = matchOverride ?? state.activeMatch;
     if (!match?.selectedMap) return;
     try {
-      setPage("play");
+      setPage("ranked");
       setState((previous) => ({ ...previous, queueStatus: "creating_lobby" }));
       log("Detecting AoE2 installation");
       const install = await services.game.detectInstallation();
@@ -1326,7 +1326,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       activeMatch: null,
       error: null
     }));
-    setPage("play");
+    setPage("ranked");
   }
 
   function updateMockConfig(patch: Partial<MockServiceConfig>): void {

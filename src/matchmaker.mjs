@@ -68,6 +68,57 @@ const socialFriendIds = new Map();
 const socialMessages = new Map();
 const socialUnread = new Map();
 const maxSocialMessagesPerConversation = 100;
+const customLobbies = new Map();
+
+function demoPlayer(id, displayName, slot, team, civilization, ready = true) {
+  return { id, displayName, slot, team, civilization, ready, host: slot === 1 };
+}
+
+for (const room of [
+  {
+    id: "demo-cba-requiem", name: "CBA Requiem — all welcome", hostId: "demo-cedric",
+    map: { id: "demo-cba", name: "CBA Requiem v293", kind: "map" },
+    players: [demoPlayer("demo-cedric", "SirCedric", 1, 1, "Random"), demoPlayer("demo-wololo", "WololoEnjoyer", 2, 2, "Random", false)],
+    maxPlayers: 8, status: "open", createdAt: new Date(Date.now() - 480_000).toISOString(), demo: true
+  },
+  {
+    id: "demo-arabia-2v2", name: "Chill Arabia 2v2", hostId: "demo-mango",
+    map: { id: "demo-arabia", name: "Arabia", kind: "map" },
+    players: [demoPlayer("demo-mango", "MangonelMike", 1, 1, "Mongols"), demoPlayer("demo-boar", "BoarLamer", 2, 2, "Goths"), demoPlayer("demo-vill", "IdleVillager", 3, 1, "Random", false)],
+    maxPlayers: 4, status: "open", createdAt: new Date(Date.now() - 260_000).toISOString(), demo: true
+  },
+  {
+    id: "demo-nomad", name: "Nomad FFA — beginners", hostId: "demo-sheep",
+    map: { id: "demo-nomad-map", name: "Land Nomad EL", kind: "map" },
+    players: [demoPlayer("demo-sheep", "MissingSheep", 1, 0, "Random"), demoPlayer("demo-castle", "CastleDropper", 2, 0, "Spanish")],
+    maxPlayers: 8, status: "open", createdAt: new Date(Date.now() - 90_000).toISOString(), demo: true
+  }
+]) {
+  customLobbies.set(room.id, {
+    ...room,
+    messages: [{ id: randomUUID(), author: "Lobby", text: `${room.name} created.`, sentAt: room.createdAt, system: true }]
+  });
+}
+
+function publicCustomRooms() {
+  return [...customLobbies.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+function broadcastCustomRooms() {
+  const message = { type: "custom_lobby_event", event: { type: "rooms_changed", rooms: publicCustomRooms() } };
+  for (const socket of webSocketServer.clients) {
+    if (socket.readyState === WebSocket.OPEN && socketSessions.get(socket)?.player) sendSocket(socket, message);
+  }
+}
+
+function playerCustomLobby(playerId) {
+  return [...customLobbies.values()].find((room) => room.players.some((player) => player.id === playerId));
+}
+
+function addLobbySystemMessage(room, text) {
+  room.messages.push({ id: randomUUID(), author: "Lobby", text, sentAt: new Date().toISOString(), system: true });
+  room.messages = room.messages.slice(-100);
+}
 
 function conversationKey(leftId, rightId) {
   return [leftId, rightId].sort().join(":");
@@ -877,6 +928,126 @@ async function handleRequest(request, response) {
           .filter(Boolean)
       );
       return send(response, 200, { onlinePlayers: playerIds.size });
+    }
+
+    if (request.method === "GET" && url.pathname === "/custom-lobbies") {
+      return send(response, 200, { rooms: publicCustomRooms() });
+    }
+
+    if (request.method === "POST" && url.pathname === "/custom-lobbies") {
+      if (playerCustomLobby(authenticatedPlayer.id)) return send(response, 409, { error: "Leave your current custom lobby first." });
+      const body = await readJson(request);
+      const name = String(body.name ?? "").trim().slice(0, 64);
+      if (!name) return send(response, 400, { error: "A lobby name is required." });
+      const room = {
+        id: randomUUID(),
+        name,
+        hostId: authenticatedPlayer.id,
+        ...(body.map?.name ? { map: { id: String(body.map.id), name: String(body.map.name).slice(0, 100), kind: "map" } } : {}),
+        ...(body.dataMod?.name ? { dataMod: { id: String(body.dataMod.id), name: String(body.dataMod.name).slice(0, 100), kind: "data_mod" } } : {}),
+        players: [{
+          id: authenticatedPlayer.id,
+          displayName: authenticatedPlayer.displayName,
+          ...(authenticatedPlayer.avatarUrl ? { avatarUrl: authenticatedPlayer.avatarUrl } : {}),
+          slot: 1, team: 1, civilization: "Random", ready: false, host: true
+        }],
+        messages: [],
+        maxPlayers: 8,
+        status: "open",
+        createdAt: new Date().toISOString()
+      };
+      addLobbySystemMessage(room, `${authenticatedPlayer.displayName} created the lobby.`);
+      customLobbies.set(room.id, room);
+      broadcastCustomRooms();
+      return send(response, 201, { room });
+    }
+
+    const joinCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/join$/);
+    if (request.method === "POST" && joinCustomLobby) {
+      const room = customLobbies.get(decodeURIComponent(joinCustomLobby[1]));
+      if (!room || room.status !== "open") return send(response, 404, { error: "That lobby is no longer available." });
+      const current = playerCustomLobby(authenticatedPlayer.id);
+      if (current && current.id !== room.id) return send(response, 409, { error: "Leave your current custom lobby first." });
+      if (!room.players.some((player) => player.id === authenticatedPlayer.id)) {
+        if (room.players.length >= room.maxPlayers) return send(response, 409, { error: "That lobby is full." });
+        const occupied = new Set(room.players.map((player) => player.slot));
+        const slot = Array.from({ length: room.maxPlayers }, (_, index) => index + 1).find((candidate) => !occupied.has(candidate));
+        room.players.push({
+          id: authenticatedPlayer.id, displayName: authenticatedPlayer.displayName,
+          ...(authenticatedPlayer.avatarUrl ? { avatarUrl: authenticatedPlayer.avatarUrl } : {}),
+          slot, team: slot % 2 ? 1 : 2, civilization: "Random", ready: false, host: false
+        });
+        addLobbySystemMessage(room, `${authenticatedPlayer.displayName} joined the lobby.`);
+        broadcastCustomRooms();
+      }
+      return send(response, 200, { room });
+    }
+
+    const leaveCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/leave$/);
+    if (request.method === "POST" && leaveCustomLobby) {
+      const room = customLobbies.get(decodeURIComponent(leaveCustomLobby[1]));
+      if (!room) return send(response, 404, { error: "Lobby not found." });
+      const member = room.players.find((player) => player.id === authenticatedPlayer.id);
+      if (!member) return send(response, 403, { error: "You are not in that lobby." });
+      room.players = room.players.filter((player) => player.id !== authenticatedPlayer.id);
+      if (!room.players.length || room.hostId === authenticatedPlayer.id) {
+        customLobbies.delete(room.id);
+      } else {
+        addLobbySystemMessage(room, `${authenticatedPlayer.displayName} left the lobby.`);
+      }
+      broadcastCustomRooms();
+      return send(response, 200, { left: true });
+    }
+
+    const updateCustomPlayer = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/player$/);
+    if (request.method === "PATCH" && updateCustomPlayer) {
+      const room = customLobbies.get(decodeURIComponent(updateCustomPlayer[1]));
+      const player = room?.players.find((item) => item.id === authenticatedPlayer.id);
+      if (!room || !player) return send(response, 403, { error: "You are not in that lobby." });
+      if (room.status !== "open") return send(response, 409, { error: "The lobby has already started." });
+      const body = await readJson(request);
+      if (Number.isInteger(body.team) && body.team >= 0 && body.team <= 4) player.team = body.team;
+      if (typeof body.civilization === "string" && body.civilization.length <= 40) player.civilization = body.civilization;
+      if (typeof body.ready === "boolean") player.ready = body.ready;
+      broadcastCustomRooms();
+      return send(response, 200, { player });
+    }
+
+    const customLobbyMessages = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/messages$/);
+    if (request.method === "POST" && customLobbyMessages) {
+      const room = customLobbies.get(decodeURIComponent(customLobbyMessages[1]));
+      if (!room?.players.some((player) => player.id === authenticatedPlayer.id)) return send(response, 403, { error: "You are not in that lobby." });
+      const body = await readJson(request);
+      const text = String(body.text ?? "").trim().slice(0, 500);
+      if (!text) return send(response, 400, { error: "A message is required." });
+      room.messages.push({ id: randomUUID(), playerId: authenticatedPlayer.id, author: authenticatedPlayer.displayName, text, sentAt: new Date().toISOString() });
+      room.messages = room.messages.slice(-100);
+      broadcastCustomRooms();
+      return send(response, 201, { sent: true });
+    }
+
+    const kickCustomPlayer = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/players\/([^/]+)$/);
+    if (request.method === "DELETE" && kickCustomPlayer) {
+      const room = customLobbies.get(decodeURIComponent(kickCustomPlayer[1]));
+      if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can remove players." });
+      const playerId = decodeURIComponent(kickCustomPlayer[2]);
+      if (playerId === room.hostId) return send(response, 400, { error: "The host cannot remove themselves." });
+      const removed = room.players.find((player) => player.id === playerId);
+      room.players = room.players.filter((player) => player.id !== playerId);
+      if (removed) addLobbySystemMessage(room, `${removed.displayName} was removed from the lobby.`);
+      broadcastCustomRooms();
+      return send(response, 200, { removed: Boolean(removed) });
+    }
+
+    const startCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/start$/);
+    if (request.method === "POST" && startCustomLobby) {
+      const room = customLobbies.get(decodeURIComponent(startCustomLobby[1]));
+      if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can start the lobby." });
+      if (!room.players.length || room.players.some((player) => !player.ready)) return send(response, 409, { error: "Every player must be ready." });
+      room.status = "started";
+      addLobbySystemMessage(room, "The host started the virtual lobby. AoE2 launch is not connected yet.");
+      broadcastCustomRooms();
+      return send(response, 200, { started: true });
     }
 
     if (request.method === "GET" && url.pathname === "/matches/history") {

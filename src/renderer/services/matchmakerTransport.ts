@@ -18,6 +18,7 @@ export type SocialEvent =
   | { type: "snapshot"; snapshot: import("./socialService").SocialSnapshot }
   | { type: "presence"; playerId: string; presence: import("../pages/SocialPage").FriendPresence; activity: string; mapName?: string }
   | { type: "message"; message: import("./socialService").SocialMessage };
+export type CustomLobbyEvent = { type: "rooms_changed"; rooms: import("../../shared/contracts/customLobby").CustomLobbyRoom[] };
 
 class MatchmakerTransport {
   private token: string | null = null;
@@ -31,6 +32,7 @@ class MatchmakerTransport {
   private reconnectAttempts = 0;
   private deliberatelyClosed = false;
   private socialListeners = new Set<(event: SocialEvent) => void>();
+  private customLobbyListeners = new Set<(event: CustomLobbyEvent) => void>();
 
   setToken(token: string | null): void {
     if (this.token === token) return;
@@ -76,6 +78,11 @@ class MatchmakerTransport {
     return () => this.socialListeners.delete(listener);
   }
 
+  onCustomLobbyEvent(listener: (event: CustomLobbyEvent) => void): UnsubscribeFunction {
+    this.customLobbyListeners.add(listener);
+    return () => this.customLobbyListeners.delete(listener);
+  }
+
   private connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN && !this.connectPromise) return Promise.resolve();
     if (this.connectPromise) return this.connectPromise;
@@ -110,7 +117,7 @@ class MatchmakerTransport {
       message?: string;
       ticketId?: string;
       sequence?: number;
-      event?: Parameters<QueueEventListener>[0] | SocialEvent;
+      event?: Parameters<QueueEventListener>[0] | SocialEvent | CustomLobbyEvent;
     };
     try {
       message = JSON.parse(String(event.data));
@@ -124,6 +131,10 @@ class MatchmakerTransport {
     }
     if (message.type === "social_event" && message.event) {
       for (const listener of this.socialListeners) listener(message.event as SocialEvent);
+      return;
+    }
+    if (message.type === "custom_lobby_event" && message.event) {
+      for (const listener of this.customLobbyListeners) listener(message.event as CustomLobbyEvent);
       return;
     }
     if (message.type === "response" && message.id) {

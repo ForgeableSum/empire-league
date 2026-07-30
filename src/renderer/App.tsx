@@ -1,5 +1,6 @@
 import { HomePage } from "./pages/HomePage";
 import { QueuePage } from "./pages/QueuePage";
+import { CustomPage } from "./pages/CustomPage";
 import { MatchHistoryPage } from "./pages/MatchHistoryPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { ProfilePage } from "./pages/ProfilePage";
@@ -231,7 +232,8 @@ export function App() {
       <LobbyInputForwarding locked={["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error} />
       <Shell>
         {page === "home" && <HomePage />}
-        {page === "play" && <QueuePage />}
+        {page === "ranked" && <QueuePage />}
+        {page === "custom" && <CustomPage />}
         {page === "match-history" && <MatchHistoryPage />}
         {page === "leaderboard" && <LeaderboardPage />}
         {page === "profile" && (
