@@ -29,6 +29,8 @@ const tickets = new Map();
 const matches = new Map();
 const playersJoiningQueue = new Set();
 const rematchCooldowns = new Map();
+const leaderboardCache = new Map();
+const leaderboardCacheTtlMs = 3 * 60 * 1000;
 const minimumQueueTimeMs = 15_000;
 const declinedPairCooldownMs = 30 * 1000;
 const matchSetupTimeoutMs = Number(process.env.MATCH_SETUP_TIMEOUT_MS ?? 120_000);
@@ -50,6 +52,33 @@ const teamRatingRangeSchedule = [
 ];
 let eventSequence = 0;
 let rematchCooldownCleanupTimer;
+
+async function getCachedLeaderboard(page) {
+  const safePage = Math.max(1, Math.floor(Number(page) || 1));
+  const now = Date.now();
+  const cached = leaderboardCache.get(safePage);
+  if (cached?.value && cached.expiresAt > now) return cached.value;
+  if (cached?.promise) return cached.promise;
+
+  for (const [cachedPage, entry] of leaderboardCache) {
+    if (!entry.promise && entry.expiresAt <= now) leaderboardCache.delete(cachedPage);
+  }
+
+  const promise = getLeaderboard(safePage, 100)
+    .then((value) => {
+      leaderboardCache.set(safePage, {
+        value,
+        expiresAt: Date.now() + leaderboardCacheTtlMs
+      });
+      return value;
+    })
+    .catch((error) => {
+      leaderboardCache.delete(safePage);
+      throw error;
+    });
+  leaderboardCache.set(safePage, { promise, expiresAt: 0 });
+  return promise;
+}
 
 function send(response, status, body) {
   response.writeHead(status, {
@@ -781,7 +810,8 @@ async function handleRequest(request, response) {
     }
 
     if (request.method === "GET" && url.pathname === "/leaderboard") {
-      return send(response, 200, { players: await getLeaderboard() });
+      const page = Number(url.searchParams.get("page") ?? 1);
+      return send(response, 200, await getCachedLeaderboard(page));
     }
 
     if (request.method === "POST" && url.pathname === "/queue") {

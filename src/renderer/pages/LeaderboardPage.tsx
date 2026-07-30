@@ -14,23 +14,29 @@ export function LeaderboardPage() {
   const [query, setQuery] = useState("");
   const [division, setDivision] = useState("all");
   const [players, setPlayers] = useState<PlayerProfile[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void leaderboardService.list()
+    setLoadError(null);
+    void leaderboardService.list(page)
       .then((result) => {
-        if (!cancelled) setPlayers(result);
+        if (!cancelled) {
+          setPlayers(result.players);
+          setTotal(result.total);
+        }
       })
       .catch((error) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : "Leaderboard could not be loaded.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
-      });
+    });
     return () => { cancelled = true; };
-  }, []);
+  }, [page]);
   const rows = useMemo(
     () =>
       players.filter((player) => {
@@ -45,6 +51,20 @@ export function LeaderboardPage() {
     ...(["Copper", "Bronze", "Silver", "Gold", "Platinum", "Diamond", "Master", "Grandmaster"] satisfies Division[])
       .map((item) => ({ value: item, label: `${item} (${formatDivisionRatingRange(item)})` }))
   ];
+  const totalPages = Math.max(1, Math.ceil(total / 100));
+  const firstRank = total === 0 ? 0 : (page - 1) * 100 + 1;
+  const lastRank = Math.min(page * 100, total);
+  const pagination = (
+    <LeaderboardPagination
+      page={page}
+      totalPages={totalPages}
+      firstRank={firstRank}
+      lastRank={lastRank}
+      total={total}
+      loading={loading}
+      onPageChange={setPage}
+    />
+  );
 
   return (
     <section className="stack">
@@ -56,6 +76,7 @@ export function LeaderboardPage() {
         <ThemedSelect className="division-field" label="Division" options={divisionOptions} value={division} onChange={setDivision} />
       </div>
       <div className="panel">
+        <div className="leaderboard-pagination-top">{pagination}</div>
         <div className="leaderboard-table">
           <div className="leader-row leader-header" aria-hidden="true">
             <strong>Rank</strong>
@@ -85,8 +106,76 @@ export function LeaderboardPage() {
           {!loading && loadError && <div className="empty-state">{loadError}</div>}
           {!loading && !loadError && rows.length === 0 && <div className="empty-state">No leaderboard results.</div>}
         </div>
+        <div className="leaderboard-pagination-bottom">{pagination}</div>
       </div>
     </section>
+  );
+}
+
+function LeaderboardPagination({
+  page,
+  totalPages,
+  firstRank,
+  lastRank,
+  total,
+  loading,
+  onPageChange
+}: {
+  page: number;
+  totalPages: number;
+  firstRank: number;
+  lastRank: number;
+  total: number;
+  loading: boolean;
+  onPageChange: (page: number) => void;
+}) {
+  const pageItems: Array<number | "ellipsis"> = totalPages <= 7
+    ? Array.from({ length: totalPages }, (_, index) => index + 1)
+    : page <= 4
+      ? [1, 2, 3, 4, 5, "ellipsis", totalPages]
+      : page >= totalPages - 3
+        ? [1, "ellipsis", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+        : [1, "ellipsis", page - 1, page, page + 1, "ellipsis", totalPages];
+
+  return (
+    <nav className="leaderboard-pagination" aria-label="Leaderboard pages">
+      <button
+        className="secondary leaderboard-page-step"
+        type="button"
+        disabled={loading || page === 1}
+        onClick={() => onPageChange(page - 1)}
+      >
+        Previous
+      </button>
+      <div className="leaderboard-page-numbers">
+        {pageItems.map((item, index) => item === "ellipsis"
+          ? <span className="leaderboard-page-ellipsis" key={`ellipsis-${index}`} aria-hidden="true">…</span>
+          : (
+            <button
+              className="leaderboard-page-number"
+              type="button"
+              key={item}
+              aria-current={item === page ? "page" : undefined}
+              disabled={loading}
+              onClick={() => onPageChange(item)}
+            >
+              {item}
+            </button>
+          ))}
+      </div>
+      <button
+        className="secondary leaderboard-page-step"
+        type="button"
+        disabled={loading || page >= totalPages}
+        onClick={() => onPageChange(page + 1)}
+      >
+        Next
+      </button>
+      <span className="leaderboard-page-status">
+        Page {page} of {totalPages}
+        {total > 0 && <small>Players {firstRank}–{lastRank} of {total.toLocaleString()}</small>}
+      </span>
+    </nav>
   );
 }
 

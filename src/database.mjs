@@ -255,9 +255,12 @@ export async function getPlayerMatchHistory(playerId) {
   }));
 }
 
-export async function getLeaderboard(limit = 500) {
-  const safeLimit = Math.max(1, Math.min(500, Number(limit) || 500));
-  const [rows] = await database.query(
+export async function getLeaderboard(page = 1, pageSize = 100) {
+  const safePageSize = Math.max(1, Math.min(100, Number(pageSize) || 100));
+  const safePage = Math.max(1, Math.floor(Number(page) || 1));
+  const offset = (safePage - 1) * safePageSize;
+  const [[rows], [countRows]] = await Promise.all([
+    database.query(
     `SELECT id, aoe_profile_id, steam_id, display_name, avatar_url, country_code,
             rating, peak_rating, team_rating, team_peak_rating,
             legacy_solo_wins, legacy_solo_losses, legacy_team_wins, legacy_team_losses,
@@ -265,9 +268,11 @@ export async function getLeaderboard(limit = 500) {
             RANK() OVER (ORDER BY rating DESC) AS ladder_rank
      FROM players
      ORDER BY rating DESC, wins DESC, display_name ASC
-     LIMIT ${safeLimit}`
-  );
-  return rows.map((row) => {
+     LIMIT ${safePageSize} OFFSET ${offset}`
+    ),
+    database.query("SELECT COUNT(*) AS total FROM players")
+  ]);
+  const players = rows.map((row) => {
     const wins = Number(row.wins);
     const losses = Number(row.losses);
     const games = wins + losses;
@@ -297,6 +302,12 @@ export async function getLeaderboard(limit = 500) {
       recentForm: []
     };
   });
+  return {
+    players,
+    page: safePage,
+    pageSize: safePageSize,
+    total: Number(countRows[0]?.total ?? 0)
+  };
 }
 
 function divisionForRating(rating) {
