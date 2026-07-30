@@ -80,7 +80,7 @@ export function CustomPage() {
         </div>
         <div className="button-row">
           <button className="secondary" type="button" onClick={() => void refresh()} disabled={loading}><RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh</button>
-          <button className="primary" type="button" disabled={state.gameStatus === "loading"} onClick={() => void openCreateRoom()}><Plus size={17} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "Create Lobby"}</button>
+          {!creating && <button className="primary" type="button" disabled={state.gameStatus === "loading"} onClick={() => void openCreateRoom()}><Plus size={17} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "Create Lobby"}</button>}
         </div>
       </div>
 
