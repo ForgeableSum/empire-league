@@ -2175,10 +2175,13 @@ export function registerGameHandlers(): void {
     if (process.platform !== "win32") {
       return { sent: false, message: "Lobby automation is only supported on Windows." };
     }
-    if (contentKind === "map" && !normalizedMapName) {
+    if (!isCustomAutomation && !(normalizedMapName in aoe2UiManifest.mapPicker.entries)) {
       return { sent: false, message: "A supported AoE2 map name is required." };
     }
-    if (contentKind === "scenario" && !normalizedMapName) {
+    if (isCustomAutomation && contentKind === "map" && !normalizedMapName) {
+      return { sent: false, message: "A supported AoE2 map name is required." };
+    }
+    if (isCustomAutomation && contentKind === "scenario" && !normalizedMapName) {
       return { sent: false, message: "An AoE2 scenario name is required." };
     }
     if (![2, 4, 8].includes(playerCount)) {
@@ -2190,11 +2193,10 @@ export function registerGameHandlers(): void {
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    const gameProcess = await detectAoe2Process();
-    if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
+    let gameProcess = isCustomAutomation ? await detectAoe2Process() : undefined;
+    if (isCustomAutomation && (!gameProcess?.running || !gameProcess.pid || !gameProcess.windowReady)) {
       return { sent: false, message: "The AoE2 game window was not ready." };
     }
-    const gamePid: number = gameProcess.pid;
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     let sequenceCompleted = false;
@@ -2211,6 +2213,12 @@ export function registerGameHandlers(): void {
         }, 60_000);
       }
       const inputGuardStarted = await startInputGuard(appWindow);
+      if (!isCustomAutomation) {
+        gameProcess = await detectAoe2Process();
+        if (!gameProcess.running || !gameProcess.pid) {
+          return { sent: false, message: "The AoE2 process was not found." };
+        }
+      }
       if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
       if (inputGuardStarted && !guardedSenders.has(event.sender)) {
         guardedSenders.add(event.sender);
@@ -2220,6 +2228,8 @@ export function registerGameHandlers(): void {
         });
       }
       emitLog(`INPUT_LOCK|Requested=True|BlockInput=${inputBlocked}|Guard=${inputGuardStarted}|Source=CreateLobby`);
+      const gamePid = gameProcess?.pid;
+      if (!gamePid) throw new Error("The AoE2 process was not found.");
       emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(gamePid)}`);
       const process = { ...gameProcess, pid: gamePid };
       const clickStep = async (
