@@ -137,6 +137,19 @@ export const aoe2UiManifest = {
     searchSettleMs: 750,
     selectionSettleMs: 1_000
   },
+  scenarioPicker: {
+    gameModePoint: [3049, 658] as const,
+    setScenarioPoint: [3045, 725] as const,
+    searchPoint: [1035, 489] as const,
+    firstResultPoint: [738, 667] as const,
+    loadScenarioPoint: [1907, 1857] as const,
+    modeMenuSettleMs: 300,
+    recommendedSettingsSettleMs: 750,
+    openSettleMs: 1_000,
+    searchSettleMs: 750,
+    selectionSettleMs: 300,
+    loadSettleMs: 2_000
+  },
   civilizationGrid: {
     columns: 9,
     columnCenters: [248, 501, 755, 1007, 1259, 1512, 1764, 2018, 2271],

@@ -1,14 +1,18 @@
 import { Check, Crown, LogIn, MessageSquare, Plus, RefreshCw, Send, Shield, Users, X } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { civilizations } from "../../shared/civilizations";
+import type { Aoe2CivilizationSelection } from "../../shared/aoe2UiManifest";
 import type { CustomLobbyRoom, LocalCustomContent, LocalCustomContentCatalog } from "../../shared/contracts/customLobby";
+import { lobbySetupTiming } from "../../shared/runtimeConfig";
 import { customLobbyService } from "../services/customLobbyService";
+import { replayHasEnded } from "../services/replayMetadataService";
+import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import { useAppStore } from "../state/appStore";
 
 const emptyCatalog: LocalCustomContentCatalog = { maps: [], dataMods: [], scannedRoots: [], scannedAt: new Date(0).toISOString() };
 
 export function CustomPage() {
-  const { state, notify } = useAppStore();
+  const { state, notify, ensureAoe2Ready } = useAppStore();
   const [rooms, setRooms] = useState<CustomLobbyRoom[]>([]);
   const [catalog, setCatalog] = useState(emptyCatalog);
   const [loading, setLoading] = useState(true);
@@ -57,6 +61,10 @@ export function CustomPage() {
     }
   }
 
+  async function openCreateRoom() {
+    if (await ensureAoe2Ready()) setCreating(true);
+  }
+
   if (activeRoom) {
     return <NetworkLobby room={activeRoom} currentPlayerId={state.currentUser.id} notify={notify} />;
   }
@@ -71,7 +79,7 @@ export function CustomPage() {
         </div>
         <div className="button-row">
           <button className="secondary" type="button" onClick={() => void refresh()} disabled={loading}><RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh</button>
-          <button className="primary" type="button" onClick={() => setCreating(true)}><Plus size={17} /> Create Lobby</button>
+          <button className="primary" type="button" disabled={state.gameStatus === "loading"} onClick={() => void openCreateRoom()}><Plus size={17} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "Create Lobby"}</button>
         </div>
       </div>
 
@@ -79,11 +87,11 @@ export function CustomPage() {
         <article className="panel custom-create-card">
           <div className="custom-create-heading"><div><span className="eyebrow">New room</span><h2>Lobby settings</h2></div></div>
           <label>Lobby name<input value={lobbyName} maxLength={64} onChange={(event) => setLobbyName(event.target.value)} /></label>
-          <ContentSelect label="Map or scenario (optional)" items={catalog.maps} value={mapId} onChange={setMapId} />
+          <ContentSelect label="Map or scenario" items={catalog.maps} value={mapId} onChange={setMapId} />
           <ContentSelect label="Data mod (optional)" items={catalog.dataMods} value={dataModId} onChange={setDataModId} />
           <div className="custom-scan-meta"><span>{catalog.maps.length} maps/scenarios</span><span>{catalog.dataMods.length} data mods</span><span>{catalog.scannedRoots.length} folders scanned</span></div>
           <div className="custom-create-actions">
-            <button className="primary large" type="button" disabled={!lobbyName.trim() || pending} onClick={() => void createRoom()}>{pending ? "Creating…" : "Create Lobby"}</button>
+            <button className="primary large" type="button" disabled={!lobbyName.trim() || !mapId || pending} onClick={() => void createRoom()}>{pending ? "Creating…" : "Create Lobby"}</button>
             <button className="secondary large" type="button" disabled={pending} onClick={() => setCreating(false)}>Cancel</button>
           </div>
         </article>
@@ -110,7 +118,7 @@ export function CustomPage() {
 }
 
 function ContentSelect({ label, items, value, onChange }: { label: string; items: LocalCustomContent[]; value: string; onChange: (value: string) => void }) {
-  return <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}><option value="">None / standard content</option>{items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>{value && <small>{items.find((item) => item.id === value)?.source}</small>}</label>;
+  return <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}><option value="">Choose content…</option>{items.map((item) => <option key={item.id} value={item.id}>{item.kind === "scenario" ? "[Scenario] " : "[Map] "}{item.name}</option>)}</select>{value && <small>{items.find((item) => item.id === value)?.source}</small>}</label>;
 }
 
 function NetworkLobby({ room, currentPlayerId, notify }: {
@@ -119,11 +127,177 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
   notify: ReturnType<typeof useAppStore>["notify"];
 }) {
   const [draft, setDraft] = useState("");
+  const automationSteps = useRef(new Set<string>());
+  const replayResultInFlight = useRef(false);
   const me = room.players.find((player) => player.id === currentPlayerId)!;
   const isHost = room.hostId === currentPlayerId;
   const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => room.players.find((player) => player.slot === index + 1)), [room]);
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
+
+  useEffect(() => {
+    if (room.status === "open") {
+      automationSteps.current.clear();
+      return;
+    }
+    if (room.status !== "launching" || !window.electronApi) return;
+    const content = room.map;
+    const hostSetupKey = `${room.id}:host-setup`;
+    if (isHost && !room.platformLobbyId && !automationSteps.current.has(hostSetupKey)) {
+      automationSteps.current.add(hostSetupKey);
+      void (async () => {
+        try {
+          if (!content) throw new Error("Choose a map or scenario before starting.");
+          await ensureAoe2Running();
+          const result = await window.electronApi!.runAoe2CreateLobbySequence(content.gameName, 8, content.kind === "scenario" ? "scenario" : "map");
+          if (!result.sent || !result.lobbyUri) throw new Error(result.message || "AoE2 lobby creation failed.");
+          await customLobbyService.publish(room.id, result.lobbyUri);
+        } catch (error) {
+          await customLobbyService.failStart(room.id, messageFor(error));
+          automationSteps.current.delete(hostSetupKey);
+        }
+      })();
+      return;
+    }
+
+    const guestJoinKey = `${room.id}:guest-join`;
+    if (!isHost && room.platformLobbyId && !me.aoeJoined && !automationSteps.current.has(guestJoinKey)) {
+      automationSteps.current.add(guestJoinKey);
+      void (async () => {
+        try {
+          const opened = await window.electronApi!.openAoe2Lobby(room.platformLobbyId!);
+          if (!opened.opened) throw new Error("AoE2 did not open the custom lobby.");
+          if (content?.kind !== "scenario") await applyMapPlayerSettings(me);
+          await customLobbyService.reportJoined(room.id);
+        } catch (error) {
+          notify("Could not join the AoE2 lobby.", "danger", { detail: messageFor(error), durationMs: null });
+          automationSteps.current.delete(guestJoinKey);
+        }
+      })();
+      return;
+    }
+
+    const hostPlayer = room.players.find((player) => player.host);
+    const guestReadyKey = `${room.id}:guest-ready`;
+    if (!isHost && me.aoeJoined && hostPlayer?.aoeReady && !me.aoeReady && !automationSteps.current.has(guestReadyKey)) {
+      automationSteps.current.add(guestReadyKey);
+      void (async () => {
+        try {
+          let ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
+          if (!ready.sent) {
+            await window.electronApi!.runAoe2LobbyCursorAction("content-confirm");
+            ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
+          }
+          if (!ready.sent) throw new Error(ready.message || "AoE2 could not ready the player.");
+          await customLobbyService.reportAoeReady(room.id);
+        } catch (error) {
+          notify("Could not ready in the AoE2 lobby.", "danger", { detail: messageFor(error), durationMs: null });
+          automationSteps.current.delete(guestReadyKey);
+        }
+      })();
+      return;
+    }
+
+    const guestsJoined = room.players.filter((player) => !player.host).every((player) => player.aoeJoined);
+    const hostReadyKey = `${room.id}:host-ready`;
+    if (isHost && room.platformLobbyId && guestsJoined && !me.aoeReady && !automationSteps.current.has(hostReadyKey)) {
+      automationSteps.current.add(hostReadyKey);
+      void (async () => {
+        try {
+          if (content?.kind !== "scenario") await applyMapPlayerSettings(me);
+          const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
+          if (!ready.sent) throw new Error(ready.message || "AoE2 could not ready the host.");
+          await customLobbyService.reportAoeReady(room.id);
+        } catch (error) {
+          await customLobbyService.failStart(room.id, messageFor(error));
+          automationSteps.current.delete(hostReadyKey);
+        }
+      })();
+      return;
+    }
+
+    const allAoeReady = room.players.every((player) => player.aoeReady);
+    const startKey = `${room.id}:aoe-start`;
+    if (isHost && allAoeReady && !automationSteps.current.has(startKey)) {
+      automationSteps.current.add(startKey);
+      void (async () => {
+        try {
+          const started = await window.electronApi!.runAoe2LobbyCursorAction("start");
+          if (!started.sent) throw new Error(started.message || "AoE2 could not start the game.");
+          await customLobbyService.completeStart(room.id);
+        } catch (error) {
+          await customLobbyService.failStart(room.id, messageFor(error));
+          automationSteps.current.delete(startKey);
+        }
+      })();
+    }
+  }, [room, isHost, me, notify]);
+
+  useEffect(() => {
+    if (room.status !== "started" || !window.electronApi) return;
+    const revealKey = `${room.id}:reveal-game`;
+    if (automationSteps.current.has(revealKey)) return;
+    automationSteps.current.add(revealKey);
+
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const detection = await window.electronApi!.startReplayEndDetection();
+          if (!detection.started) throw new Error(detection.message || "Replay detection could not be started.");
+          await stopYouTubeShorts();
+          await window.electronApi!.focusAoe2();
+        } catch (error) {
+          notify("Post-game return detection could not be started.", "danger", { detail: messageFor(error) });
+        } finally {
+          await window.electronApi!.setLobbyInputLock(false);
+        }
+      })();
+    }, lobbySetupTiming.revealAfterStartMs);
+
+    return () => window.clearTimeout(timer);
+  }, [room.id, room.status]);
+
+  useEffect(() => {
+    if (room.status !== "started" || !window.electronApi) return;
+    return window.electronApi.onReplayEnded((filePath) => {
+      if (replayResultInFlight.current) return;
+      replayResultInFlight.current = true;
+      void replayHasEnded(filePath)
+        .then(async (ended) => {
+          if (!ended) {
+            replayResultInFlight.current = false;
+            return;
+          }
+          await window.electronApi!.confirmReplayEnded();
+        })
+        .catch((error) => {
+          replayResultInFlight.current = false;
+          notify("The finished custom game could not be detected.", "danger", { detail: messageFor(error) });
+        });
+    });
+  }, [room.status, notify]);
+
+  async function ensureAoe2Running() {
+    const process = await window.electronApi!.detectAoe2Process();
+    if (process.running) return;
+    const launched = await window.electronApi!.launchAoe2();
+    if (!launched.launched) throw new Error(launched.message || "AoE2 could not be launched.");
+    const deadline = Date.now() + 45_000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1_000));
+      if ((await window.electronApi!.detectAoe2Process()).windowReady) return;
+    }
+    throw new Error("AoE2 did not become ready in time.");
+  }
+
+  async function applyMapPlayerSettings(player: CustomLobbyRoom["players"][number]) {
+    const civilization = await window.electronApi!.selectAoe2Civilization(player.civilization as Aoe2CivilizationSelection, player.slot);
+    if (!civilization.sent) throw new Error(civilization.message);
+    if (player.team === 1 || player.team === 2) {
+      const team = await window.electronApi!.selectAoe2Team(player.team, player.slot);
+      if (!team.sent) throw new Error(team.message);
+    }
+  }
   function submitChat(event: FormEvent) {
     event.preventDefault();
     if (!draft.trim()) return;
@@ -139,11 +313,14 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
       </div>
       <div className="custom-lobby-layout">
         <article className="panel lobby-roster">
+          {room.map?.kind === "scenario" && <p className="scenario-settings-note">This scenario defines its own player slots, civilizations, teams, and map.</p>}
           <div className="lobby-roster-header"><strong>Players</strong><span>Team</span><span>Civilization</span><span>Status</span></div>
           {slots.map((player, index) => (
             <div className={player ? "lobby-player-row occupied" : "lobby-player-row"} key={index}>
               <div className="lobby-player-name"><span className="lobby-slot-number">{index + 1}</span>{player ? <><Shield size={17} /><strong>{player.displayName}</strong>{player.host && <Crown size={15} />} {isHost && !player.host && <button className="lobby-kick" aria-label={`Remove ${player.displayName}`} onClick={() => act(customLobbyService.kick(room.id, player.id))}><X size={13} /></button>}</> : <span>Open slot</span>}</div>
-              {player && (player.id === currentPlayerId ? <>
+              {player && room.map?.kind === "scenario" ? <><span>Scenario</span><span>Scenario-defined</span>{player.id === currentPlayerId
+                ? <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
+                : <span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span>}</> : player && (player.id === currentPlayerId ? <>
                 <select value={player.team} onChange={(event) => act(customLobbyService.updatePlayer(room.id, { team: Number(event.target.value) }))}><option value={0}>—</option>{[1, 2, 3, 4].map((team) => <option value={team} key={team}>Team {team}</option>)}</select>
                 <select value={player.civilization} onChange={(event) => act(customLobbyService.updatePlayer(room.id, { civilization: event.target.value }))}><option>Random</option>{civilizations.map((civilization) => <option key={civilization}>{civilization}</option>)}</select>
                 <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
@@ -157,7 +334,7 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
           <form onSubmit={submitChat}><input placeholder="Message lobby…" value={draft} onChange={(event) => setDraft(event.target.value)} /><button className="primary" aria-label="Send"><Send size={17} /></button></form>
         </aside>
       </div>
-      <div className="custom-lobby-actions"><span>{room.status === "started" ? "Virtual game started. AoE2 launch is not connected yet." : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>{isHost && <button className="primary large" disabled={room.status !== "open" || !room.players.every((player) => player.ready)} onClick={() => act(customLobbyService.start(room.id))}>Start Game</button>}</div>
+      <div className="custom-lobby-actions"><span>{room.status === "started" ? "AoE2 game started." : room.status === "launching" ? "Creating and synchronizing the AoE2 lobby…" : room.automationError ? room.automationError : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>{isHost && <button className="primary large" disabled={room.status !== "open" || !room.map || !room.players.every((player) => player.ready)} onClick={() => act(customLobbyService.start(room.id))}>Start Game</button>}</div>
     </section>
   );
 }

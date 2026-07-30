@@ -63,6 +63,7 @@ const GetPixel = gdi32?.func("uint32_t __stdcall GetPixel(HANDLE dc, int32_t x, 
 const Sleep = kernel32?.func("void __stdcall Sleep(uint32_t milliseconds)");
 const GetLastError = kernel32?.func("uint32_t __stdcall GetLastError()");
 const SetLastError = kernel32?.func("void __stdcall SetLastError(uint32_t errorCode)");
+const VkKeyScanW = user32?.func("int16_t __stdcall VkKeyScanW(char16_t character)");
 const CreateToolhelp32Snapshot = kernel32?.func("HANDLE __stdcall CreateToolhelp32Snapshot(uint32_t flags, uint32_t processId)");
 const Process32FirstW = kernel32?.func("bool __stdcall Process32FirstW(HANDLE snapshot, _Inout_ EL_PROCESSENTRY32W *entry)");
 const Process32NextW = kernel32?.func("bool __stdcall Process32NextW(HANDLE snapshot, _Inout_ EL_PROCESSENTRY32W *entry)");
@@ -115,19 +116,25 @@ export function detectAoe2NativeProcess(): NativeProcessStatus {
       th32ProcessID: number;
       szExeFile: string;
     };
+    let fallbackProcessId: number | undefined;
     let hasEntry = Boolean(Process32FirstW!(snapshot, entry));
     while (hasEntry) {
       if (entry.szExeFile?.toLowerCase() === "aoe2de_s.exe") {
+        fallbackProcessId ??= entry.th32ProcessID;
         const window = findLargestProcessWindow(entry.th32ProcessID);
-        return {
-          running: true,
-          pid: entry.th32ProcessID,
-          windowReady: Boolean(window) && !IsHungAppWindow!(window)
-        };
+        if (window && !IsHungAppWindow!(window)) {
+          return {
+            running: true,
+            pid: entry.th32ProcessID,
+            windowReady: true
+          };
+        }
       }
       hasEntry = Boolean(Process32NextW!(snapshot, entry));
     }
-    return { running: false, windowReady: false };
+    return fallbackProcessId
+      ? { running: true, pid: fallbackProcessId, windowReady: false }
+      : { running: false, windowReady: false };
   } finally {
     CloseHandle!(snapshot);
   }
@@ -488,7 +495,11 @@ export async function sendAoe2Tab(processId: number): Promise<NativeInputResult>
   };
 }
 
-export async function sendAoe2Text(processId: number, text: string): Promise<NativeInputResult> {
+export async function sendAoe2Text(
+  processId: number,
+  text: string,
+  options: { triggerKeyEvents?: boolean } = {}
+): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
@@ -498,6 +509,21 @@ export async function sendAoe2Text(processId: number, text: string): Promise<Nat
 
   const results = [];
   for (const character of text) {
+    if (options.triggerKeyEvents) {
+      const keyMapping = Number(VkKeyScanW!(character.charCodeAt(0)));
+      if (keyMapping === -1) return { sent: false, detail: `KEY_MAPPING_NOT_FOUND|Character=${character}` };
+      const virtualKey = keyMapping & 0xff;
+      const shiftRequired = (keyMapping & 0x0100) !== 0;
+      if (shiftRequired) sendWindowMessage(window, 0x0100, 0x10, 1);
+      sendWindowMessage(window, 0x0100, virtualKey, 1);
+      const characterResult = sendWindowMessage(window, 0x0102, character.charCodeAt(0), 1);
+      sendWindowMessage(window, 0x0101, virtualKey, -2147483647);
+      if (shiftRequired) sendWindowMessage(window, 0x0101, 0x10, -2147483647);
+      results.push(characterResult);
+      if (!characterResult.dispatched) break;
+      await delay(15);
+      continue;
+    }
     const result = sendWindowMessage(window, 0x0102, character.charCodeAt(0), 1);
     results.push(result);
     if (!result.dispatched) break;
@@ -508,7 +534,7 @@ export async function sendAoe2Text(processId: number, text: string): Promise<Nat
     sent,
     detail: [
       sent ? "SENT" : "SEND_FAILED",
-      "Mode=WindowMessageText",
+      `Mode=${options.triggerKeyEvents ? "WindowMessageKeyText" : "WindowMessageText"}`,
       `Characters=${results.length}/${text.length}`,
       `ElapsedMs=${results.reduce((total, result) => total + result.elapsedMs, 0).toFixed(1)}`
     ].join("|")

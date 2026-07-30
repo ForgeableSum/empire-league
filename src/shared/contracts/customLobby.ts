@@ -1,8 +1,9 @@
-export type CustomContentKind = "map" | "data_mod";
+export type CustomContentKind = "map" | "scenario" | "data_mod";
 
 export interface LocalCustomContent {
   id: string;
   name: string;
+  gameName: string;
   kind: CustomContentKind;
   path: string;
   source: string;
@@ -24,6 +25,8 @@ export interface CustomLobbyPlayer {
   civilization: string;
   ready: boolean;
   host: boolean;
+  aoeJoined?: boolean;
+  aoeReady?: boolean;
 }
 
 export interface CustomLobbyMessage {
@@ -39,12 +42,14 @@ export interface CustomLobbyRoom {
   id: string;
   name: string;
   hostId: string;
-  map?: Pick<LocalCustomContent, "id" | "name" | "kind">;
+  map?: Pick<LocalCustomContent, "id" | "name" | "gameName" | "kind">;
   dataMod?: Pick<LocalCustomContent, "id" | "name" | "kind">;
   players: CustomLobbyPlayer[];
   messages: CustomLobbyMessage[];
   maxPlayers: number;
-  status: "open" | "started";
+  status: "open" | "launching" | "started";
+  platformLobbyId?: string;
+  automationError?: string;
   createdAt: string;
   demo?: boolean;
 }

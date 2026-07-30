@@ -30,6 +30,7 @@ interface AppContextValue {
   openPlayerProfile: (playerId: string) => void;
   returnFromPlayerProfile: () => void;
   queues: QueueDefinition[];
+  ensureAoe2Ready: () => Promise<boolean>;
   startQueue: (queue: QueueDefinition) => Promise<void>;
   updateActiveQueue: (queue: QueueDefinition) => Promise<void>;
   cancelQueue: () => Promise<void>;
@@ -432,6 +433,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function ensureAoe2Ready(): Promise<boolean> {
+    if (!window.electronApi) return true;
+    const gameProcess = await window.electronApi.detectAoe2Process();
+    if (gameProcess.running && gameProcess.windowReady && gameProcess.owned) return true;
+    return launchAoe2ForMatchmaking();
+  }
+
   async function recoverAoe2AfterLobbyFailure(): Promise<boolean> {
     let recoveryNotificationId: string | null = null;
     try {
@@ -618,15 +626,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (state.gameStatus === "loading" || !canStartQueue || queueJoinInFlightRef.current) return;
     queueJoinInFlightRef.current = true;
     try {
-      if (window.electronApi) {
-        const gameProcess = await window.electronApi.detectAoe2Process();
-        if (!gameProcess.running || !gameProcess.owned) {
-          const launched = await launchAoe2ForMatchmaking();
-          if (!launched) {
-            queueJoinInFlightRef.current = false;
-            return;
-          }
-        }
+      if (!(await ensureAoe2Ready())) {
+        queueJoinInFlightRef.current = false;
+        return;
       }
 
       if (ticketRef.current) {
@@ -1387,6 +1389,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPage(profileReturnPage);
     },
     queues: queueDefinitions,
+    ensureAoe2Ready,
     startQueue,
     updateActiveQueue,
     cancelQueue,

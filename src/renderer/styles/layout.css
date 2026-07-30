@@ -3525,6 +3525,13 @@
   border-bottom: 1px solid var(--line-soft);
 }
 
+.scenario-settings-note {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--warning);
+  font-size: 13px;
+}
+
 .lobby-roster-header {
   min-height: 42px;
   color: var(--faint);

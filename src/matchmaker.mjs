@@ -77,19 +77,19 @@ function demoPlayer(id, displayName, slot, team, civilization, ready = true) {
 for (const room of [
   {
     id: "demo-cba-requiem", name: "CBA Requiem — all welcome", hostId: "demo-cedric",
-    map: { id: "demo-cba", name: "CBA Requiem v293", kind: "map" },
+    map: { id: "demo-cba", name: "CBA Requiem v293 — Standard", gameName: "CBA_=REQUIEM=_V292", kind: "scenario" },
     players: [demoPlayer("demo-cedric", "SirCedric", 1, 1, "Random"), demoPlayer("demo-wololo", "WololoEnjoyer", 2, 2, "Random", false)],
     maxPlayers: 8, status: "open", createdAt: new Date(Date.now() - 480_000).toISOString(), demo: true
   },
   {
     id: "demo-arabia-2v2", name: "Chill Arabia 2v2", hostId: "demo-mango",
-    map: { id: "demo-arabia", name: "Arabia", kind: "map" },
+    map: { id: "demo-arabia", name: "Arabia", gameName: "Arabia", kind: "map" },
     players: [demoPlayer("demo-mango", "MangonelMike", 1, 1, "Mongols"), demoPlayer("demo-boar", "BoarLamer", 2, 2, "Goths"), demoPlayer("demo-vill", "IdleVillager", 3, 1, "Random", false)],
     maxPlayers: 4, status: "open", createdAt: new Date(Date.now() - 260_000).toISOString(), demo: true
   },
   {
     id: "demo-nomad", name: "Nomad FFA — beginners", hostId: "demo-sheep",
-    map: { id: "demo-nomad-map", name: "Land Nomad EL", kind: "map" },
+    map: { id: "demo-nomad-map", name: "Land Nomad EL", gameName: "Land Nomad EL", kind: "map" },
     players: [demoPlayer("demo-sheep", "MissingSheep", 1, 0, "Random"), demoPlayer("demo-castle", "CastleDropper", 2, 0, "Spanish")],
     maxPlayers: 8, status: "open", createdAt: new Date(Date.now() - 90_000).toISOString(), demo: true
   }
@@ -943,7 +943,12 @@ async function handleRequest(request, response) {
         id: randomUUID(),
         name,
         hostId: authenticatedPlayer.id,
-        ...(body.map?.name ? { map: { id: String(body.map.id), name: String(body.map.name).slice(0, 100), kind: "map" } } : {}),
+        ...(body.map?.name ? { map: {
+          id: String(body.map.id),
+          name: String(body.map.name).slice(0, 100),
+          gameName: String(body.map.gameName ?? body.map.name).slice(0, 120),
+          kind: body.map.kind === "scenario" ? "scenario" : "map"
+        } } : {}),
         ...(body.dataMod?.name ? { dataMod: { id: String(body.dataMod.id), name: String(body.dataMod.name).slice(0, 100), kind: "data_mod" } } : {}),
         players: [{
           id: authenticatedPlayer.id,
@@ -1044,10 +1049,80 @@ async function handleRequest(request, response) {
       const room = customLobbies.get(decodeURIComponent(startCustomLobby[1]));
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can start the lobby." });
       if (!room.players.length || room.players.some((player) => !player.ready)) return send(response, 409, { error: "Every player must be ready." });
+      room.status = "launching";
+      room.platformLobbyId = undefined;
+      room.automationError = undefined;
+      for (const player of room.players) {
+        player.aoeJoined = false;
+        player.aoeReady = false;
+      }
+      addLobbySystemMessage(room, "The host is creating the AoE2 lobby.");
+      broadcastCustomRooms();
+      return send(response, 200, { launching: true });
+    }
+
+    const publishCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/publish$/);
+    if (request.method === "POST" && publishCustomLobby) {
+      const room = customLobbies.get(decodeURIComponent(publishCustomLobby[1]));
+      if (!room || room.hostId !== authenticatedPlayer.id || room.status !== "launching") {
+        return send(response, 403, { error: "Only the launching host can publish the AoE2 lobby." });
+      }
+      const body = await readJson(request);
+      if (!/^aoe2de:\/\/0\/\d+$/.test(body.platformLobbyId ?? "")) return send(response, 400, { error: "A valid AoE2 lobby URI is required." });
+      room.platformLobbyId = body.platformLobbyId;
+      const host = room.players.find((player) => player.id === room.hostId);
+      if (host) host.aoeJoined = true;
+      addLobbySystemMessage(room, "The AoE2 lobby is ready. Players are joining.");
+      broadcastCustomRooms();
+      return send(response, 200, { published: true });
+    }
+
+    const joinedCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/joined$/);
+    if (request.method === "POST" && joinedCustomLobby) {
+      const room = customLobbies.get(decodeURIComponent(joinedCustomLobby[1]));
+      const player = room?.players.find((item) => item.id === authenticatedPlayer.id);
+      if (!room || !player) return send(response, 403, { error: "You are not in that lobby." });
+      player.aoeJoined = true;
+      broadcastCustomRooms();
+      return send(response, 200, { joined: true });
+    }
+
+    const readyCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/aoe-ready$/);
+    if (request.method === "POST" && readyCustomLobby) {
+      const room = customLobbies.get(decodeURIComponent(readyCustomLobby[1]));
+      const player = room?.players.find((item) => item.id === authenticatedPlayer.id);
+      if (!room || !player) return send(response, 403, { error: "You are not in that lobby." });
+      player.aoeJoined = true;
+      player.aoeReady = true;
+      broadcastCustomRooms();
+      return send(response, 200, { ready: true });
+    }
+
+    const completeCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/complete-start$/);
+    if (request.method === "POST" && completeCustomLobby) {
+      const room = customLobbies.get(decodeURIComponent(completeCustomLobby[1]));
+      if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can complete game start." });
       room.status = "started";
-      addLobbySystemMessage(room, "The host started the virtual lobby. AoE2 launch is not connected yet.");
+      addLobbySystemMessage(room, "AoE2 game started.");
       broadcastCustomRooms();
       return send(response, 200, { started: true });
+    }
+
+    const failCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/fail-start$/);
+    if (request.method === "POST" && failCustomLobby) {
+      const room = customLobbies.get(decodeURIComponent(failCustomLobby[1]));
+      if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can report automation failure." });
+      const body = await readJson(request);
+      room.status = "open";
+      room.automationError = String(body.error ?? "AoE2 lobby automation failed.").slice(0, 300);
+      room.platformLobbyId = undefined;
+      for (const player of room.players) {
+        player.aoeJoined = false;
+        player.aoeReady = false;
+      }
+      addLobbySystemMessage(room, room.automationError);
+      broadcastCustomRooms();
+      return send(response, 200, { reset: true });
     }
 
     if (request.method === "GET" && url.pathname === "/matches/history") {

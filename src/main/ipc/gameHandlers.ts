@@ -45,7 +45,6 @@ import {
   postAoe2DesignClick,
   readAoe2HostSetupState,
   readAoe2ReadyState,
-  restoreAoe2NativeWindowBehind,
   sendAoe2End,
   sendAoe2Down,
   sendAoe2Enter,
@@ -110,11 +109,11 @@ function selectScenarioVariants(
 async function scanLocalCustomContent() {
   const profilesRoot = join(homedir(), "Games", "Age of Empires 2 DE");
   const roots: string[] = [];
-  const maps: Array<{ id: string; name: string; kind: "map"; path: string; source: string }> = [];
-  const dataMods: Array<{ id: string; name: string; kind: "data_mod"; path: string; source: string }> = [];
+  const maps: Array<{ id: string; name: string; gameName: string; kind: "map" | "scenario"; path: string; source: string }> = [];
+  const dataMods: Array<{ id: string; name: string; gameName: string; kind: "data_mod"; path: string; source: string }> = [];
   const seen = new Set<string>();
 
-  const add = (kind: "map" | "data_mod", path: string, source: string, label?: string) => {
+  const add = (kind: "map" | "scenario" | "data_mod", path: string, source: string, label?: string, gameName?: string) => {
     const name = (label || basename(path, extname(path))).trim();
     const normalizedName = name.toLowerCase().replace(/\s+/g, " ");
     const key = `${kind}:${normalizedName}`;
@@ -123,11 +122,12 @@ async function scanLocalCustomContent() {
     const item = {
       id: Buffer.from(`${key}:${path.toLowerCase()}`).toString("base64url"),
       name,
+      gameName: gameName ?? basename(path, extname(path)),
       kind,
       path,
       source
     };
-    (kind === "map" ? maps : dataMods).push(item as never);
+    (kind === "data_mod" ? dataMods : maps).push(item as never);
   };
 
   const walk = async (
@@ -155,7 +155,7 @@ async function scanLocalCustomContent() {
         const details = await stat(path).catch(() => null);
         if (details) options.scenarioFiles.push({ path, name: basename(path, extname(path)), size: details.size });
       }
-      if (lower.endsWith(".aoe2scenario") && !options.modRoot) add("map", path, source);
+      if (lower.endsWith(".aoe2scenario") && !options.modRoot) add("scenario", path, source);
       if (lower === "empires2_x2_p1.dat" || lower === "empires2_x2_p1.json") {
         const modRoot = options.modRoot
           ?? path.slice(0, Math.max(0, path.toLowerCase().lastIndexOf(`${join("resources", "_common").toLowerCase()}`)));
@@ -179,7 +179,13 @@ async function scanLocalCustomContent() {
       const scenarioFiles: Array<{ path: string; name: string; size: number }> = [];
       await walk(modRoot, source, { modRoot, modName, scenarioFiles });
       for (const scenario of selectScenarioVariants(modName, scenarioFiles)) {
-        add("map", scenario.path, source, `${modName} — ${scenario.variant}`);
+        add(
+          "scenario",
+          scenario.path,
+          source,
+          `${modName} — ${scenario.variant}`,
+          basename(scenario.path, extname(scenario.path))
+        );
       }
     }
   };
@@ -2110,7 +2116,8 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:run-create-lobby-sequence", async (
     event,
     mapName: string,
-    playerCount: 2 | 4 | 8 = 2
+    playerCount: 2 | 4 | 8 = 2,
+    contentKind: "map" | "scenario" = "map"
   ) => {
     stopTabTest();
     setMouseCoordinateOverlayEnabled(false);
@@ -2118,8 +2125,11 @@ export function registerGameHandlers(): void {
     if (process.platform !== "win32") {
       return { sent: false, message: "Lobby automation is only supported on Windows." };
     }
-    if (!(normalizedMapName in aoe2UiManifest.mapPicker.entries)) {
+    if (contentKind === "map" && !normalizedMapName) {
       return { sent: false, message: "A supported AoE2 map name is required." };
+    }
+    if (contentKind === "scenario" && !normalizedMapName) {
+      return { sent: false, message: "An AoE2 scenario name is required." };
     }
     if (![2, 4, 8].includes(playerCount)) {
       return { sent: false, message: "The lobby must contain 2, 4, or 8 players." };
@@ -2130,17 +2140,20 @@ export function registerGameHandlers(): void {
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
     const appWindow = BrowserWindow.fromWebContents(event.sender);
+    const gameProcess = await detectAoe2Process();
+    if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
+      return { sent: false, message: "The AoE2 game window was not ready." };
+    }
+    const gamePid: number = gameProcess.pid;
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    let sequenceCompleted = false;
     try {
       const inputBlocked = setWindowsInputBlocked(true);
       const inputGuardStarted = await startInputGuard(appWindow);
       emitLog(`INPUT_LOCK|Requested=True|BlockInput=${inputBlocked}|Guard=${inputGuardStarted}|Source=CreateLobby`);
-      const process = await detectAoe2Process();
-      if (!process.running || !process.pid) {
-        return { sent: false, message: "The AoE2 process was not found." };
-      }
-      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`);
+      emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(gamePid)}`);
+      const process = { ...gameProcess, pid: gamePid };
       const clickStep = async (
         name: string,
         x: number,
@@ -2235,41 +2248,60 @@ export function registerGameHandlers(): void {
       if (!reset.sent) throw new Error("The reset confirmation could not be sent.");
       await delay(lobbySetupTiming.resetConfirmationMs);
 
-      const mapPicker = aoe2UiManifest.mapPicker;
-      const mapPoint = mapDesignPoint(normalizedMapName as Aoe2MapSelection);
-      await clickStep("Open Map Picker", mapPicker.openPoint[0], mapPicker.openPoint[1], { synchronous: true });
-      await delay(mapPicker.openSettleMs);
-      const isCustomMap = (mapPicker.customMapNames as readonly string[]).includes(normalizedMapName);
-      const mapStyle = isCustomMap ? "Custom" : "Standard";
-      const mapStylePoint = isCustomMap ? mapPicker.customStylePoint : mapPicker.standardStylePoint;
-      await clickStep(
-        "Open Map Style",
-        mapPicker.mapStylePoint[0],
-        mapPicker.mapStylePoint[1],
-        { synchronous: true }
-      );
-      await delay(mapPicker.styleMenuSettleMs);
-      await clickStep(
-        `Select ${mapStyle} Map Style`,
-        mapStylePoint[0],
-        mapStylePoint[1],
-        { synchronous: true }
-      );
-      await delay(mapPicker.styleSelectionSettleMs);
-      emitLog(`MAP_SELECT|Step=MapStyle|Style=${mapStyle}|Map=${normalizedMapName}`);
-      await clickStep("Focus Map Search", mapPicker.searchPoint[0], mapPicker.searchPoint[1], { synchronous: true });
-      const mapSearch = await sendAoe2Text(process.pid, normalizedMapName);
-      emitLog(`MAP_SELECT|Step=Search|Map=${normalizedMapName}|${mapSearch.detail}`);
-      if (!mapSearch.sent) throw new Error(`${normalizedMapName} could not be entered in the map search.`);
-      await delay(mapPicker.searchSettleMs);
-      await clickStep(`Select ${normalizedMapName}`, mapPoint[0], mapPoint[1], { synchronous: true });
-      await delay(mapPicker.selectionSettleMs);
-      const mapLobbyState = readAoe2HostSetupState(process.pid);
-      emitLog(`MAP_SELECT|Step=VerifyReturn|Map=${normalizedMapName}|${mapLobbyState.detail}`);
-      if (mapLobbyState.state !== "lobby-room") {
+      if (contentKind === "scenario") {
+        const picker = aoe2UiManifest.scenarioPicker;
+        await clickStep("Open Game Mode", picker.gameModePoint[0], picker.gameModePoint[1], { synchronous: true });
+        await delay(picker.modeMenuSettleMs);
+        const lastGameMode = await sendAoe2End(process.pid);
+        emitLog(`SCENARIO_SELECT|Step=CustomScenario|Key=END|${lastGameMode.detail}`);
+        if (!lastGameMode.sent) throw new Error("Custom Scenario could not be selected.");
+        const confirmGameMode = await sendAoe2Enter(process.pid);
+        if (!confirmGameMode.sent) throw new Error("Custom Scenario could not be confirmed.");
+        await delay(picker.recommendedSettingsSettleMs);
+        const acceptRecommended = await sendAoe2Enter(process.pid);
+        emitLog(`SCENARIO_SELECT|Step=RecommendedSettings|Key=ENTER|${acceptRecommended.detail}`);
+        if (!acceptRecommended.sent) throw new Error("Recommended scenario settings could not be accepted.");
+        await delay(picker.recommendedSettingsSettleMs);
+        await clickStep("Set Scenario", picker.setScenarioPoint[0], picker.setScenarioPoint[1], { synchronous: true });
+        await delay(picker.openSettleMs);
+        await clickStep("Focus Scenario Search", picker.searchPoint[0], picker.searchPoint[1], { synchronous: true });
+        const scenarioSearch = await sendAoe2Text(process.pid, normalizedMapName, { triggerKeyEvents: true });
+        emitLog(`SCENARIO_SELECT|Step=Search|Scenario=${normalizedMapName}|${scenarioSearch.detail}`);
+        if (!scenarioSearch.sent) throw new Error(`${normalizedMapName} could not be entered in scenario search.`);
+        await delay(picker.searchSettleMs);
+        await clickStep(`Select ${normalizedMapName}`, picker.firstResultPoint[0], picker.firstResultPoint[1], { synchronous: true });
+        await delay(picker.selectionSettleMs);
+        await clickStep("Load Scenario", picker.loadScenarioPoint[0], picker.loadScenarioPoint[1], { synchronous: true });
+        await delay(picker.loadSettleMs);
+        emitLog(`SCENARIO_SELECT|Complete=True|Scenario=${normalizedMapName}`);
+      } else {
+        const mapPicker = aoe2UiManifest.mapPicker;
+        const knownMap = normalizedMapName in aoe2UiManifest.mapPicker.entries;
+        const mapPoint = knownMap
+          ? mapDesignPoint(normalizedMapName as Aoe2MapSelection)
+          : [mapPicker.resultColumnCenters[0], mapPicker.resultRowCenters[0]] as const;
+        await clickStep("Open Map Picker", mapPicker.openPoint[0], mapPicker.openPoint[1], { synchronous: true });
+        await delay(mapPicker.openSettleMs);
+        const isCustomMap = !knownMap || (mapPicker.customMapNames as readonly string[]).includes(normalizedMapName);
+        const mapStyle = isCustomMap ? "Custom" : "Standard";
+        const mapStylePoint = isCustomMap ? mapPicker.customStylePoint : mapPicker.standardStylePoint;
+        await clickStep("Open Map Style", mapPicker.mapStylePoint[0], mapPicker.mapStylePoint[1], { synchronous: true });
+        await delay(mapPicker.styleMenuSettleMs);
+        await clickStep(`Select ${mapStyle} Map Style`, mapStylePoint[0], mapStylePoint[1], { synchronous: true });
+        await delay(mapPicker.styleSelectionSettleMs);
+        await clickStep("Focus Map Search", mapPicker.searchPoint[0], mapPicker.searchPoint[1], { synchronous: true });
+        const mapSearch = await sendAoe2Text(process.pid, normalizedMapName);
+        emitLog(`MAP_SELECT|Step=Search|Map=${normalizedMapName}|${mapSearch.detail}`);
+        if (!mapSearch.sent) throw new Error(`${normalizedMapName} could not be entered in the map search.`);
+        await delay(mapPicker.searchSettleMs);
+        await clickStep(`Select ${normalizedMapName}`, mapPoint[0], mapPoint[1], { synchronous: true });
+        await delay(mapPicker.selectionSettleMs);
+        emitLog(`MAP_SELECT|Complete=True|Map=${normalizedMapName}`);
+      }
+      const contentLobbyState = readAoe2HostSetupState(process.pid);
+      if (contentLobbyState.state !== "lobby-room") {
         throw new Error(`${normalizedMapName} selection did not return to the lobby room.`);
       }
-      emitLog(`MAP_SELECT|Complete=True|Map=${normalizedMapName}`);
 
       clipboard.writeText("EL_CURSOR_COPY_PENDING");
       await actionStep("copyLobbyUri");
@@ -2284,12 +2316,18 @@ export function registerGameHandlers(): void {
       if (!lobbyUri) throw new Error("Lobby URI was not copied.");
       emitLog(`LOBBY_URI|${lobbyUri}`);
       emitLog("SEQUENCE|Complete=True|Mode=WindowMessage");
+      sequenceCompleted = true;
       return { sent: true, message: "Cursor lobby creation completed.", lobbyUri };
     } catch (error) {
       emitLog(`ERROR|${error instanceof Error ? error.message : "Native lobby automation failed."}`);
       return { sent: false, message: "The Create Lobby sequence stopped before completion." };
     } finally {
       setMainWindowGameCoverClickThrough(false);
+      if (!sequenceCompleted) {
+        setWindowsInputBlocked(false);
+        stopInputGuard();
+        emitLog("INPUT_LOCK|Requested=False|Source=CreateLobbyCleanup");
+      }
     }
   });
 

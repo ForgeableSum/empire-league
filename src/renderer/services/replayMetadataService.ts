@@ -9,6 +9,28 @@ export class ReplayNotFinishedError extends Error {
   }
 }
 
+export async function replayHasEnded(filePath: string): Promise<boolean> {
+  if (!window.electronApi) return false;
+  const { parse_rec } = await import("aoe2rec-js");
+  const bytes = await window.electronApi.readReplayFile(filePath);
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  let replay: { operations?: Array<Record<string, unknown>> };
+  try {
+    replay = parse_rec(buffer) as { operations?: Array<Record<string, unknown>> };
+  } catch {
+    return false;
+  }
+  return replay.operations?.some((operation) => {
+    if ("PostGame" in operation) return true;
+    const action = operation.Action;
+    if (typeof action !== "object" || action === null) return false;
+    const actionData = (action as Record<string, unknown>).action_data;
+    return typeof actionData === "object"
+      && actionData !== null
+      && "Resign" in actionData;
+  }) ?? false;
+}
+
 export async function parseReplayMetadata(
   filePath: string,
   teamGame = false

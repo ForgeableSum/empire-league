@@ -29,11 +29,26 @@ export const customLobbyService = {
   async start(roomId: string): Promise<void> {
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/start`, { method: "POST" });
   },
+  async publish(roomId: string, platformLobbyId: string): Promise<void> {
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/publish`, { method: "POST", body: { platformLobbyId } });
+  },
+  async reportJoined(roomId: string): Promise<void> {
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/joined`, { method: "POST" });
+  },
+  async reportAoeReady(roomId: string): Promise<void> {
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/aoe-ready`, { method: "POST" });
+  },
+  async completeStart(roomId: string): Promise<void> {
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/complete-start`, { method: "POST" });
+  },
+  async failStart(roomId: string, error: string): Promise<void> {
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/fail-start`, { method: "POST", body: { error } });
+  },
   onEvent(listener: Parameters<typeof matchmakerTransport.onCustomLobbyEvent>[0]) {
     return matchmakerTransport.onCustomLobbyEvent(listener);
   }
 };
 
 function summarize(content?: LocalCustomContent) {
-  return content ? { id: content.id, name: content.name, kind: content.kind } : undefined;
+  return content ? { id: content.id, name: content.name, gameName: content.gameName, kind: content.kind } : undefined;
 }
