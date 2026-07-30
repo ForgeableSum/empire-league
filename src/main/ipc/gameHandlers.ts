@@ -341,6 +341,7 @@ async function startReplayEndDetection(
   let active: ReplaySnapshot | undefined;
   let lastGrowthAt = startedAt;
   let observedGrowth = false;
+  let activeCreatedDuringWatch = false;
   let lastCandidateKey: string | undefined;
 
   const initialFiles = await findReplayFiles(configuredFolder);
@@ -365,13 +366,17 @@ async function startReplayEndDetection(
         active = files
           .filter((file) => file.modifiedMs >= startedAt - 60_000)
           .sort((left, right) => right.modifiedMs - left.modifiedMs)[0];
-        if (active) lastGrowthAt = Date.now();
+        if (active) {
+          activeCreatedDuringWatch = !initialFiles.some((file) => file.path === active?.path);
+          lastGrowthAt = Date.now();
+        }
       } else {
         const newest = files
           .filter((file) => file.modifiedMs >= startedAt - 60_000)
           .sort((left, right) => right.modifiedMs - left.modifiedMs)[0];
         if (!observedGrowth && newest && newest.path !== active.path && newest.modifiedMs > active.modifiedMs) {
           active = newest;
+          activeCreatedDuringWatch = !initialFiles.some((file) => file.path === newest.path);
           lastGrowthAt = Date.now();
         }
         const current = files.find((file) => file.path === active?.path);
@@ -380,7 +385,7 @@ async function startReplayEndDetection(
           lastGrowthAt = Date.now();
           active = current;
           if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
-        } else if (current && observedGrowth) {
+        } else if (current && (observedGrowth || activeCreatedDuringWatch)) {
           const now = Date.now();
           const elapsedMs = now - startedAt;
           const stableForMs = elapsedMs < replayStartupWindowMs

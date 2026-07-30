@@ -239,11 +239,19 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
     if (automationSteps.current.has(revealKey)) return;
     automationSteps.current.add(revealKey);
 
+    void window.electronApi.startReplayEndDetection().then((detection) => {
+      if (!detection.started) {
+        notify("Post-game return detection could not be started.", "danger", {
+          detail: detection.message || "Replay detection could not be started."
+        });
+      }
+    }).catch((error) => {
+      notify("Post-game return detection could not be started.", "danger", { detail: messageFor(error) });
+    });
+
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
-          const detection = await window.electronApi!.startReplayEndDetection();
-          if (!detection.started) throw new Error(detection.message || "Replay detection could not be started.");
           await stopYouTubeShorts();
           await window.electronApi!.focusAoe2();
         } catch (error) {
