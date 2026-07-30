@@ -173,10 +173,12 @@ export function setWindowsInputBlocked(blocked: boolean): boolean {
 
 export function restoreAoe2NativeWindowBehind(processId: number): boolean {
   ensureWindowsBindings();
-  const window = findLargestProcessWindow(processId);
+  const window = findRecoverableProcessWindow(processId);
   if (!window) return false;
   ShowWindow!(window, 9);
-  return keepAoe2NativeWindowBehind(processId);
+  // Restore by the HWND we recovered while minimized. Re-enumerating through
+  // the ready-window path here can race the client area being recreated.
+  return Boolean(SetWindowPos!(window, 1n, 0, 0, 0, 0, 0x0013));
 }
 
 export function keepAoe2NativeWindowBehind(processId: number): boolean {
@@ -735,6 +737,23 @@ function findLargestProcessWindow(processId: number): NativeHandle {
     const rect = {} as Rect;
     if (!GetClientRect!(window, rect)) return true;
     const area = (rect.right - rect.left) * (rect.bottom - rect.top);
+    if (area > largestArea) {
+      largestArea = area;
+      found = window;
+    }
+    return true;
+  }, 0);
+  return found;
+}
+
+function findRecoverableProcessWindow(processId: number): NativeHandle {
+  let found: NativeHandle = null;
+  let largestArea = 0;
+  EnumWindows!((window: NativeHandle) => {
+    if (processIdForWindow(window) !== processId) return true;
+    const rect = {} as Rect;
+    if (!GetWindowRect!(window, rect)) return true;
+    const area = Math.max(1, rect.right - rect.left) * Math.max(1, rect.bottom - rect.top);
     if (area > largestArea) {
       largestArea = area;
       found = window;

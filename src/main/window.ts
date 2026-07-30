@@ -72,8 +72,10 @@ function restoreFromTaskbar(window: BrowserWindow): void {
   logWindowLifecycle(window, "CALL restoreFromTaskbar");
   if (process.platform === "win32" && !independentWindowMinimize) {
     const game = detectAoe2NativeProcess();
-    if (game.pid && game.windowReady) restoreAoe2NativeWindowBehind(game.pid);
+    if (game.pid) restoreAoe2NativeWindowBehind(game.pid);
   }
+  // Clear this before show/focus because fullscreen Windows restores can emit
+  // focus without ever emitting Electron's restore event.
   taskbarMinimizedWindow = null;
   taskbarMinimizeCompletedWindow = null;
   window.setFullScreen(true);
@@ -187,6 +189,15 @@ export function createMainWindow(): BrowserWindow {
     if (
       taskbarMinimizedWindow === mainWindow
       && taskbarMinimizeCompletedWindow === mainWindow
+    ) {
+      restoreFromTaskbar(mainWindow);
+    }
+  });
+  mainWindow.on("focus", () => {
+    if (
+      taskbarMinimizedWindow === mainWindow
+      && taskbarMinimizeCompletedWindow === mainWindow
+      && !mainWindow.isMinimized()
     ) {
       restoreFromTaskbar(mainWindow);
     }
