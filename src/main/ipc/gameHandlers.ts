@@ -2228,12 +2228,12 @@ export function registerGameHandlers(): void {
         name: string,
         x: number,
         y: number,
-        timing?: { hoverMs?: number; holdMs?: number; synchronous?: boolean; primeMove?: boolean }
+        timing?: { hoverMs?: number; holdMs?: number; synchronous?: boolean; primeMove?: boolean; requireMove?: boolean }
       ) => {
         if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
         const result = await postAoe2DesignClick(process.pid as number, x, y, {
           ...timing,
-          requireMove: !isCustomAutomation
+          requireMove: timing?.requireMove ?? !isCustomAutomation
         });
         if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
@@ -2395,7 +2395,8 @@ export function registerGameHandlers(): void {
         // then wait for the lobby pixels to change instead of requiring an
         // immediate synchronous response from the game.
         await clickStep("Open Map Picker", mapPicker.openPoint[0], mapPicker.openPoint[1], {
-          synchronous: !isCustomAutomation
+          synchronous: !isCustomAutomation,
+          requireMove: false
         });
         if (isCustomAutomation) {
           let mapPickerState = readAoe2HostSetupState(process.pid);
