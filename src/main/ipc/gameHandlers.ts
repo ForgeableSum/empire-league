@@ -41,6 +41,7 @@ import {
   focusAoe2NativeWindow,
   setWindowsInputBlocked,
   isAoe2NativeWindowForeground,
+  keepAoe2NativeWindowBehind,
   postAoe2DesignClick,
   readAoe2HostSetupState,
   readAoe2ReadyState,
@@ -314,16 +315,27 @@ function moveAoe2WindowOffscreen(): void {
     let lastPid: number | undefined;
     let lastForeground = false;
     let sawGame = false;
+    const fastGuardEndsAt = Date.now() + 30_000;
     aoe2WindowMonitor = setInterval(() => {
+      if (Date.now() >= fastGuardEndsAt) {
+        if (aoe2WindowMonitor) clearInterval(aoe2WindowMonitor);
+        aoe2WindowMonitor = undefined;
+        console.info("[AoE2 automation] STARTUP_WINDOW_GUARD|Stopped=True|ElapsedMs=30000");
+        return;
+      }
       const game = detectAoe2NativeProcess();
-      if (game.running && game.pid && game.windowReady) {
+      if (game.running && game.pid) {
         sawGame = true;
         if (game.pid !== lastPid) {
-          restoreAoe2NativeWindowBehind(game.pid);
-          console.info(`[AoE2 automation] WINDOW_READY|BehindElectron=True|Pid=${game.pid}|Mode=Koffi`);
+          keepAoe2NativeWindowBehind(game.pid);
+          console.info(`[AoE2 automation] WINDOW_FOUND|BehindElectron=True|Pid=${game.pid}|Mode=Koffi`);
           lastPid = game.pid;
         }
         const foreground = isAoe2NativeWindowForeground(game.pid);
+        // AoE2 changes its window style and z-order more than once while booting.
+        // Reassert HWND_BOTTOM whenever it steals the foreground; doing this only
+        // on first discovery leaves a later fullscreen transition free to cover EL.
+        if (foreground) keepAoe2NativeWindowBehind(game.pid);
         if (foreground !== lastForeground) {
           console.info(`[AoE2 automation] MOUSE_TEST|Foreground=${foreground}|Mode=Koffi`);
           setMainWindowGameCoverOverAoe(foreground);
@@ -336,7 +348,7 @@ function moveAoe2WindowOffscreen(): void {
         closeTestOverlay();
         restoreMainWindowFromGameCover();
       }
-    }, 250);
+    }, 25);
     return;
   }
   const script = String.raw`
@@ -1792,19 +1804,23 @@ export function registerGameHandlers(): void {
         return { launched: false, status: "not_detected", message: "Steam could not be launched." };
       }
 
+      const appWindow = BrowserWindow.fromWebContents(event.sender);
+      // Arm both layers before Steam is allowed to create the game window. The
+      // old ordering left an unavoidable interval where AoE2 could paint first.
+      if (cursorAutomationEnabled && appWindow) showMainWindowAsGameCover(appWindow);
+      moveAoe2WindowOffscreen();
+
       const gameProcess = spawn(steamExecutable, ["-applaunch", aoe2AppId, "SKIPINTRO"], {
         detached: true,
         stdio: "ignore",
         windowsHide: false
       });
       gameProcess.unref();
-      const appWindow = BrowserWindow.fromWebContents(event.sender);
-      if (cursorAutomationEnabled && appWindow) showMainWindowAsGameCover(appWindow);
-      moveAoe2WindowOffscreen();
       appWindow?.on("focus", releaseCursorForElectron);
       appWindow?.once("closed", restoreAoe2Window);
       return { launched: true, status: "running", message: "Launching AoE2 DE." };
     } catch (error) {
+      restoreAoe2Window();
       launchRequested = false;
       throw error;
     }
