@@ -2870,6 +2870,76 @@
   gap: 10px;
 }
 
+.promotion-backdrop {
+  z-index: 20;
+  background:
+    radial-gradient(circle at center, rgba(197, 141, 69, 0.2), transparent 45%),
+    rgba(10, 9, 8, 0.88);
+}
+
+.promotion-modal {
+  width: min(560px, calc(100vw - 40px));
+  justify-items: center;
+  overflow: hidden;
+  text-align: center;
+  box-shadow: 0 0 60px rgba(197, 141, 69, 0.25);
+}
+
+.promotion-modal h2,
+.promotion-modal p {
+  margin: 0;
+}
+
+.promotion-modal h2 {
+  color: var(--accent-2);
+  font-size: 40px;
+}
+
+.promotion-trophy {
+  color: var(--accent-2);
+  filter: drop-shadow(0 0 12px rgba(245, 211, 139, 0.45));
+}
+
+.promotion-ranks {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.promotion-ranks > div {
+  min-height: 112px;
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.promotion-ranks span,
+.promotion-ranks small {
+  color: var(--muted);
+}
+
+.promotion-ranks strong {
+  color: var(--text);
+  font-size: 22px;
+}
+
+.promotion-ranks .promotion-rank-new {
+  border-color: var(--accent);
+  background: rgba(197, 141, 69, 0.12);
+}
+
+.promotion-ranks .promotion-rank-new strong {
+  color: var(--accent-2);
+}
+
+.promotion-modal > button {
+  min-width: 180px;
+}
+
 .toolbar {
   align-items: center;
   justify-content: start;

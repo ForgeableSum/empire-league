@@ -64,6 +64,14 @@ export function formatDivisionForRating(rating: number): string {
   return `${division} ${tier === 1 ? "I" : tier === 2 ? "II" : "III"}`;
 }
 
+export function isRatingPromotion(oldRating: number, newRating: number): boolean {
+  return newRating > oldRating
+    && (
+      getDivisionForRating(oldRating) !== getDivisionForRating(newRating)
+      || getDivisionTierForRating(oldRating) !== getDivisionTierForRating(newRating)
+    );
+}
+
 export type MatchOutcome = "win" | "loss" | "no_contest";
 
 export type QueueStatus =
