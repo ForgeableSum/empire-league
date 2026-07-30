@@ -224,7 +224,10 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
         try {
           const started = await window.electronApi!.runAoe2LobbyCursorAction("start");
           if (!started.sent) throw new Error(started.message || "AoE2 could not start the game.");
-          await customLobbyService.completeStart(room.id);
+          await customLobbyService.completeStart(
+            room.id,
+            new Date(Date.now() - lobbySetupTiming.startGameSettleMs).toISOString()
+          );
         } catch (error) {
           await customLobbyService.failStart(room.id, messageFor(error));
           automationSteps.current.delete(startKey);
@@ -343,7 +346,10 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
           <form onSubmit={submitChat}><input placeholder="Message lobby…" value={draft} onChange={(event) => setDraft(event.target.value)} /><button className="primary" aria-label="Send"><Send size={17} /></button></form>
         </aside>
       </div>
-      <div className="custom-lobby-actions"><span>{room.status === "started" ? "AoE2 game started." : room.status === "launching" ? "Creating and synchronizing the AoE2 lobby…" : room.automationError ? room.automationError : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>{isHost && <button className="primary large" disabled={room.status !== "open" || !room.map || !room.players.every((player) => player.ready)} onClick={() => act(customLobbyService.start(room.id))}>Start Game</button>}</div>
+      <div className={`custom-lobby-actions${room.status !== "open" ? " launching" : ""}`}>
+        <span>{room.status === "started" ? <GameStartCountdown startedAt={room.gameStartedAt} /> : room.status === "launching" ? <>Creating and synchronizing the AoE2 lobby<AnimatedEllipsis /></> : room.automationError ? room.automationError : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>
+        {isHost && <button className="primary large" disabled={room.status !== "open" || !room.map || !room.players.every((player) => player.ready)} onClick={() => act(customLobbyService.start(room.id))}>{room.status !== "open" ? <>Starting<AnimatedEllipsis /></> : "Start Game"}</button>}
+      </div>
     </section>
   );
 }
@@ -356,4 +362,29 @@ function customRoomStatusLabel(status: CustomLobbyRoom["status"]): string {
   if (status === "open") return "Open";
   if (status === "launching") return "Starting";
   return "In Game";
+}
+
+function AnimatedEllipsis() {
+  return <span className="animated-ellipsis" aria-hidden="true"><i /><i /><i /></span>;
+}
+
+function GameStartCountdown({ startedAt }: { startedAt?: string }) {
+  const [remaining, setRemaining] = useState(() => customGameCountdownRemaining(startedAt));
+
+  useEffect(() => {
+    const update = () => setRemaining(customGameCountdownRemaining(startedAt));
+    update();
+    const timer = window.setInterval(update, 100);
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+
+  return remaining > 0
+    ? <span className="custom-game-countdown-label" aria-live="polite">Game starts in <strong className="custom-game-countdown">{remaining}</strong></span>
+    : <>Entering game<AnimatedEllipsis /></>;
+}
+
+function customGameCountdownRemaining(startedAt?: string): number {
+  if (!startedAt) return 5;
+  const elapsedMs = Math.max(0, Date.now() - new Date(startedAt).getTime());
+  return Math.max(0, Math.ceil((5_000 - elapsedMs) / 1_000));
 }

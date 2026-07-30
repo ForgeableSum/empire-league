@@ -48,6 +48,7 @@ export interface CustomLobbyRoom {
   messages: CustomLobbyMessage[];
   maxPlayers: number;
   status: "open" | "launching" | "started";
+  gameStartedAt?: string;
   platformLobbyId?: string;
   automationError?: string;
   createdAt: string;

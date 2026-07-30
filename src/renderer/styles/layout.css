@@ -3670,6 +3670,82 @@
   color: var(--muted);
 }
 
+.custom-lobby-actions.launching {
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--line-soft));
+  background: color-mix(in srgb, var(--warning) 8%, #1d1b18);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.custom-lobby-actions.launching > span {
+  color: var(--warning);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.custom-game-countdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  line-height: 1;
+}
+
+.custom-game-countdown {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  color: #fff4cf;
+  font-size: 24px;
+  line-height: 1;
+  text-align: center;
+}
+
+.animated-ellipsis {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 4px;
+}
+
+.animated-ellipsis i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: custom-lobby-dot 1s infinite ease-in-out;
+}
+
+.animated-ellipsis i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.animated-ellipsis i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.custom-lobby-actions button .animated-ellipsis {
+  color: #3a2608;
+}
+
+@keyframes custom-lobby-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-ellipsis i {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 .event-log {
   display: grid;
   gap: 6px;

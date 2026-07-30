@@ -38,8 +38,11 @@ export const customLobbyService = {
   async reportAoeReady(roomId: string): Promise<void> {
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/aoe-ready`, { method: "POST" });
   },
-  async completeStart(roomId: string): Promise<void> {
-    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/complete-start`, { method: "POST" });
+  async completeStart(roomId: string, gameStartedAt: string): Promise<void> {
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/complete-start`, {
+      method: "POST",
+      body: { gameStartedAt }
+    });
   },
   async finish(roomId: string): Promise<void> {
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/finish`, { method: "POST" });

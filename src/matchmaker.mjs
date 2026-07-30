@@ -1050,6 +1050,7 @@ async function handleRequest(request, response) {
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can start the lobby." });
       if (!room.players.length || room.players.some((player) => !player.ready)) return send(response, 409, { error: "Every player must be ready." });
       room.status = "launching";
+      room.gameStartedAt = undefined;
       room.platformLobbyId = undefined;
       room.automationError = undefined;
       for (const player of room.players) {
@@ -1102,7 +1103,15 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && completeCustomLobby) {
       const room = customLobbies.get(decodeURIComponent(completeCustomLobby[1]));
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can complete game start." });
+      const body = await readJson(request);
+      const reportedStartedAt = Date.parse(String(body.gameStartedAt ?? ""));
+      const now = Date.now();
       room.status = "started";
+      room.gameStartedAt = new Date(
+        Number.isFinite(reportedStartedAt) && Math.abs(now - reportedStartedAt) <= 15_000
+          ? reportedStartedAt
+          : now
+      ).toISOString();
       addLobbySystemMessage(room, "AoE2 game started.");
       broadcastCustomRooms();
       return send(response, 200, { started: true });
@@ -1130,6 +1139,7 @@ async function handleRequest(request, response) {
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can report automation failure." });
       const body = await readJson(request);
       room.status = "open";
+      room.gameStartedAt = undefined;
       room.automationError = String(body.error ?? "AoE2 lobby automation failed.").slice(0, 300);
       room.platformLobbyId = undefined;
       for (const player of room.players) {
