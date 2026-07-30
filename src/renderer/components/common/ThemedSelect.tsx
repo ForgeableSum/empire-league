@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 export interface ThemedSelectOption {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
 export function ThemedSelect({
@@ -45,7 +46,7 @@ export function ThemedSelect({
 
   return (
     <div className={className ? `themed-select-field ${className}` : "themed-select-field"}>
-      <span>{label}</span>
+      {label && <span>{label}</span>}
       <details className="themed-select" ref={dropdownRef} onToggle={(event) => {
         if (!event.currentTarget.open) setQuery("");
       }}>
@@ -64,14 +65,15 @@ export function ThemedSelect({
               onChange={(event) => setQuery(event.target.value)}
             />
           )}
-          <div className="themed-select-option-list" role="listbox" aria-label={label}>
+          <div className="themed-select-option-list" role="listbox" aria-label={label || "Select option"}>
             {visibleOptions.map((option) => (
               <button
                 aria-selected={option.value === value}
                 className={option.value === value ? "selected" : undefined}
                 key={option.value}
-                disabled={disabled}
+                disabled={disabled || option.disabled}
                 onClick={() => {
+                  if (option.disabled) return;
                   onChange(option.value);
                   dropdownRef.current?.removeAttribute("open");
                 }}
@@ -81,7 +83,7 @@ export function ThemedSelect({
                 {option.label}
               </button>
             ))}
-            {visibleOptions.length === 0 && <span className="themed-select-empty">No civilizations found</span>}
+            {visibleOptions.length === 0 && <span className="themed-select-empty">No options found</span>}
           </div>
         </div>
       </details>

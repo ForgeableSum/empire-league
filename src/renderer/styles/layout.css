@@ -1314,11 +1314,17 @@
   color: var(--bg);
 }
 
-.themed-select-options button:hover,
+.themed-select-options button:not(:disabled):hover,
 .themed-select-options button:focus-visible {
   outline: none;
   background: #4b3926;
   color: var(--accent-2);
+}
+
+.themed-select-options button:disabled {
+  cursor: not-allowed;
+  color: #756b5e;
+  opacity: 0.58;
 }
 
 .tag-list {
@@ -3489,6 +3495,16 @@
   white-space: nowrap;
 }
 
+.custom-create-card > div > small {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .custom-scan-meta {
   display: flex;
   flex-wrap: wrap;
@@ -3517,7 +3533,14 @@
 .lobby-roster,
 .lobby-chat {
   padding: 0;
+}
+
+.lobby-chat {
   overflow: hidden;
+}
+
+.lobby-roster {
+  overflow: visible;
 }
 
 .lobby-roster-header,
@@ -3590,10 +3613,22 @@
   font-size: 12px;
 }
 
-.lobby-player-row select {
+.lobby-inline-select {
+  min-width: 0;
+}
+
+.lobby-inline-select > span {
+  display: none;
+}
+
+.lobby-inline-select .themed-select summary {
   min-height: 38px;
-  padding: 6px 9px;
+  padding: 6px 28px 6px 9px;
   font-size: 12px;
+}
+
+.lobby-inline-select .themed-select-options {
+  z-index: 40;
 }
 
 .lobby-ready {

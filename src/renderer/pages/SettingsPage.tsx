@@ -1,5 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 import { CircleHelp } from "lucide-react";
+import { ThemedSelect } from "../components/common/ThemedSelect";
 import { useAppStore } from "../state/appStore";
 
 export function SettingsPage() {
@@ -36,21 +37,18 @@ export function SettingsPage() {
           checked={settings.autoRejectFamilySharing}
           onChange={(autoRejectFamilySharing) => updateSettings({ autoRejectFamilySharing })}
         />
-        <label>
+        <div>
           <span className="setting-label">
             Maximum 1v1 opponent rating below yours
             <HelpTooltip text="This applies only to 1v1. Restricting lower-rated opponents may make matchmaking take longer." />
           </span>
-          <select
-            value={settings.maximumLowerOpponentRatingGap}
-            onChange={(event) => updateSettings({ maximumLowerOpponentRatingGap: Number(event.target.value) })}
-          >
-            <option value={0}>Off</option>
-            {[200, 300, 400, 500].map((rating) => (
-              <option key={rating} value={rating}>{rating} Elo</option>
-            ))}
-          </select>
-        </label>
+          <ThemedSelect
+            label=""
+            value={String(settings.maximumLowerOpponentRatingGap)}
+            onChange={(value) => updateSettings({ maximumLowerOpponentRatingGap: Number(value) })}
+            options={[{ value: "0", label: "Off" }, ...[200, 300, 400, 500].map((rating) => ({ value: String(rating), label: `${rating} Elo` }))]}
+          />
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title="Account">

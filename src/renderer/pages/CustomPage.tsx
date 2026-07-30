@@ -4,6 +4,7 @@ import { civilizations } from "../../shared/civilizations";
 import type { Aoe2CivilizationSelection } from "../../shared/aoe2UiManifest";
 import type { CustomLobbyRoom, LocalCustomContent, LocalCustomContentCatalog } from "../../shared/contracts/customLobby";
 import { lobbySetupTiming } from "../../shared/runtimeConfig";
+import { ThemedSelect } from "../components/common/ThemedSelect";
 import { customLobbyService } from "../services/customLobbyService";
 import { replayHasEnded } from "../services/replayMetadataService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
@@ -119,7 +120,7 @@ export function CustomPage() {
 }
 
 function ContentSelect({ label, items, value, onChange }: { label: string; items: LocalCustomContent[]; value: string; onChange: (value: string) => void }) {
-  return <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}><option value="">Choose content…</option>{items.map((item) => <option key={item.id} value={item.id} disabled={!item.enabled}>{item.kind === "scenario" ? "[Scenario] " : "[Map] "}{item.name}{item.enabled ? "" : ` — Disabled (${item.modName ?? "enable in AoE2 Mods"})`}</option>)}</select>{value && <small>{items.find((item) => item.id === value)?.source}</small>}</label>;
+  return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: "Choose content…" }, ...items.map((item) => ({ value: item.id, label: `${item.kind === "scenario" ? "[Scenario] " : "[Map] "}${item.name}${item.enabled ? "" : ` — Disabled (${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
 }
 
 function NetworkLobby({ room, currentPlayerId, notify }: {
@@ -334,8 +335,8 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
               {player && room.map?.kind === "scenario" ? <><span>Scenario</span><span>Scenario-defined</span>{player.id === currentPlayerId
                 ? <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
                 : <span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span>}</> : player && (player.id === currentPlayerId ? <>
-                <select value={player.team} onChange={(event) => act(customLobbyService.updatePlayer(room.id, { team: Number(event.target.value) }))}><option value={0}>—</option>{[1, 2, 3, 4].map((team) => <option value={team} key={team}>Team {team}</option>)}</select>
-                <select value={player.civilization} onChange={(event) => act(customLobbyService.updatePlayer(room.id, { civilization: event.target.value }))}><option>Random</option>{civilizations.map((civilization) => <option key={civilization}>{civilization}</option>)}</select>
+                <ThemedSelect className="lobby-inline-select" label="Team" value={String(player.team)} onChange={(team) => act(customLobbyService.updatePlayer(room.id, { team: Number(team) }))} options={[{ value: "0", label: "—" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />
+                <ThemedSelect className="lobby-inline-select" label="Civilization" value={player.civilization} onChange={(civilization) => act(customLobbyService.updatePlayer(room.id, { civilization }))} options={["Random", ...civilizations].map((civilization) => ({ value: civilization, label: civilization }))} />
                 <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
               </> : <><span>Team {player.team || "—"}</span><span>{player.civilization}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>)}
             </div>
