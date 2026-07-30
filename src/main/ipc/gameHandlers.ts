@@ -37,6 +37,7 @@ import {
 } from "../window.js";
 import {
   closeAoe2NativeWindow,
+  clearAoe2TextField,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
   setWindowsInputBlocked,
@@ -2265,6 +2266,9 @@ export function registerGameHandlers(): void {
         await clickStep("Set Scenario", picker.setScenarioPoint[0], picker.setScenarioPoint[1], { synchronous: true });
         await delay(picker.openSettleMs);
         await clickStep("Focus Scenario Search", picker.searchPoint[0], picker.searchPoint[1], { synchronous: true });
+        const clearScenarioSearch = await clearAoe2TextField(process.pid);
+        emitLog(`SCENARIO_SELECT|Step=ClearSearch|${clearScenarioSearch.detail}`);
+        if (!clearScenarioSearch.sent) throw new Error("The previous scenario search could not be cleared.");
         const scenarioSearch = await sendAoe2Text(process.pid, normalizedMapName, { triggerKeyEvents: true });
         emitLog(`SCENARIO_SELECT|Step=Search|Scenario=${normalizedMapName}|${scenarioSearch.detail}`);
         if (!scenarioSearch.sent) throw new Error(`${normalizedMapName} could not be entered in scenario search.`);

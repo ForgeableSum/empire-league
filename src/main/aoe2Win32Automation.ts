@@ -541,6 +541,28 @@ export async function sendAoe2Text(
   };
 }
 
+export async function clearAoe2TextField(processId: number): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+
+  const events = [
+    sendWindowMessage(window, 0x0100, 0x24, 1),
+    sendWindowMessage(window, 0x0101, 0x24, -2147483647)
+  ];
+  for (let index = 0; index < 256; index += 1) {
+    events.push(sendWindowMessage(window, 0x0100, 0x2e, 1));
+    events.push(sendWindowMessage(window, 0x0101, 0x2e, -2147483647));
+    if (index % 16 === 15) await delay(10);
+  }
+  const sent = events.every((event) => event.dispatched);
+  await delay(150);
+  return {
+    sent,
+    detail: `${sent ? "SENT" : "SEND_FAILED"}|Mode=WindowMessageKeyText|Action=HomeDelete|DeleteCount=256`
+  };
+}
+
 export function readAoe2ReadyState(processId: number, designY: number): NativeReadyStateResult {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
