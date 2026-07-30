@@ -104,7 +104,7 @@ export function CustomPage() {
             <div><strong>{room.name}</strong><small>{room.demo ? "Demo room · " : ""}Hosted by {room.players.find((player) => player.host)?.displayName ?? "Unknown"}</small></div>
             <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
             <div className="room-player-count"><Users size={16} /> {room.players.length}/{room.maxPlayers}</div>
-            <span className={`custom-room-status ${room.status}`}>{room.status}</span>
+            <span className={`custom-room-status ${room.status}`}>{customRoomStatusLabel(room.status)}</span>
             <button className="secondary" type="button" disabled={room.status !== "open" || room.players.length >= room.maxPlayers || pending} onClick={() => {
               setPending(true);
               void customLobbyService.join(room.id).catch((error) => notify("Could not join the lobby.", "danger", { detail: messageFor(error) })).finally(() => setPending(false));
@@ -269,13 +269,14 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
             return;
           }
           await window.electronApi!.confirmReplayEnded();
+          await customLobbyService.finish(room.id);
         })
         .catch((error) => {
           replayResultInFlight.current = false;
           notify("The finished custom game could not be detected.", "danger", { detail: messageFor(error) });
         });
     });
-  }, [room.status, notify]);
+  }, [room.id, room.status, notify]);
 
   async function ensureAoe2Running() {
     const process = await window.electronApi!.detectAoe2Process();
@@ -341,4 +342,10 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
 
 function messageFor(error: unknown) {
   return error instanceof Error ? error.message : "An unexpected error occurred.";
+}
+
+function customRoomStatusLabel(status: CustomLobbyRoom["status"]): string {
+  if (status === "open") return "Open";
+  if (status === "launching") return "Starting";
+  return "In Game";
 }

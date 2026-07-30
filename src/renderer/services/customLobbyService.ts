@@ -41,6 +41,9 @@ export const customLobbyService = {
   async completeStart(roomId: string): Promise<void> {
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/complete-start`, { method: "POST" });
   },
+  async finish(roomId: string): Promise<void> {
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/finish`, { method: "POST" });
+  },
   async failStart(roomId: string, error: string): Promise<void> {
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/fail-start`, { method: "POST", body: { error } });
   },

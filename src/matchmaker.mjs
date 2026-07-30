@@ -1108,6 +1108,22 @@ async function handleRequest(request, response) {
       return send(response, 200, { started: true });
     }
 
+    const finishCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/finish$/);
+    if (request.method === "POST" && finishCustomLobby) {
+      const roomId = decodeURIComponent(finishCustomLobby[1]);
+      const room = customLobbies.get(roomId);
+      if (!room) return send(response, 200, { finished: true });
+      if (!room.players.some((player) => player.id === authenticatedPlayer.id)) {
+        return send(response, 403, { error: "Only lobby players can finish the game." });
+      }
+      if (room.status !== "started") {
+        return send(response, 409, { error: "The custom game has not started." });
+      }
+      customLobbies.delete(roomId);
+      broadcastCustomRooms();
+      return send(response, 200, { finished: true });
+    }
+
     const failCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/fail-start$/);
     if (request.method === "POST" && failCustomLobby) {
       const room = customLobbies.get(decodeURIComponent(failCustomLobby[1]));
