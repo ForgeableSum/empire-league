@@ -45,6 +45,7 @@ import {
   keepAoe2NativeWindowBehind,
   postAoe2Enter,
   postAoe2DesignClick,
+  readAoe2CivilizationPickerState,
   readAoe2HostSetupState,
   readAoe2ReadyState,
   sendAoe2End,
@@ -2659,11 +2660,20 @@ export function registerGameHandlers(): void {
       if (!enter.sent) throw new Error("Civilization confirmation Enter could not be sent.");
       await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
-      const lobbyState = readAoe2HostSetupState(gameProcess.pid);
-      emitLog(`CIV_SELECT|Step=VerifyReturn|Selection=${selection}|${lobbyState.detail}`);
-      if (lobbyState.state !== "lobby-room") {
-        if (lobbyState.state === "content-picker"
-          && selection in aoe2UiManifest.civilizationGrid.entries) {
+      const usesFilteredPicker = selection in aoe2UiManifest.civilizationGrid.entries;
+      const pickerState = usesFilteredPicker
+        ? readAoe2CivilizationPickerState(gameProcess.pid)
+        : null;
+      const lobbyState = pickerState ? null : readAoe2HostSetupState(gameProcess.pid);
+      emitLog(
+        `CIV_SELECT|Step=VerifyReturn|Selection=${selection}`
+        + `|${pickerState?.detail ?? lobbyState?.detail ?? "State=unknown"}`
+      );
+      const selectionVerified = pickerState
+        ? pickerState.state === "closed"
+        : lobbyState?.state === "lobby-room";
+      if (!selectionVerified) {
+        if (pickerState?.state === "open" && usesFilteredPicker) {
           const [randomX, randomY] = civilizationDesignPoint("Random");
           const randomTile = await postAoe2DesignClick(
             gameProcess.pid,
@@ -2687,11 +2697,11 @@ export function registerGameHandlers(): void {
           if (!randomEnter.sent) throw new Error("Random civilization confirmation Enter could not be sent.");
           await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
-          const fallbackLobbyState = readAoe2HostSetupState(gameProcess.pid);
+          const fallbackPickerState = readAoe2CivilizationPickerState(gameProcess.pid);
           emitLog(
-            `CIV_SELECT|Step=FallbackVerifyReturn|UnavailableSelection=${selection}|${fallbackLobbyState.detail}`
+            `CIV_SELECT|Step=FallbackVerifyReturn|UnavailableSelection=${selection}|${fallbackPickerState.detail}`
           );
-          if (fallbackLobbyState.state === "lobby-room") {
+          if (fallbackPickerState.state === "closed") {
             emitLog(`CIV_SELECT|Complete=True|Selection=Random|FallbackFrom=${selection}|Slot=${slot}`);
             return {
               sent: true,
@@ -2700,7 +2710,11 @@ export function registerGameHandlers(): void {
             };
           }
         }
-        throw new Error(`${selection} selection did not return to the lobby room.`);
+        throw new Error(
+          pickerState?.state === "unknown"
+            ? `${selection} picker state could not be verified after selection.`
+            : `${selection} selection did not close the civilization picker.`
+        );
       }
       emitLog(`CIV_SELECT|Complete=True|Selection=${selection}|Slot=${slot}`);
       return { sent: true, message: `${selection} selected for AoE2 lobby slot ${slot}.` };

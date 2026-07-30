@@ -99,6 +99,11 @@ export interface NativeReadyStateResult {
   detail: string;
 }
 
+export interface NativeCivilizationPickerStateResult {
+  state: "open" | "closed" | "unknown";
+  detail: string;
+}
+
 export interface NativeHostSetupStateResult {
   state: "main-menu" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "content-picker" | "unknown";
   detail: string;
@@ -631,6 +636,49 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
       `Viewport=${formatViewport(transform)}`,
       `ClientPoint=${x},${y}`,
       `RGB=${red},${green},${blue}`
+    ].join("|")
+  };
+}
+
+export function readAoe2CivilizationPickerState(processId: number): NativeCivilizationPickerStateResult {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { state: "unknown", detail: "WINDOW_NOT_FOUND" };
+
+  const rect = {} as Rect;
+  if (!GetClientRect!(window, rect)) return { state: "unknown", detail: "CLIENT_RECT_FAILED" };
+  const width = rect.right - rect.left;
+  const height = rect.bottom - rect.top;
+  if (width <= 0 || height <= 0) return { state: "unknown", detail: "INVALID_CLIENT_SIZE" };
+
+  const transform = designTransform(width, height);
+  const searchPoint = transformDesignPoint(375, 300, transform);
+  const filteredTilePoint = transformDesignPoint(1259, 515, transform);
+  const dc = GetDC!(window) as NativeHandle;
+  if (!dc) return { state: "unknown", detail: "WINDOW_DC_FAILED" };
+  let search: [number, number, number] | null;
+  let filteredTile: [number, number, number] | null;
+  try {
+    search = readRgb(dc, searchPoint.x, searchPoint.y);
+    filteredTile = readRgb(dc, filteredTilePoint.x, filteredTilePoint.y);
+  } finally {
+    ReleaseDC!(window, dc);
+  }
+  if (!search || !filteredTile) return { state: "unknown", detail: "PIXEL_READ_FAILED" };
+
+  const searchIsBlack = Math.max(...search) <= 25;
+  const tileChroma = Math.max(...filteredTile) - Math.min(...filteredTile);
+  const hasFilteredTile = Math.max(...filteredTile) >= 60 && tileChroma >= 35;
+  const state = searchIsBlack && hasFilteredTile ? "open" : "closed";
+  return {
+    state,
+    detail: [
+      `State=${state}`,
+      `Window=${String(window)}`,
+      `Viewport=${formatViewport(transform)}`,
+      `SearchRGB=${search.join(",")}`,
+      `FilteredTileRGB=${filteredTile.join(",")}`,
+      `FilteredTileChroma=${tileChroma}`
     ].join("|")
   };
 }
