@@ -2442,12 +2442,21 @@ export function registerGameHandlers(): void {
         throw new Error(`${normalizedMapName} selection did not return to the lobby room.`);
       }
 
+      const rankedCustomMap = !isCustomAutomation
+        && contentKind === "map"
+        && (!(normalizedMapName in aoe2UiManifest.mapPicker.entries)
+          || (aoe2UiManifest.mapPicker.customMapNames as readonly string[]).includes(normalizedMapName));
+      const copyDeadline = rankedCustomMap ? Date.now() + 12_000 : 0;
       clipboard.writeText("EL_CURSOR_COPY_PENDING");
-      await actionStep("copyLobbyUri");
-      await delay(lobbySetupTiming.clipboardReadMs);
-      let lobbyUri = clipboard.readText().match(/aoe2de:\/\/0\/\d+/)?.[0];
-      if (!lobbyUri) {
+      let lobbyUri: string | undefined;
+      do {
+        await actionStep("copyLobbyUri");
+        await delay(lobbySetupTiming.clipboardReadMs);
+        lobbyUri = clipboard.readText().match(/aoe2de:\/\/0\/\d+/)?.[0];
+        if (lobbyUri) break;
         await delay(lobbySetupRetryTiming.beforeClipboardRetryMs);
+      } while (rankedCustomMap && Date.now() < copyDeadline);
+      if (!lobbyUri && !rankedCustomMap) {
         await actionStep("copyLobbyUri");
         await delay(lobbySetupRetryTiming.clipboardReadMs);
         lobbyUri = clipboard.readText().match(/aoe2de:\/\/0\/\d+/)?.[0];
