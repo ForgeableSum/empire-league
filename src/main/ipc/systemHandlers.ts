@@ -42,6 +42,13 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:stop-match-found-alert", async (event) => {
     BrowserWindow.fromWebContents(event.sender)?.flashFrame(false);
   });
+  ipcMain.handle("system:alert-unread-message", async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (window && !window.isFocused()) window.flashFrame(true);
+  });
+  ipcMain.handle("system:clear-unread-message-alert", async (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.flashFrame(false);
+  });
   ipcMain.handle("system:restart", async () => {
     app.relaunch();
     app.quit();

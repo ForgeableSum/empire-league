@@ -449,6 +449,16 @@ export async function areFriends(leftId, rightId) {
   return rows.length > 0;
 }
 
+export async function removeFriend(leftId, rightId) {
+  const [playerOneId, playerTwoId] = socialPair(leftId, rightId);
+  const [result] = await database.execute(
+    `DELETE FROM social_connections
+     WHERE player_one_id = ? AND player_two_id = ? AND status = 'accepted'`,
+    [playerOneId, playerTwoId]
+  );
+  return result.affectedRows === 1;
+}
+
 function divisionForRating(rating) {
   if (rating >= 2200) return "Grandmaster";
   if (rating >= 1800) return "Master";

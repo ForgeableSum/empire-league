@@ -12,7 +12,7 @@ import { Toasts } from "./components/common/Toasts";
 import { WindowControls } from "./components/layout/WindowControls";
 import { useAppStore } from "./state/appStore";
 import { LogIn } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
 import loadingScreenArtwork from "./assets/el_full_1.png";
 import { socialService } from "./services/socialService";
@@ -23,6 +23,7 @@ export function App() {
   const [mouseTestActive, setMouseTestActive] = useState(false);
   const [startupScreenVisible, setStartupScreenVisible] = useState(true);
   const [friends, setFriends] = useState<SocialFriend[]>([]);
+  const friendsRef = useRef<SocialFriend[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [chats, setChats] = useState<OpenChat[]>([]);
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
@@ -33,6 +34,16 @@ export function App() {
   }, []);
 
   const { page, state, authStatus, authError, signInWithSteam } = useAppStore();
+
+  useEffect(() => {
+    friendsRef.current = friends;
+  }, [friends]);
+
+  useEffect(() => {
+    const clearAttention = () => void window.electronApi?.clearUnreadMessageAlert();
+    window.addEventListener("focus", clearAttention);
+    return () => window.removeEventListener("focus", clearAttention);
+  }, []);
 
   async function openChat(friend: SocialFriend) {
     const history = await socialService.getMessages(friend.id).catch(() => []);
@@ -52,6 +63,17 @@ export function App() {
       }];
     });
     setFriends((current) => current.map((item) => item.id === friend.id ? { ...item, unread: 0 } : item));
+  }
+
+  function activateChat(friendId: string) {
+    setFriends((current) => current.map((friend) => friend.id === friendId ? { ...friend, unread: 0 } : friend));
+    void socialService.markMessagesRead(friendId);
+    void window.electronApi?.clearUnreadMessageAlert();
+  }
+
+  async function unfriend(friend: SocialFriend) {
+    await socialService.removeFriend(friend.id);
+    setChats((current) => current.filter((chat) => chat.friend.id !== friend.id));
   }
 
   async function acceptRequest(request: FriendRequest) {
@@ -96,25 +118,32 @@ export function App() {
       }
       if (event.type === "message") {
         const message = event.message;
+        const receivedMessage = {
+          id: message.id,
+          from: "friend" as const,
+          text: message.text,
+          time: new Date(message.sentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        };
+        const sender = friendsRef.current.find((friend) => friend.id === message.senderId);
+        const appFocused = document.hasFocus();
         setChats((current) => {
           const open = current.some((chat) => chat.friend.id === message.senderId);
-          if (!open) {
-            setFriends((items) => items.map((friend) => friend.id === message.senderId
-              ? { ...friend, unread: (friend.unread ?? 0) + 1 }
-              : friend));
-            return current;
-          }
-          void socialService.markMessagesRead(message.senderId);
+          if (!open && sender) return [...current.slice(-2), { friend: sender, minimized: false, messages: [receivedMessage] }];
+          if (!open) return current;
           return current.map((chat) => chat.friend.id === message.senderId ? {
             ...chat,
-            messages: [...chat.messages, {
-              id: message.id,
-              from: "friend",
-              text: message.text,
-              time: new Date(message.sentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-            }]
+            minimized: false,
+            messages: [...chat.messages, receivedMessage]
           } : chat);
         });
+        if (appFocused) {
+          void socialService.markMessagesRead(message.senderId);
+        } else {
+          setFriends((items) => items.map((friend) => friend.id === message.senderId
+            ? { ...friend, unread: (friend.unread ?? 0) + 1 }
+            : friend));
+          void window.electronApi?.alertUnreadMessage();
+        }
       }
     });
   }, [authStatus, state.currentUser.id]);
@@ -204,7 +233,7 @@ export function App() {
         {page === "match-history" && <MatchHistoryPage />}
         {page === "leaderboard" && <LeaderboardPage />}
         {page === "profile" && <ProfilePage />}
-        {page === "social" && <SocialPage friends={friends} requests={requests} onMessage={(friend) => void openChat(friend)} onAccept={(request) => void acceptRequest(request)} onDecline={(id) => void socialService.declineRequest(requests.find((item) => item.id === id)?.connectionId ?? id)} onInvite={inviteFriend} />}
+        {page === "social" && <SocialPage friends={friends} requests={requests} onMessage={(friend) => void openChat(friend)} onAccept={(request) => void acceptRequest(request)} onDecline={(id) => void socialService.declineRequest(requests.find((item) => item.id === id)?.connectionId ?? id)} onInvite={inviteFriend} onUnfriend={(friend) => void unfriend(friend)} />}
         {page === "settings" && <SettingsPage />}
       </Shell>
       {state.queueStatus === "match_found" && state.activeMatch && <MatchFoundOverlay />}
@@ -213,6 +242,7 @@ export function App() {
         chats={chats}
         onToggle={(id) => setChats((current) => current.map((chat) => chat.friend.id === id ? { ...chat, minimized: !chat.minimized } : chat))}
         onClose={(id) => setChats((current) => current.filter((chat) => chat.friend.id !== id))}
+        onActivate={activateChat}
         onSend={(id, text) => void socialService.sendMessage(id, text).then((message) => setChats((current) => current.map((chat) => chat.friend.id === id ? {
           ...chat,
           messages: [...chat.messages, { id: message.id, from: "me", text: message.text, time: new Date(message.sentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }]

@@ -40,6 +40,10 @@ export const socialService = {
     await matchmakerTransport.request(`/social/requests/${encodeURIComponent(connectionId)}`, { method: "DELETE" });
   },
 
+  async removeFriend(friendId: string): Promise<void> {
+    await matchmakerTransport.request(`/social/friends/${encodeURIComponent(friendId)}`, { method: "DELETE" });
+  },
+
   async updatePresence(presence: FriendPresence, activity: string, mapName?: string): Promise<void> {
     await matchmakerTransport.request("/social/presence", { method: "POST", body: { presence, activity, mapName } });
   },

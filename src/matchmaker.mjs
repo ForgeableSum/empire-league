@@ -13,6 +13,7 @@ import {
   acceptFriendRequest,
   deleteSocialConnection,
   areFriends,
+  removeFriend,
   getPlayerMatchHistory,
   linkPlayerAoeProfile,
   recordMatchResultConflict,
@@ -935,6 +936,21 @@ async function handleRequest(request, response) {
       }
       await emitSocialGraphChanged(authenticatedPlayer.id, otherPlayerId);
       return send(response, 200, { deleted: true });
+    }
+
+    const removeSocialFriend = url.pathname.match(/^\/social\/friends\/([^/]+)$/);
+    if (request.method === "DELETE" && removeSocialFriend) {
+      const friendId = decodeURIComponent(removeSocialFriend[1]);
+      if (!await removeFriend(authenticatedPlayer.id, friendId)) {
+        return send(response, 404, { error: "Friendship not found." });
+      }
+      socialFriendIds.get(authenticatedPlayer.id)?.delete(friendId);
+      socialFriendIds.get(friendId)?.delete(authenticatedPlayer.id);
+      socialMessages.delete(conversationKey(authenticatedPlayer.id, friendId));
+      socialUnread.get(authenticatedPlayer.id)?.delete(friendId);
+      socialUnread.get(friendId)?.delete(authenticatedPlayer.id);
+      await emitSocialGraphChanged(authenticatedPlayer.id, friendId);
+      return send(response, 200, { removed: true });
     }
 
     if (request.method === "POST" && url.pathname === "/social/presence") {

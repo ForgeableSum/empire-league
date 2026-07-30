@@ -13,29 +13,32 @@ export function ChatDock({
   chats,
   onToggle,
   onClose,
-  onSend
+  onSend,
+  onActivate
 }: {
   chats: OpenChat[];
   onToggle: (id: string) => void;
   onClose: (id: string) => void;
   onSend: (id: string, text: string) => void;
+  onActivate: (id: string) => void;
 }) {
   return (
     <div className="chat-dock" aria-label="Open conversations">
       {chats.map((chat) => chat.minimized
-        ? <button className="chat-minimized" type="button" key={chat.friend.id} onClick={() => onToggle(chat.friend.id)}>
+        ? <button className="chat-minimized" type="button" key={chat.friend.id} onClick={() => { onToggle(chat.friend.id); onActivate(chat.friend.id); }}>
             <MessageCircle size={17} /><span>{chat.friend.name}</span><span className={`presence-dot ${chat.friend.presence}`} />
           </button>
-        : <ChatWindow key={chat.friend.id} chat={chat} onToggle={onToggle} onClose={onClose} onSend={onSend} />)}
+        : <ChatWindow key={chat.friend.id} chat={chat} onToggle={onToggle} onClose={onClose} onSend={onSend} onActivate={onActivate} />)}
     </div>
   );
 }
 
-function ChatWindow({ chat, onToggle, onClose, onSend }: {
+function ChatWindow({ chat, onToggle, onClose, onSend, onActivate }: {
   chat: OpenChat;
   onToggle: (id: string) => void;
   onClose: (id: string) => void;
   onSend: (id: string, text: string) => void;
+  onActivate: (id: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -49,7 +52,7 @@ function ChatWindow({ chat, onToggle, onClose, onSend }: {
   }
 
   return (
-    <section className="chat-window">
+    <section className="chat-window" onPointerDown={() => onActivate(chat.friend.id)}>
       <header className="chat-header">
         <button className="chat-person" type="button" onClick={() => onToggle(chat.friend.id)}>
           <span className="social-avatar compact">{chat.friend.initials}<span className={`presence-dot ${chat.friend.presence}`} /></span>

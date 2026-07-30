@@ -1,4 +1,4 @@
-import { Check, Clock3, Gamepad2, MessageCircle, Search, Send, UserPlus, Users, X } from "lucide-react";
+import { Check, Clock3, Gamepad2, MessageCircle, Search, Send, UserMinus, UserPlus, Users, X } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
 
 export type FriendPresence = "online" | "in_game" | "idle" | "offline";
@@ -34,14 +34,16 @@ interface SocialPageProps {
   onAccept: (request: FriendRequest) => void;
   onDecline: (id: string) => void;
   onInvite: (name: string) => Promise<string>;
+  onUnfriend: (friend: SocialFriend) => void;
 }
 
-export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, onInvite }: SocialPageProps) {
+export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, onInvite, onUnfriend }: SocialPageProps) {
   const [query, setQuery] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteSent, setInviteSent] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [invitePending, setInvitePending] = useState(false);
+  const [pendingUnfriend, setPendingUnfriend] = useState<SocialFriend | null>(null);
   const [filter, setFilter] = useState<"all" | "online" | "in_game">("all");
 
   const visibleFriends = useMemo(() => friends.filter((friend) => {
@@ -115,10 +117,15 @@ export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, 
                   {friend.presence === "idle" && <Clock3 size={15} />}
                   <span>{friend.activity}{friend.lastSeen ? ` · ${friend.lastSeen}` : ""}</span>
                 </div>
-                <button className="secondary friend-message" type="button" onClick={() => onMessage(friend)}>
-                  <MessageCircle size={16} /> Message
-                  {!!friend.unread && <span className="unread-badge">{friend.unread}</span>}
-                </button>
+                <div className="friend-actions">
+                  <button className="secondary friend-message" type="button" onClick={() => onMessage(friend)}>
+                    <MessageCircle size={16} /> Message
+                    {!!friend.unread && <span className="unread-badge">{friend.unread}</span>}
+                  </button>
+                  <button className="secondary unfriend-button" type="button" aria-label={`Unfriend ${friend.name}`} title={`Unfriend ${friend.name}`} onClick={() => setPendingUnfriend(friend)}>
+                    <UserMinus size={16} />
+                  </button>
+                </div>
               </article>
             ))}
             {visibleFriends.length === 0 && <div className="empty-state social-empty">No friends match this view.</div>}
@@ -165,6 +172,27 @@ export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, 
           </div>
         </div>
       </aside>
+      {pendingUnfriend && (
+        <div className="modal-backdrop social-confirm-backdrop" role="presentation" onPointerDown={() => setPendingUnfriend(null)}>
+          <section className="social-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="unfriend-title" onPointerDown={(event) => event.stopPropagation()}>
+            <div className="social-confirm-icon"><UserMinus size={24} /></div>
+            <div>
+              <span className="eyebrow">Remove friend</span>
+              <h2 id="unfriend-title">Unfriend {pendingUnfriend.name}?</h2>
+            </div>
+            <p>They’ll be removed from your friends list and your current chat history will be cleared.</p>
+            <div className="social-confirm-actions">
+              <button className="secondary" type="button" onClick={() => setPendingUnfriend(null)}>Cancel</button>
+              <button className="social-confirm-remove" type="button" onClick={() => {
+                onUnfriend(pendingUnfriend);
+                setPendingUnfriend(null);
+              }}>
+                <UserMinus size={16} /> Unfriend
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

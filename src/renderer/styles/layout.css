@@ -791,6 +791,81 @@
   padding: 0 12px;
 }
 
+.friend-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.unfriend-button {
+  min-width: 40px;
+  width: 40px;
+  padding: 0;
+  color: var(--muted);
+}
+
+.unfriend-button:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 65%, var(--line));
+}
+
+.social-confirm-backdrop {
+  z-index: 60;
+  backdrop-filter: blur(4px);
+}
+
+.social-confirm-modal {
+  width: min(430px, calc(100vw - 40px));
+  display: grid;
+  gap: 16px;
+  padding: 26px;
+  border: 1px solid #74513a;
+  border-radius: var(--radius);
+  background:
+    linear-gradient(145deg, rgba(226, 107, 107, 0.055), transparent 48%),
+    #211e1a;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.62);
+}
+
+.social-confirm-modal h2 {
+  margin-top: 4px;
+}
+
+.social-confirm-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--danger) 48%, var(--line));
+  border-radius: 50%;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.social-confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.social-confirm-remove {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--danger) 72%, #fff);
+  border-radius: var(--radius);
+  color: #fff;
+  background: color-mix(in srgb, var(--danger) 78%, #301918);
+  font-weight: 800;
+}
+
+.social-confirm-remove:hover {
+  filter: brightness(1.1);
+}
+
 .unread-badge,
 .request-count {
   min-width: 20px;
