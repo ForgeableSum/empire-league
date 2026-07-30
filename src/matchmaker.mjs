@@ -104,8 +104,15 @@ function publicCustomRooms() {
   return [...customLobbies.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
-function broadcastCustomRooms() {
-  const message = { type: "custom_lobby_event", event: { type: "rooms_changed", rooms: publicCustomRooms() } };
+function broadcastCustomRooms(closedRoom) {
+  const message = {
+    type: "custom_lobby_event",
+    event: {
+      type: "rooms_changed",
+      rooms: publicCustomRooms(),
+      ...(closedRoom ? { closedRoomId: closedRoom.id, closeReason: closedRoom.reason } : {})
+    }
+  };
   for (const socket of webSocketServer.clients) {
     if (socket.readyState === WebSocket.OPEN && socketSessions.get(socket)?.player) sendSocket(socket, message);
   }
@@ -113,6 +120,20 @@ function broadcastCustomRooms() {
 
 function playerCustomLobby(playerId) {
   return [...customLobbies.values()].find((room) => room.players.some((player) => player.id === playerId));
+}
+
+function cleanupCustomLobbyDisconnect(playerId) {
+  const room = playerCustomLobby(playerId);
+  if (!room || room.status === "started") return;
+  if (room.hostId === playerId) {
+    customLobbies.delete(room.id);
+    broadcastCustomRooms({ id: room.id, reason: "The host disconnected before the game began." });
+    return;
+  }
+  const disconnected = room.players.find((player) => player.id === playerId);
+  room.players = room.players.filter((player) => player.id !== playerId);
+  if (disconnected) addLobbySystemMessage(room, `${disconnected.displayName} disconnected.`);
+  broadcastCustomRooms();
 }
 
 function addLobbySystemMessage(room, text) {
@@ -1808,9 +1829,11 @@ webSocketServer.on("connection", (socket) => {
         }
         sendSocket(socket, { type: "response", id: message.id, status, body });
         if (message.method.toUpperCase() === "POST" && new URL(message.path, "http://localhost").pathname === "/auth/logout" && status < 400) {
+          const playerId = session.player?.id;
           unsubscribeSocket(socket);
           session.player = null;
           session.token = null;
+          if (playerId) cleanupCustomLobbyDisconnect(playerId);
         }
         return;
       }
@@ -1833,6 +1856,7 @@ webSocketServer.on("connection", (socket) => {
         (candidate) => candidate.readyState === WebSocket.OPEN && socketSessions.get(candidate)?.player?.id === playerId
       );
       if (!stillConnected) {
+        cleanupCustomLobbyDisconnect(playerId);
         socialPresence.delete(playerId);
         socialFriendIds.delete(playerId);
       }

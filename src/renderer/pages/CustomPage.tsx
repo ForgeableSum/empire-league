@@ -43,7 +43,17 @@ export function CustomPage() {
 
   useEffect(() => {
     void refresh();
-    return customLobbyService.onEvent((event) => setRooms(event.rooms));
+    return customLobbyService.onEvent((event) => {
+      setRooms((current) => {
+        const closedRoom = event.closedRoomId
+          ? current.find((room) => room.id === event.closedRoomId && room.players.some((player) => player.id === state.currentUser.id))
+          : undefined;
+        if (closedRoom && event.closeReason) {
+          notify("Custom lobby closed.", "warning", { detail: event.closeReason });
+        }
+        return event.rooms;
+      });
+    });
   }, []);
 
   async function createRoom() {
@@ -136,6 +146,11 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
   const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => room.players.find((player) => player.slot === index + 1)), [room]);
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
+
+  useEffect(() => () => {
+    void window.electronApi?.setLobbyInputLock(false);
+    void window.electronApi?.stopReplayEndDetection();
+  }, [room.id]);
 
   useEffect(() => {
     if (room.status === "open") {

@@ -18,7 +18,12 @@ export type SocialEvent =
   | { type: "snapshot"; snapshot: import("./socialService").SocialSnapshot }
   | { type: "presence"; playerId: string; presence: import("../pages/SocialPage").FriendPresence; activity: string; mapName?: string }
   | { type: "message"; message: import("./socialService").SocialMessage };
-export type CustomLobbyEvent = { type: "rooms_changed"; rooms: import("../../shared/contracts/customLobby").CustomLobbyRoom[] };
+export type CustomLobbyEvent = {
+  type: "rooms_changed";
+  rooms: import("../../shared/contracts/customLobby").CustomLobbyRoom[];
+  closedRoomId?: string;
+  closeReason?: string;
+};
 
 class MatchmakerTransport {
   private token: string | null = null;
