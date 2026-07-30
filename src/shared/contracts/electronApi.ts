@@ -53,10 +53,14 @@ export interface ElectronGameApi {
   startAoe2TabTest(): Promise<GameInputTestResult>;
   stopAoe2TabTest(): Promise<void>;
   sendAoe2Key(key: GameInputKey): Promise<GameInputResult>;
-  runAoe2CreateLobbySequence(mapName: string, playerCount?: 2 | 4 | 8, contentKind?: "map" | "scenario", context?: "ranked" | "custom"): Promise<GameInputResult>;
-  runAoe2LobbyCursorAction(target: "content-confirm" | "guest-ready" | "host-ready" | "start", context?: "ranked" | "custom"): Promise<GameInputResult>;
-  selectAoe2Civilization(selection: Aoe2CivilizationSelection, slot: number, context?: "ranked" | "custom"): Promise<GameInputResult>;
-  selectAoe2Team(team: 1 | 2, slot: number, context?: "ranked" | "custom"): Promise<GameInputResult>;
+  runAoe2CreateLobbySequence(mapName: string, playerCount?: 2 | 4 | 8, contentKind?: "map" | "scenario"): Promise<GameInputResult>;
+  runAoe2LobbyCursorAction(target: "content-confirm" | "guest-ready" | "host-ready" | "start"): Promise<GameInputResult>;
+  selectAoe2Civilization(selection: Aoe2CivilizationSelection, slot: number): Promise<GameInputResult>;
+  selectAoe2Team(team: 1 | 2, slot: number): Promise<GameInputResult>;
+  runAoe2CustomCreateLobbySequence(mapName: string, playerCount: 2 | 4 | 8, contentKind: "map" | "scenario"): Promise<GameInputResult>;
+  runAoe2CustomLobbyCursorAction(target: "content-confirm" | "guest-ready" | "host-ready" | "start"): Promise<GameInputResult>;
+  selectAoe2CustomCivilization(selection: Aoe2CivilizationSelection, slot: number): Promise<GameInputResult>;
+  selectAoe2CustomTeam(team: 1 | 2, slot: number): Promise<GameInputResult>;
   testAoe2HostGameMouseClick(): Promise<GameInputResult>;
   calibrateAoe2HostGameMouseClick(): Promise<GameInputResult>;
   testAoe2FakeActivationMouseClick(): Promise<GameInputResult>;

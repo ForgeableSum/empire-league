@@ -2163,17 +2163,15 @@ export function registerGameHandlers(): void {
     }
   });
 
-  ipcMain.handle("game:run-create-lobby-sequence", async (
+  const registerCreateLobbySequence = (channel: string, isCustomAutomation: boolean) => ipcMain.handle(channel, async (
     event,
     mapName: string,
     playerCount: 2 | 4 | 8 = 2,
-    contentKind: "map" | "scenario" = "map",
-    automationContext: "ranked" | "custom" = "ranked"
+    contentKind: "map" | "scenario" = "map"
   ) => {
     stopTabTest();
     setMouseCoordinateOverlayEnabled(false);
     const normalizedMapName = typeof mapName === "string" ? mapName.trim() : "";
-    const isCustomAutomation = automationContext === "custom";
     if (process.platform !== "win32") {
       return { sent: false, message: "Lobby automation is only supported on Windows." };
     }
@@ -2395,8 +2393,7 @@ export function registerGameHandlers(): void {
         // then wait for the lobby pixels to change instead of requiring an
         // immediate synchronous response from the game.
         await clickStep("Open Map Picker", mapPicker.openPoint[0], mapPicker.openPoint[1], {
-          synchronous: !isCustomAutomation,
-          requireMove: false
+          synchronous: !isCustomAutomation
         });
         if (isCustomAutomation) {
           let mapPickerState = readAoe2HostSetupState(process.pid);
@@ -2470,17 +2467,17 @@ export function registerGameHandlers(): void {
       }
     }
   });
+  registerCreateLobbySequence("game:run-create-lobby-sequence", false);
+  registerCreateLobbySequence("game:run-custom-create-lobby-sequence", true);
 
-  ipcMain.handle("game:run-lobby-cursor-action", async (
+  const registerLobbyCursorAction = (channel: string, isCustomAutomation: boolean) => ipcMain.handle(channel, async (
     event,
-    target: "content-confirm" | "guest-ready" | "host-ready" | "start",
-    automationContext: "ranked" | "custom" = "ranked"
+    target: "content-confirm" | "guest-ready" | "host-ready" | "start"
   ) => {
     if (process.platform !== "win32" || !["content-confirm", "guest-ready", "host-ready", "start"].includes(target)) {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    const isCustomAutomation = automationContext === "custom";
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
@@ -2586,8 +2583,10 @@ export function registerGameHandlers(): void {
       setMainWindowGameCoverClickThrough(false);
     }
   });
+  registerLobbyCursorAction("game:run-lobby-cursor-action", false);
+  registerLobbyCursorAction("game:run-custom-lobby-cursor-action", true);
 
-  ipcMain.handle("game:select-civilization", async (
+  const registerCivilizationSelection = (channel: string) => ipcMain.handle(channel, async (
     event,
     selection: Aoe2CivilizationSelection,
     slot: number
@@ -2714,12 +2713,13 @@ export function registerGameHandlers(): void {
       setMainWindowGameCoverClickThrough(false);
     }
   });
+  registerCivilizationSelection("game:select-civilization");
+  registerCivilizationSelection("game:select-custom-civilization");
 
-  ipcMain.handle("game:select-team", async (
+  const registerTeamSelection = (channel: string, isCustomAutomation: boolean) => ipcMain.handle(channel, async (
     event,
     team: 1 | 2,
-    slot: number,
-    automationContext: "ranked" | "custom" = "ranked"
+    slot: number
   ) => {
     if (process.platform !== "win32"
       || (team !== 1 && team !== 2)
@@ -2733,7 +2733,6 @@ export function registerGameHandlers(): void {
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    const isCustomAutomation = automationContext === "custom";
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
@@ -2767,6 +2766,8 @@ export function registerGameHandlers(): void {
       setMainWindowGameCoverClickThrough(false);
     }
   });
+  registerTeamSelection("game:select-team", false);
+  registerTeamSelection("game:select-custom-team", true);
 
   ipcMain.handle("game:test-host-game-mouse-click", async (event) => {
     if (process.platform !== "win32") {
