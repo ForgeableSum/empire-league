@@ -2662,7 +2662,8 @@ export function registerGameHandlers(): void {
       const lobbyState = readAoe2HostSetupState(gameProcess.pid);
       emitLog(`CIV_SELECT|Step=VerifyReturn|Selection=${selection}|${lobbyState.detail}`);
       if (lobbyState.state !== "lobby-room") {
-        if (selection in aoe2UiManifest.civilizationGrid.entries) {
+        if (lobbyState.state === "content-picker"
+          && selection in aoe2UiManifest.civilizationGrid.entries) {
           const [randomX, randomY] = civilizationDesignPoint("Random");
           const randomTile = await postAoe2DesignClick(
             gameProcess.pid,

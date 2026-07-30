@@ -653,19 +653,22 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
   const upperCenterPoint = transformDesignPoint(1920, 495, transform);
   const multiplayerPanelPoint = transformDesignPoint(2000, 1040, transform);
   const lowerButtonPoint = transformDesignPoint(1500, 1979, transform);
+  const guestReadyButtonPoint = transformDesignPoint(1500, 1875, transform);
   let upperLeft: [number, number, number] | null;
   let upperCenter: [number, number, number] | null;
   let multiplayerPanel: [number, number, number] | null;
   let lowerButton: [number, number, number] | null;
+  let guestReadyButton: [number, number, number] | null;
   try {
     upperLeft = readRgb(dc, upperLeftPoint.x, upperLeftPoint.y);
     upperCenter = readRgb(dc, upperCenterPoint.x, upperCenterPoint.y);
     multiplayerPanel = readRgb(dc, multiplayerPanelPoint.x, multiplayerPanelPoint.y);
     lowerButton = readRgb(dc, lowerButtonPoint.x, lowerButtonPoint.y);
+    guestReadyButton = readRgb(dc, guestReadyButtonPoint.x, guestReadyButtonPoint.y);
   } finally {
     ReleaseDC!(window, dc);
   }
-  if (!upperLeft || !upperCenter || !multiplayerPanel || !lowerButton) {
+  if (!upperLeft || !upperCenter || !multiplayerPanel || !lowerButton || !guestReadyButton) {
     return { state: "unknown", detail: "PIXEL_READ_FAILED" };
   }
 
@@ -673,11 +676,11 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
   const [centerRed, centerGreen, centerBlue] = upperCenter;
   const [panelRed, panelGreen, panelBlue] = multiplayerPanel;
   const [buttonRed, buttonGreen, buttonBlue] = lowerButton;
-  const hasReadyButton = (buttonRed > buttonGreen * 2 && buttonRed > 80)
-    || (buttonGreen > buttonRed * 2 && buttonGreen > 80);
-  // The host and guest Ready buttons sit at different heights. The lower
-  // sample therefore misses the guest button, but the lobby's parchment
-  // panels are stable in both layouts and distinct from the picker/dialog.
+  const [guestButtonRed, guestButtonGreen] = guestReadyButton;
+  const isReadyButtonColor = (red: number, green: number) =>
+    (red > green * 2 && red > 80) || (green > red * 2 && green > 80);
+  const hasReadyButton = isReadyButtonColor(buttonRed, buttonGreen)
+    || isReadyButtonColor(guestButtonRed, guestButtonGreen);
   const hasLobbyParchment = leftRed > 150 && leftGreen > 110 && leftBlue > 70
     && centerRed > 140 && centerGreen > 110 && centerBlue > 70;
   const hasMultiplayerPanel = panelRed > 180 && panelGreen > 180 && panelBlue > 160;
@@ -690,10 +693,12 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
     && panelRed > 140 && panelGreen > 110 && panelBlue > 70
     && buttonRed > 170 && buttonGreen > 120 && buttonBlue > 80;
   const hasContentPicker = hasDarkContentPicker || hasMapContentPicker;
-  const state = hasContentPicker
-    ? "content-picker"
-    : hasReadyButton || hasLobbyParchment
+  const state = hasReadyButton
     ? "lobby-room"
+    : hasContentPicker
+      ? "content-picker"
+      : hasLobbyParchment
+        ? "lobby-room"
     : hasMultiplayerPanel
       ? "multiplayer-menu"
       : centerRed > 150 && centerGreen > 150 && centerBlue > 140
@@ -711,7 +716,8 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
       `UpperLeftRGB=${upperLeft.join(",")}`,
       `UpperCenterRGB=${upperCenter.join(",")}`,
       `MultiplayerPanelRGB=${multiplayerPanel.join(",")}`,
-      `LowerButtonRGB=${lowerButton.join(",")}`
+      `LowerButtonRGB=${lowerButton.join(",")}`,
+      `GuestReadyButtonRGB=${guestReadyButton.join(",")}`
     ].join("|")
   };
 }
