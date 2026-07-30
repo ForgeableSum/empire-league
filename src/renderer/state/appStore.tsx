@@ -58,6 +58,7 @@ interface AppContextValue {
 const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
 const roomSetupTimeoutMs = 65_000;
+const restartAoe2AfterLobbyAutomationFailure = false;
 const defaultSettings: UserSettings = {
   launchAoe2OnStartup: false,
   serverRegion: "US East",
@@ -568,8 +569,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       roomSetupMilestone: null
     }));
     notify(message, "warning", { durationMs: 5000, dismissible: false });
-    log("Lobby setup failed; resetting AoE2 before returning to queue");
     if (ticketId) await services.matchmaking.leaveQueue(ticketId).catch(() => undefined);
+    if (!restartAoe2AfterLobbyAutomationFailure) {
+      await window.electronApi?.setLobbyInputLock(false).catch(() => ({ locked: false }));
+      log("Lobby setup failed; automatic AoE2 restart is disabled");
+      lobbyRecoveryInFlightRef.current = false;
+      return;
+    }
+    log("Lobby setup failed; resetting AoE2 before returning to queue");
     const recovered = await recoverAoe2AfterLobbyFailure();
     lobbyRecoveryInFlightRef.current = false;
     if (recovered) await startQueue(queue);
