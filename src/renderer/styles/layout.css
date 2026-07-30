@@ -2433,6 +2433,96 @@
   text-align: center;
 }
 
+.rating-chart-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 2px 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.rating-chart-summary strong {
+  font-size: 18px;
+}
+
+.rating-chart {
+  width: 100%;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.rating-chart svg {
+  width: 100%;
+  min-height: 220px;
+  display: block;
+}
+
+.rating-chart-grid {
+  stroke: var(--line-soft);
+  stroke-width: 1;
+}
+
+.rating-chart-axis {
+  fill: var(--faint);
+  font-size: 11px;
+}
+
+.rating-chart-area {
+  fill: url("#rating-chart-fill");
+}
+
+.rating-chart-line {
+  fill: none;
+  stroke: var(--accent-2);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  filter: drop-shadow(0 2px 4px rgba(197, 141, 69, 0.35));
+}
+
+.rating-chart-point {
+  fill: var(--panel);
+  stroke: var(--accent-2);
+  stroke-width: 3;
+  transition: r 100ms ease, fill 100ms ease;
+}
+
+.rating-chart-point-target {
+  cursor: pointer;
+}
+
+.rating-chart-point-target:hover .rating-chart-point {
+  fill: var(--accent);
+}
+
+.rating-chart-hit-area {
+  fill: transparent;
+  stroke: none;
+}
+
+.rating-chart-tooltip {
+  pointer-events: none;
+}
+
+.rating-chart-tooltip rect {
+  fill: #11100f;
+  stroke: var(--line);
+  filter: drop-shadow(0 5px 8px rgba(0, 0, 0, 0.48));
+}
+
+.rating-chart-tooltip-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.rating-chart-tooltip-value {
+  fill: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .rating-swing strong {
   display: block;
   font-size: 36px;
