@@ -3,7 +3,7 @@ import { ThemedSelect } from "../components/common/ThemedSelect";
 import { useAppStore } from "../state/appStore";
 
 export function MatchHistoryPage() {
-  const { state } = useAppStore();
+  const { state, openPlayerProfile } = useAppStore();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const matches = useMemo(
@@ -49,9 +49,11 @@ export function MatchHistoryPage() {
             <span>Status</span>
           </div>
           {matches.map((match) => (
-            <button className="table-row clickable" type="button" key={match.id}>
+            <div className="table-row clickable" key={match.id}>
               <strong className={match.outcome}>{match.outcome}</strong>
-              <span>{match.opponent} ({match.opponentRating})</span>
+              <button className="player-link" type="button" onClick={() => openPlayerProfile(match.opponentId)}>
+                {match.opponent} ({match.opponentRating})
+              </button>
               <span>{match.map}</span>
               <span>{match.civilization && match.opponentCivilization
                 ? `${match.civilization} vs. ${match.opponentCivilization}`
@@ -60,7 +62,7 @@ export function MatchHistoryPage() {
               <span>{match.durationMinutes}m</span>
               <span>{new Date(match.timestamp).toLocaleDateString()}</span>
               <span>{match.verified ? "Verified" : "Pending"}</span>
-            </button>
+            </div>
           ))}
           {matches.length === 0 && (
             <div className="empty-state">

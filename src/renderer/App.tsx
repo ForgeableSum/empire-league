@@ -25,6 +25,7 @@ export function App() {
   const [friends, setFriends] = useState<SocialFriend[]>([]);
   const friendsRef = useRef<SocialFriend[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [outgoingRequestIds, setOutgoingRequestIds] = useState<string[]>([]);
   const [chats, setChats] = useState<OpenChat[]>([]);
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
   useEffect(() => {
@@ -104,6 +105,7 @@ export function App() {
         unread: friend.unread ?? current.find((item) => item.id === friend.id)?.unread ?? 0
       })));
       setRequests(snapshot.requests.map((request) => ({ ...request, initials: initialsFor(request.name) })));
+      setOutgoingRequestIds(snapshot.outgoing.map((request) => request.id));
     };
     void socialService.getSnapshot().then(applySnapshot);
     return socialService.onEvent((event) => {
@@ -232,7 +234,15 @@ export function App() {
         {page === "play" && <QueuePage />}
         {page === "match-history" && <MatchHistoryPage />}
         {page === "leaderboard" && <LeaderboardPage />}
-        {page === "profile" && <ProfilePage />}
+        {page === "profile" && (
+          <ProfilePage
+            friendIds={friends.map((friend) => friend.id)}
+            outgoingRequestIds={outgoingRequestIds}
+            onAddFriend={async (displayName) => {
+              await inviteFriend(displayName);
+            }}
+          />
+        )}
         {page === "social" && <SocialPage friends={friends} requests={requests} onMessage={(friend) => void openChat(friend)} onAccept={(request) => void acceptRequest(request)} onDecline={(id) => void socialService.declineRequest(requests.find((item) => item.id === id)?.connectionId ?? id)} onInvite={inviteFriend} onUnfriend={(friend) => void unfriend(friend)} />}
         {page === "settings" && <SettingsPage />}
       </Shell>

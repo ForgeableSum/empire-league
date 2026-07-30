@@ -620,6 +620,35 @@
   color: var(--text);
 }
 
+.player-link {
+  justify-self: start;
+  width: auto;
+  max-width: none;
+  padding: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  line-height: inherit;
+  white-space: normal;
+  text-decoration: underline;
+  text-decoration-color: rgba(197, 141, 69, 0.55);
+  text-underline-offset: 3px;
+}
+
+.player-link:hover {
+  color: var(--accent);
+  text-decoration-color: currentColor;
+}
+
+.profile-friend-button {
+  margin-top: 14px;
+}
+
+.profile-friend-status {
+  margin-top: 12px;
+  color: var(--success);
+}
+
 /* Social */
 .social-layout {
   display: grid;

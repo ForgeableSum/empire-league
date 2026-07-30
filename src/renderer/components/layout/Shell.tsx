@@ -16,7 +16,7 @@ const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { page, setPage, state, signOut } = useAppStore();
+  const { page, setPage, state, signOut, selectedProfileId, openPlayerProfile } = useAppStore();
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
   const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
 
@@ -53,7 +53,7 @@ export function Shell({ children }: { children: ReactNode }) {
               key={item.page}
               className={page === item.page ? "nav-item active" : "nav-item"}
               type="button"
-              onClick={() => setPage(item.page)}
+              onClick={() => item.page === "profile" ? openPlayerProfile(state.currentUser.id) : setPage(item.page)}
             >
               {item.icon}
               <span>{item.label}</span>
@@ -97,7 +97,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <div className="content-shell">
           <header className="topbar">
             <div>
-              <h1>{titleFor(page)}</h1>
+              <h1>{page === "profile" && selectedProfileId && selectedProfileId !== state.currentUser.id ? "Player Profile" : titleFor(page)}</h1>
             </div>
           </header>
           {children}

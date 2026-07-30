@@ -217,7 +217,7 @@ export async function recordMatchResultConflict(match, { reason, implicatedTicke
 
 export async function getPlayerMatchHistory(playerId) {
   const [rows] = await database.execute(
-    `SELECT m.id, opponent.display_name AS opponent,
+    `SELECT m.id, opponent.id AS opponent_id, opponent.display_name AS opponent,
        CASE WHEN m.queue_id = 'team-games' THEN opponent.team_rating ELSE opponent.rating END AS opponent_rating,
        m.selected_map_name AS map_name, m.queue_id AS queue_type,
        CASE WHEN m.host_player_id = ? THEN m.host_civilization ELSE m.guest_civilization END AS civilization,
@@ -241,6 +241,7 @@ export async function getPlayerMatchHistory(playerId) {
   );
   return rows.map((row) => ({
     id: row.id,
+    opponentId: row.opponent_id,
     opponent: row.opponent,
     opponentRating: Number(row.opponent_rating),
     outcome: row.outcome,
@@ -253,6 +254,46 @@ export async function getPlayerMatchHistory(playerId) {
     verified: row.verification_status === "verified",
     queueType: row.queue_type
   }));
+}
+
+export async function getPlayerProfile(playerId) {
+  const [rows] = await database.query(
+    `SELECT p.*, (SELECT COUNT(*) + 1 FROM players higher WHERE higher.rating > p.rating) AS ladder_rank
+     FROM players p
+     WHERE p.id = ?
+     LIMIT 1`,
+    [playerId]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const wins = Number(row.wins);
+  const losses = Number(row.losses);
+  const games = wins + losses;
+  return {
+    id: row.id,
+    aoeProfileId: row.aoe_profile_id ? Number(row.aoe_profile_id) : 0,
+    steamId: row.steam_id ?? undefined,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url ?? undefined,
+    countryCode: row.country_code ?? undefined,
+    rating: Number(row.rating),
+    peakRating: Number(row.peak_rating),
+    teamRating: Number(row.team_rating),
+    teamPeakRating: Number(row.team_peak_rating),
+    legacy1v1Wins: Number(row.legacy_solo_wins),
+    legacy1v1Losses: Number(row.legacy_solo_losses),
+    legacyTeamWins: Number(row.legacy_team_wins),
+    legacyTeamLosses: Number(row.legacy_team_losses),
+    rank: Number(row.ladder_rank),
+    division: divisionForRating(Number(row.rating)),
+    wins,
+    losses,
+    winRate: games ? Number(((wins / games) * 100).toFixed(1)) : 0,
+    streak: Number(row.streak),
+    preferredMaps: [],
+    favoriteCivilizations: [],
+    recentForm: []
+  };
 }
 
 const leaderboardDivisionRanges = {

@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FormPips } from "../components/common/FormPips";
 import { Metric } from "../components/common/Metric";
 import { useAppStore } from "../state/appStore";
 import type { MatchSummary } from "../../shared/contracts/matches";
+import type { PlayerProfile } from "../../shared/contracts/players";
+import { playerService } from "../services/playerService";
 
 interface RatingPoint {
   id: string;
@@ -39,11 +41,11 @@ function buildRatingHistory(matches: MatchSummary[], currentRating: number): Rat
   return points;
 }
 
-function RatingChart({ matches, currentRating }: { matches: MatchSummary[]; currentRating: number }) {
+function RatingChart({ matches, currentRating, possessive = "Your" }: { matches: MatchSummary[]; currentRating: number; possessive?: string }) {
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const points = buildRatingHistory(matches, currentRating);
   if (points.length === 0) {
-    return <div className="empty-state">Your Elo progress will appear after your first 1v1 match.</div>;
+    return <div className="empty-state">{possessive} Elo progress will appear after the first 1v1 match.</div>;
   }
 
   const width = 800;
@@ -134,10 +136,60 @@ function RatingChart({ matches, currentRating }: { matches: MatchSummary[]; curr
   );
 }
 
-export function ProfilePage() {
-  const { state } = useAppStore();
-  const user = state.currentUser;
-  const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
+export function ProfilePage({
+  friendIds,
+  outgoingRequestIds,
+  onAddFriend
+}: {
+  friendIds: string[];
+  outgoingRequestIds: string[];
+  onAddFriend: (displayName: string) => Promise<void>;
+}) {
+  const { state, selectedProfileId } = useAppStore();
+  const viewingOwnProfile = !selectedProfileId || selectedProfileId === state.currentUser.id;
+  const [profile, setProfile] = useState<{ player: PlayerProfile; matches: MatchSummary[] } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [addingFriend, setAddingFriend] = useState(false);
+  const [requestSent, setRequestSent] = useState(false);
+
+  useEffect(() => {
+    setRequestSent(false);
+    if (viewingOwnProfile) {
+      setProfile(null);
+      setLoadError(null);
+      return;
+    }
+    let cancelled = false;
+    setProfile(null);
+    setLoadError(null);
+    void playerService.getProfile(selectedProfileId)
+      .then((result) => { if (!cancelled) setProfile(result); })
+      .catch((error) => {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Player profile could not be loaded.");
+      });
+    return () => { cancelled = true; };
+  }, [selectedProfileId, viewingOwnProfile]);
+
+  if (!viewingOwnProfile && !profile) {
+    return <div className="panel empty-state">{loadError ?? "Loading player profile…"}</div>;
+  }
+
+  const user = viewingOwnProfile ? state.currentUser : profile!.player;
+  const matches = viewingOwnProfile ? state.recentMatches : profile!.matches;
+  const recentForm = matches.slice(0, 5).map((match) => match.outcome);
+  const isFriend = friendIds.includes(user.id);
+  const isPending = requestSent || outgoingRequestIds.includes(user.id);
+
+  async function addFriend() {
+    setAddingFriend(true);
+    try {
+      await onAddFriend(user.displayName);
+      setRequestSent(true);
+    } finally {
+      setAddingFriend(false);
+    }
+  }
+
   return (
     <section className="profile-layout">
       <div className="panel profile-card">
@@ -149,6 +201,12 @@ export function ProfilePage() {
         <h2>{user.displayName}</h2>
         <span>{user.steamId ? `Steam ID ${user.steamId}` : "Steam account"}</span>
         {recentForm.length > 0 && <FormPips form={recentForm} />}
+        {!viewingOwnProfile && !isFriend && (
+          <button className="primary profile-friend-button" type="button" disabled={addingFriend || isPending} onClick={() => void addFriend()}>
+            {isPending ? "Friend request sent" : addingFriend ? "Sending…" : "Add friend"}
+          </button>
+        )}
+        {!viewingOwnProfile && isFriend && <span className="profile-friend-status">Friends</span>}
       </div>
       <div className="metrics-grid">
         <Metric
@@ -168,7 +226,7 @@ export function ProfilePage() {
       </div>
       <div className="panel span-2">
         <h2>Elo Progress</h2>
-        <RatingChart matches={state.recentMatches} currentRating={user.rating} />
+        <RatingChart matches={matches} currentRating={user.rating} possessive={viewingOwnProfile ? "Your" : `${user.displayName}'s`} />
       </div>
     </section>
   );

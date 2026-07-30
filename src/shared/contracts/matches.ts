@@ -66,6 +66,7 @@ export interface ReplayMatchMetadata {
 
 export interface MatchSummary {
   id: string;
+  opponentId: string;
   opponent: string;
   opponentRating: number;
   outcome: MatchOutcome;

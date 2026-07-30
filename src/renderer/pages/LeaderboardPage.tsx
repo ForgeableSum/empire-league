@@ -10,7 +10,7 @@ import { leaderboardService } from "../services/leaderboardService";
 import { useAppStore } from "../state/appStore";
 
 export function LeaderboardPage() {
-  const { state } = useAppStore();
+  const { state, openPlayerProfile } = useAppStore();
   const [query, setQuery] = useState("");
   const [division, setDivision] = useState("all");
   const [players, setPlayers] = useState<PlayerProfile[]>([]);
@@ -99,7 +99,9 @@ export function LeaderboardPage() {
           {rows.map((player) => (
             <div className={player.id === state.currentUser.id ? "leader-row current" : "leader-row"} key={player.id}>
               <strong>#{player.rank}</strong>
-              <span>{player.displayName}</span>
+              <button className="player-link" type="button" onClick={() => openPlayerProfile(player.id)}>
+                {player.displayName}
+              </button>
               <span>{countryFlag(player.countryCode)}</span>
               <span>{player.rating}</span>
               <span>{formatDivisionForRating(player.rating)}</span>

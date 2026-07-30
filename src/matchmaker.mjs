@@ -7,6 +7,7 @@ import {
   database,
   checkDatabase,
   getLeaderboard,
+  getPlayerProfile,
   getPlayerByDisplayName,
   getSocialSnapshot,
   createFriendRequest,
@@ -895,6 +896,15 @@ async function handleRequest(request, response) {
       return player
         ? send(response, 200, { player })
         : send(response, 404, { error: "No Empire League player was found with that name." });
+    }
+
+    const playerProfile = url.pathname.match(/^\/players\/([^/]+)$/);
+    if (request.method === "GET" && playerProfile) {
+      const playerId = decodeURIComponent(playerProfile[1]);
+      const player = await getPlayerProfile(playerId);
+      return player
+        ? send(response, 200, { player, matches: await getPlayerMatchHistory(playerId) })
+        : send(response, 404, { error: "Player not found." });
     }
 
     if (request.method === "GET" && url.pathname === "/social") {

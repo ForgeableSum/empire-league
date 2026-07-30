@@ -26,6 +26,8 @@ interface AppContextValue {
   state: AppState;
   page: AppPage;
   setPage: (page: AppPage) => void;
+  selectedProfileId: string | null;
+  openPlayerProfile: (playerId: string) => void;
   queues: QueueDefinition[];
   startQueue: (queue: QueueDefinition) => Promise<void>;
   updateActiveQueue: (queue: QueueDefinition) => Promise<void>;
@@ -102,6 +104,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [page, setPage] = useState<AppPage>("home");
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [authStatus, setAuthStatus] = useState<AppContextValue["authStatus"]>("loading");
   const [authError, setAuthError] = useState<string | null>(null);
   const [state, setState] = useState<AppState>(() => ({
@@ -1259,6 +1262,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ? {
             id: activeMatch.id,
             opponent: activeMatch.opponent.displayName,
+            opponentId: activeMatch.opponent.id,
             opponentRating: isTeamRating
               ? activeMatch.opponent.teamRating
               : activeMatch.opponent.rating,
@@ -1349,6 +1353,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     state,
     page,
     setPage,
+    selectedProfileId,
+    openPlayerProfile: (playerId) => {
+      setSelectedProfileId(playerId);
+      setPage("profile");
+    },
     queues: queueDefinitions,
     startQueue,
     updateActiveQueue,
