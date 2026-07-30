@@ -23,6 +23,71 @@ select {
   font: inherit;
 }
 
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  margin: 0;
+  border: 1px solid #8c642e;
+  border-radius: 2px;
+  background:
+    linear-gradient(135deg, rgba(248, 221, 160, 0.16), transparent 35%),
+    linear-gradient(315deg, #12100d, #29231c);
+  box-shadow:
+    inset 0 0 0 2px #18130e,
+    inset 0 0 0 3px rgba(197, 141, 69, 0.16),
+    0 1px 2px rgba(0, 0, 0, 0.75);
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+}
+
+input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 6px;
+  height: 11px;
+  border: solid #f0c66e;
+  border-width: 0 3px 3px 0;
+  filter: drop-shadow(0 1px 0 #6d4015);
+  opacity: 0;
+  transform: rotate(45deg) scale(0.55);
+  transition: opacity 120ms ease, transform 140ms ease;
+}
+
+input[type="checkbox"]:hover {
+  border-color: #d3a352;
+  filter: brightness(1.12);
+}
+
+input[type="checkbox"]:checked {
+  border-color: #e0b561;
+  background:
+    linear-gradient(135deg, rgba(255, 230, 169, 0.25), transparent 38%),
+    linear-gradient(315deg, #3b2410, #785020);
+  box-shadow:
+    inset 0 0 0 2px #21160c,
+    inset 0 0 0 3px rgba(248, 221, 160, 0.28),
+    0 0 7px rgba(197, 141, 69, 0.25),
+    0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+input[type="checkbox"]:checked::after {
+  opacity: 1;
+  transform: rotate(45deg) scale(1);
+}
+
+input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.6);
+  opacity: 0.48;
+}
+
 button,
 select,
 input {

@@ -1381,40 +1381,62 @@
 
 .group-switch > span {
   position: relative;
-  width: 38px;
-  height: 21px;
+  width: 42px;
+  height: 22px;
   grid-row: 1 / span 2;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #24211e;
-  transition: background 160ms ease, border-color 160ms ease;
+  border: 1px solid #765426;
+  border-radius: 2px;
+  background:
+    linear-gradient(135deg, rgba(248, 221, 160, 0.12), transparent 35%),
+    #1c1915;
+  box-shadow:
+    inset 0 0 0 2px #100e0c,
+    inset 0 0 0 3px rgba(224, 181, 97, 0.1),
+    0 1px 2px rgba(0, 0, 0, 0.72);
+  transition: background 160ms ease, border-color 160ms ease, filter 160ms ease;
 }
 
 .group-switch > span::after {
   content: "";
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--muted);
-  transition: transform 160ms ease, background 160ms ease;
+  top: 4px;
+  left: 4px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #8d8171;
+  border-radius: 1px;
+  background: linear-gradient(135deg, #817568, #433c34);
+  box-shadow: 0 1px 2px #000;
+  transform: rotate(45deg);
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 
 .group-switch input:checked + span {
-  border-color: var(--accent);
-  background: rgba(197, 141, 69, 0.25);
+  border-color: #d9ad62;
+  background:
+    linear-gradient(135deg, rgba(255, 229, 166, 0.2), transparent 38%),
+    #3b2917;
 }
 
 .group-switch input:checked + span::after {
-  transform: translateX(17px);
-  background: var(--accent);
+  transform: translateX(19px) rotate(45deg);
+  border-color: #f0cb7c;
+  background: linear-gradient(135deg, #e5bd67, #916026);
 }
 
 .group-switch input:focus-visible + span {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.group-switch:hover > span {
+  border-color: #c69348;
+  filter: brightness(1.1);
+}
+
+.group-switch input:disabled + span {
+  filter: grayscale(0.6);
+  opacity: 0.48;
 }
 
 .group-switch small {
@@ -2333,8 +2355,8 @@
 }
 
 .toggle-row input {
-  width: 18px;
-  min-height: 18px;
+  width: 20px;
+  min-height: 20px;
   accent-color: var(--accent);
   cursor: pointer;
 }
