@@ -452,8 +452,11 @@ function ratingsAreInRange(ticket, candidate, now = Date.now()) {
     playerRatingForQueue(ticket.player, ticket.queueId)
       - playerRatingForQueue(candidate.player, candidate.queueId)
   );
-  return difference <= ratingSpreadForTicket(ticket, now)
-    && difference <= ratingSpreadForTicket(candidate, now);
+  const ticketAllowsCandidate = ticket.queue.findAnyone === true
+    || difference <= ratingSpreadForTicket(ticket, now);
+  const candidateAllowsTicket = candidate.queue.findAnyone === true
+    || difference <= ratingSpreadForTicket(candidate, now);
+  return ticketAllowsCandidate && candidateAllowsTicket;
 }
 
 function scheduleRatingRanges(ticket) {
@@ -476,7 +479,7 @@ function normalizeMaximumLowerOpponentRatingGap(value) {
 }
 
 function allowsOpponentRating(ticket, candidate) {
-  if (ticket.queue.format === "team") return true;
+  if (ticket.queue.format === "team" || ticket.queue.findAnyone === true) return true;
   const maximumGap = ticket.maximumLowerOpponentRatingGap;
   return maximumGap === 0
     || playerRatingForQueue(candidate.player, candidate.queueId)

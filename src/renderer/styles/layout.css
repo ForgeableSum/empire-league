@@ -2335,6 +2335,8 @@
 .toggle-row input {
   width: 18px;
   min-height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .setting-label {

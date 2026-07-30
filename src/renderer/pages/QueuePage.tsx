@@ -64,6 +64,7 @@ export function QueuePage() {
     }
   });
   const [selectedTeamSizes, setSelectedTeamSizes] = useState<Array<2 | 4>>([2, 4]);
+  const [findAnyone, setFindAnyone] = useState(true);
   const [civilizationMode, setCivilizationMode] = useState<CivilizationMode>(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(civilizationPreferenceKey) ?? "{}");
@@ -250,6 +251,7 @@ export function QueuePage() {
     const timer = window.setTimeout(() => {
       void updateActiveQueue({
         ...selectedQueue,
+        findAnyone,
         teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
         mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
         mapPreferences: {
@@ -266,7 +268,7 @@ export function QueuePage() {
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [civilization, civilizationBans, civilizationMode, enabledGroups, favoriteMaps, isSearching, preferRandom, selectedMaps, selectedQueue, selectedTeamSizes]);
+  }, [civilization, civilizationBans, civilizationMode, enabledGroups, favoriteMaps, findAnyone, isSearching, preferRandom, selectedMaps, selectedQueue, selectedTeamSizes]);
 
   if (["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus)) {
     return <LobbyPreparation />;
@@ -292,11 +294,22 @@ export function QueuePage() {
                     <span>Your {selectedQueue.format === "team" ? "team " : ""}rating</span>
                     <strong>{selectedQueue.format === "team" ? state.currentUser.teamRating : state.currentUser.rating}</strong>
                   </div>
-                  <div><span>Current search range</span><strong>{state.searchRange.min}-{state.searchRange.max}</strong></div>
+                  <div>
+                    <span>Current search range</span>
+                    <strong>{findAnyone ? "Anyone" : `${state.searchRange.min}-${state.searchRange.max}`}</strong>
+                  </div>
                   <div><span>Time searching</span><strong>{formatTime(elapsed)}</strong></div>
                   <div><span>Estimated wait</span><strong>{state.selectedQueue?.estimatedWaitSeconds}s</strong></div>
                 </div>
                 <p>Rating range expands automatically. Civilization and map changes below update your active search.</p>
+                <label className="toggle-row compact-toggle">
+                  <span>Find anyone</span>
+                  <input
+                    type="checkbox"
+                    checked={findAnyone}
+                    onChange={(event) => setFindAnyone(event.target.checked)}
+                  />
+                </label>
                 <button className="secondary" type="button" onClick={() => void cancelQueue()}>
                   <XCircle size={18} /> Cancel Search
                 </button>
@@ -316,12 +329,21 @@ export function QueuePage() {
                   <div><span>Maps enabled</span><strong>{activeMapIds.length}</strong></div>
                   <div><span>Favorites</span><strong>{favoriteNames || "None"}</strong></div>
                 </div>
+                <label className="toggle-row compact-toggle">
+                  <span>Find anyone</span>
+                  <input
+                    type="checkbox"
+                    checked={findAnyone}
+                    onChange={(event) => setFindAnyone(event.target.checked)}
+                  />
+                </label>
                 <button
                   className="queue-search-button"
                   type="button"
                   disabled={!canStartQueue || activeMapIds.length === 0}
                   onClick={() => void startQueue({
                     ...selectedQueue,
+                    findAnyone,
                     teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
                     mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
                     mapPreferences: {

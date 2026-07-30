@@ -117,6 +117,7 @@ export interface QueueDefinition {
   name: string;
   description: string;
   format: "1v1" | "team";
+  findAnyone?: boolean;
   teamSizes?: Array<2 | 4>;
   ruleset: "Random Map" | "Empire Wars";
   mapPool: MapDefinition[];
