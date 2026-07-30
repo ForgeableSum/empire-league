@@ -612,7 +612,7 @@
 }
 
 .leader-row {
-  grid-template-columns: 70px 1.2fr 68px 78px 110px 62px 70px 80px 70px;
+  grid-template-columns: 70px 1.2fr 68px 78px 165px 62px 70px 80px 70px;
 }
 
 .leader-row.current {
