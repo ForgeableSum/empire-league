@@ -166,7 +166,7 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
         try {
           if (!content) throw new Error("Choose a map or scenario before starting.");
           await ensureAoe2Running();
-          const result = await window.electronApi!.runAoe2CreateLobbySequence(content.gameName, 8, content.kind === "scenario" ? "scenario" : "map");
+          const result = await window.electronApi!.runAoe2CreateLobbySequence(content.gameName, 8, content.kind === "scenario" ? "scenario" : "map", "custom");
           if (!result.sent || !result.lobbyUri) throw new Error(result.message || "AoE2 lobby creation failed.");
           await customLobbyService.publish(room.id, result.lobbyUri);
         } catch (error) {
@@ -200,10 +200,10 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
       automationSteps.current.add(guestReadyKey);
       void (async () => {
         try {
-          let ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
+          let ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready", "custom");
           if (!ready.sent) {
-            await window.electronApi!.runAoe2LobbyCursorAction("content-confirm");
-            ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
+            await window.electronApi!.runAoe2LobbyCursorAction("content-confirm", "custom");
+            ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready", "custom");
           }
           if (!ready.sent) throw new Error(ready.message || "AoE2 could not ready the player.");
           await customLobbyService.reportAoeReady(room.id);
@@ -222,7 +222,7 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
       void (async () => {
         try {
           if (content?.kind !== "scenario") await applyMapPlayerSettings(me);
-          const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
+          const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready", "custom");
           if (!ready.sent) throw new Error(ready.message || "AoE2 could not ready the host.");
           await customLobbyService.reportAoeReady(room.id);
         } catch (error) {
@@ -239,7 +239,7 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
       automationSteps.current.add(startKey);
       void (async () => {
         try {
-          const started = await window.electronApi!.runAoe2LobbyCursorAction("start");
+          const started = await window.electronApi!.runAoe2LobbyCursorAction("start", "custom");
           if (!started.sent) throw new Error(started.message || "AoE2 could not start the game.");
           await customLobbyService.completeStart(
             room.id,
@@ -320,10 +320,10 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
   }
 
   async function applyMapPlayerSettings(player: CustomLobbyRoom["players"][number]) {
-    const civilization = await window.electronApi!.selectAoe2Civilization(player.civilization as Aoe2CivilizationSelection, player.slot);
+    const civilization = await window.electronApi!.selectAoe2Civilization(player.civilization as Aoe2CivilizationSelection, player.slot, "custom");
     if (!civilization.sent) throw new Error(civilization.message);
     if (player.team === 1 || player.team === 2) {
-      const team = await window.electronApi!.selectAoe2Team(player.team, player.slot);
+      const team = await window.electronApi!.selectAoe2Team(player.team, player.slot, "custom");
       if (!team.sent) throw new Error(team.message);
     }
   }

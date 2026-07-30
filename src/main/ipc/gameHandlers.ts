@@ -43,6 +43,7 @@ import {
   setWindowsInputBlocked,
   isAoe2NativeWindowForeground,
   keepAoe2NativeWindowBehind,
+  postAoe2Enter,
   postAoe2DesignClick,
   readAoe2HostSetupState,
   readAoe2ReadyState,
@@ -943,6 +944,7 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
       settled = true;
       resolve(ready);
     };
+    child.once("exit", () => finish(false));
     child.stdout?.on("data", (chunk: Buffer) => {
       stdoutBuffer += chunk.toString();
       const messages = stdoutBuffer.split(/\r?\n/);
@@ -2165,11 +2167,13 @@ export function registerGameHandlers(): void {
     event,
     mapName: string,
     playerCount: 2 | 4 | 8 = 2,
-    contentKind: "map" | "scenario" = "map"
+    contentKind: "map" | "scenario" = "map",
+    automationContext: "ranked" | "custom" = "ranked"
   ) => {
     stopTabTest();
     setMouseCoordinateOverlayEnabled(false);
     const normalizedMapName = typeof mapName === "string" ? mapName.trim() : "";
+    const isCustomAutomation = automationContext === "custom";
     if (process.platform !== "win32") {
       return { sent: false, message: "Lobby automation is only supported on Windows." };
     }
@@ -2196,9 +2200,27 @@ export function registerGameHandlers(): void {
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     let sequenceCompleted = false;
+    let sequenceExpired = false;
+    let sequenceSafetyTimer: NodeJS.Timeout | undefined;
     try {
       const inputBlocked = setWindowsInputBlocked(true);
+      if (isCustomAutomation) {
+        sequenceSafetyTimer = setTimeout(() => {
+          sequenceExpired = true;
+          setWindowsInputBlocked(false);
+          stopInputGuard();
+          emitLog("SAFETY_TIMEOUT|Source=CreateLobby|InputReleased=True");
+        }, 60_000);
+      }
       const inputGuardStarted = await startInputGuard(appWindow);
+      if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
+      if (inputGuardStarted && !guardedSenders.has(event.sender)) {
+        guardedSenders.add(event.sender);
+        event.sender.once("destroyed", () => {
+          setWindowsInputBlocked(false);
+          stopInputGuard();
+        });
+      }
       emitLog(`INPUT_LOCK|Requested=True|BlockInput=${inputBlocked}|Guard=${inputGuardStarted}|Source=CreateLobby`);
       emitLog(`ACTION_WINDOW|Target=create-lobby|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(gamePid)}`);
       const process = { ...gameProcess, pid: gamePid };
@@ -2208,7 +2230,12 @@ export function registerGameHandlers(): void {
         y: number,
         timing?: { hoverMs?: number; holdMs?: number; synchronous?: boolean; primeMove?: boolean }
       ) => {
-        const result = await postAoe2DesignClick(process.pid as number, x, y, timing);
+        if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
+        const result = await postAoe2DesignClick(process.pid as number, x, y, {
+          ...timing,
+          requireMove: !isCustomAutomation
+        });
+        if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
         if (!result.sent) throw new Error(`${name} could not be clicked.`);
       };
@@ -2291,9 +2318,14 @@ export function registerGameHandlers(): void {
       await actionStep("createLobby");
       await clickStep("Reset Settings", 3101, 1976);
       await delay(lobbySetupTiming.resetFocusMs);
-      const reset = await sendAoe2Enter(process.pid);
+      // Resetting custom content can briefly stall AoE2's window thread. Queue
+      // this confirmation so a processed-but-timed-out SendMessage cannot abort
+      // the otherwise successful lobby setup.
+      const reset = isCustomAutomation
+        ? await postAoe2Enter(process.pid)
+        : await sendAoe2Enter(process.pid);
       emitLog(`STEP|Confirm Reset|Key=ENTER|${reset.detail}`);
-      if (!reset.sent) throw new Error("The reset confirmation could not be sent.");
+      if (!reset.sent) throw new Error(`The reset confirmation could not be ${isCustomAutomation ? "queued" : "sent"}.`);
       await delay(lobbySetupTiming.resetConfirmationMs);
 
       if (contentKind === "scenario") {
@@ -2310,7 +2342,34 @@ export function registerGameHandlers(): void {
         emitLog(`SCENARIO_SELECT|Step=RecommendedSettings|Key=ENTER|${acceptRecommended.detail}`);
         if (!acceptRecommended.sent) throw new Error("Recommended scenario settings could not be accepted.");
         await delay(picker.recommendedSettingsSettleMs);
-        await clickStep("Set Scenario", picker.setScenarioPoint[0], picker.setScenarioPoint[1], { synchronous: true });
+        await clickStep("Set Scenario", picker.setScenarioPoint[0], picker.setScenarioPoint[1], {
+          synchronous: !isCustomAutomation
+        });
+        if (isCustomAutomation) {
+          let scenarioPickerState = readAoe2HostSetupState(process.pid);
+          let scenarioPickerDeadline = Date.now() + 5_000;
+          while (scenarioPickerState.state !== "content-picker" && Date.now() < scenarioPickerDeadline) {
+            if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
+            await delay(250);
+            scenarioPickerState = readAoe2HostSetupState(process.pid);
+          }
+          if (scenarioPickerState.state !== "content-picker") {
+            emitLog(`STEP_RETRY|Set Scenario|Reason=ControlNotReady|${scenarioPickerState.detail}`);
+            await clickStep("Set Scenario Retry", picker.setScenarioPoint[0], picker.setScenarioPoint[1], {
+              synchronous: true
+            });
+            scenarioPickerDeadline = Date.now() + 10_000;
+            while (scenarioPickerState.state !== "content-picker" && Date.now() < scenarioPickerDeadline) {
+              if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
+              await delay(250);
+              scenarioPickerState = readAoe2HostSetupState(process.pid);
+            }
+          }
+          emitLog(`STEP_VERIFY|Set Scenario|Expected=content-picker|${scenarioPickerState.detail}`);
+          if (scenarioPickerState.state !== "content-picker") {
+            throw new Error("Set Scenario did not open the scenario picker.");
+          }
+        }
         await delay(picker.openSettleMs);
         await clickStep("Focus Scenario Search", picker.searchPoint[0], picker.searchPoint[1], { synchronous: true });
         const clearScenarioSearch = await clearAoe2TextField(process.pid);
@@ -2331,7 +2390,26 @@ export function registerGameHandlers(): void {
         const mapPoint = knownMap
           ? mapDesignPoint(normalizedMapName as Aoe2MapSelection)
           : [mapPicker.resultColumnCenters[0], mapPicker.resultRowCenters[0]] as const;
-        await clickStep("Open Map Picker", mapPicker.openPoint[0], mapPicker.openPoint[1], { synchronous: true });
+        // A reset can keep AoE2's window thread busy for several seconds while
+        // custom content is reloaded. Queue the picker click behind that work,
+        // then wait for the lobby pixels to change instead of requiring an
+        // immediate synchronous response from the game.
+        await clickStep("Open Map Picker", mapPicker.openPoint[0], mapPicker.openPoint[1], {
+          synchronous: !isCustomAutomation
+        });
+        if (isCustomAutomation) {
+          let mapPickerState = readAoe2HostSetupState(process.pid);
+          const mapPickerDeadline = Date.now() + 15_000;
+          while (mapPickerState.state !== "content-picker" && Date.now() < mapPickerDeadline) {
+            if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
+            await delay(250);
+            mapPickerState = readAoe2HostSetupState(process.pid);
+          }
+          emitLog(`STEP_VERIFY|Open Map Picker|Expected=content-picker|${mapPickerState.detail}`);
+          if (mapPickerState.state !== "content-picker") {
+            throw new Error("Open Map Picker did not open the content picker.");
+          }
+        }
         await delay(mapPicker.openSettleMs);
         const isCustomMap = !knownMap || (mapPicker.customMapNames as readonly string[]).includes(normalizedMapName);
         const mapStyle = isCustomMap ? "Custom" : "Standard";
@@ -2349,7 +2427,16 @@ export function registerGameHandlers(): void {
         await delay(mapPicker.selectionSettleMs);
         emitLog(`MAP_SELECT|Complete=True|Map=${normalizedMapName}`);
       }
-      const contentLobbyState = readAoe2HostSetupState(process.pid);
+      let contentLobbyState = readAoe2HostSetupState(process.pid);
+      if (isCustomAutomation) {
+        const contentLobbyDeadline = Date.now() + 15_000;
+        while (contentLobbyState.state !== "lobby-room" && Date.now() < contentLobbyDeadline) {
+          if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
+          await delay(250);
+          contentLobbyState = readAoe2HostSetupState(process.pid);
+        }
+        emitLog(`STEP_VERIFY|Content Selection|Expected=lobby-room|${contentLobbyState.detail}`);
+      }
       if (contentLobbyState.state !== "lobby-room") {
         throw new Error(`${normalizedMapName} selection did not return to the lobby room.`);
       }
@@ -2373,6 +2460,7 @@ export function registerGameHandlers(): void {
       emitLog(`ERROR|${error instanceof Error ? error.message : "Native lobby automation failed."}`);
       return { sent: false, message: "The Create Lobby sequence stopped before completion." };
     } finally {
+      if (sequenceSafetyTimer) clearTimeout(sequenceSafetyTimer);
       setMainWindowGameCoverClickThrough(false);
       if (!sequenceCompleted) {
         setWindowsInputBlocked(false);
@@ -2384,16 +2472,25 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:run-lobby-cursor-action", async (
     event,
-    target: "content-confirm" | "guest-ready" | "host-ready" | "start"
+    target: "content-confirm" | "guest-ready" | "host-ready" | "start",
+    automationContext: "ranked" | "custom" = "ranked"
   ) => {
     if (process.platform !== "win32" || !["content-confirm", "guest-ready", "host-ready", "start"].includes(target)) {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
     const appWindow = BrowserWindow.fromWebContents(event.sender);
+    const isCustomAutomation = automationContext === "custom";
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
       const inputGuardStarted = await startInputGuard(appWindow);
+      if (inputGuardStarted && !guardedSenders.has(event.sender)) {
+        guardedSenders.add(event.sender);
+        event.sender.once("destroyed", () => {
+          setWindowsInputBlocked(false);
+          stopInputGuard();
+        });
+      }
       console.info(`[AoE2 automation] INPUT_LOCK|Requested=True|Guard=${inputGuardStarted}|Source=LobbyAction|Target=${target}`);
       const process = await detectAoe2Process();
       if (!process.running || !process.pid) {
@@ -2437,14 +2534,22 @@ export function registerGameHandlers(): void {
             : await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
                 hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
                 holdMs: "holdMs" in action ? action.holdMs : undefined,
-                synchronous: true
+                synchronous: !isCustomAutomation,
+                requireMove: !isCustomAutomation
               });
 
       if (result.detail !== "SKIPPED_ALREADY_READY") await delay(action.settleMs);
       if (verifiesReady) {
         readyState = readAoe2ReadyState(process.pid, action.point[1]);
         emitVerification("1", readyState.detail);
-        if (readyState.state === "not-ready") {
+        if (isCustomAutomation) {
+          const readyVerificationDeadline = Date.now() + 10_000;
+          while (readyState.state === "not-ready" && Date.now() < readyVerificationDeadline) {
+            await delay(250);
+            readyState = readAoe2ReadyState(process.pid, action.point[1]);
+          }
+          emitVerification("settled", readyState.detail);
+        } else if (readyState.state === "not-ready") {
           result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
             hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
             holdMs: "holdMs" in action ? action.holdMs : undefined,
@@ -2459,6 +2564,11 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
       const sent = result.sent && (!verifiesReady || readyState?.state === "ready");
+      if (!sent) {
+        setWindowsInputBlocked(false);
+        stopInputGuard();
+        console.info(`[AoE2 automation] INPUT_LOCK|Requested=False|Source=LobbyActionUnverified|Target=${target}`);
+      }
       return {
         sent,
         message: sent
@@ -2467,6 +2577,9 @@ export function registerGameHandlers(): void {
       };
     } catch (error) {
       console.error(`[AoE2 automation] Cursor action ${target} failed`, error);
+      setWindowsInputBlocked(false);
+      stopInputGuard();
+      console.info(`[AoE2 automation] INPUT_LOCK|Requested=False|Source=LobbyActionFailure|Target=${target}`);
       return { sent: false, message: `${target} cursor action failed.` };
     } finally {
       setMainWindowGameCoverClickThrough(false);
@@ -2592,13 +2705,21 @@ export function registerGameHandlers(): void {
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Civilization selection failed.";
       emitLog(`CIV_SELECT|Complete=False|Error=${detail}`);
+      setWindowsInputBlocked(false);
+      stopInputGuard();
+      emitLog("INPUT_LOCK|Requested=False|Source=CivilizationSelectionFailure");
       return { sent: false, message: detail };
     } finally {
       setMainWindowGameCoverClickThrough(false);
     }
   });
 
-  ipcMain.handle("game:select-team", async (event, team: 1 | 2, slot: number) => {
+  ipcMain.handle("game:select-team", async (
+    event,
+    team: 1 | 2,
+    slot: number,
+    automationContext: "ranked" | "custom" = "ranked"
+  ) => {
     if (process.platform !== "win32"
       || (team !== 1 && team !== 2)
       || !Number.isInteger(slot)
@@ -2611,6 +2732,7 @@ export function registerGameHandlers(): void {
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
     const appWindow = BrowserWindow.fromWebContents(event.sender);
+    const isCustomAutomation = automationContext === "custom";
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
@@ -2623,9 +2745,10 @@ export function registerGameHandlers(): void {
       const clicks = team + 1;
       for (let index = 0; index < clicks; index += 1) {
         const result = await postAoe2DesignClick(gameProcess.pid, x, y, {
-          synchronous: true,
+          synchronous: !isCustomAutomation,
           hoverMs: 100,
-          holdMs: 100
+          holdMs: 100,
+          requireMove: !isCustomAutomation
         });
         emitLog(`TEAM_SELECT|Slot=${slot}|Team=${team}|Click=${index + 1}/${clicks}|${result.detail}`);
         if (!result.sent) throw new Error(`Team ${team} could not be selected for lobby slot ${slot}.`);
@@ -2635,6 +2758,9 @@ export function registerGameHandlers(): void {
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Team selection failed.";
       emitLog(`TEAM_SELECT|Complete=False|Error=${detail}`);
+      setWindowsInputBlocked(false);
+      stopInputGuard();
+      emitLog("INPUT_LOCK|Requested=False|Source=TeamSelectionFailure");
       return { sent: false, message: detail };
     } finally {
       setMainWindowGameCoverClickThrough(false);

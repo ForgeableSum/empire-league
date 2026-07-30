@@ -100,7 +100,7 @@ export interface NativeReadyStateResult {
 }
 
 export interface NativeHostSetupStateResult {
-  state: "main-menu" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "unknown";
+  state: "main-menu" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "content-picker" | "unknown";
   detail: string;
 }
 
@@ -287,7 +287,7 @@ export async function postAoe2DesignClick(
   processId: number,
   designX: number,
   designY: number,
-  timing: { hoverMs?: number; holdMs?: number; synchronous?: boolean; primeMove?: boolean } = {}
+  timing: { hoverMs?: number; holdMs?: number; synchronous?: boolean; primeMove?: boolean; requireMove?: boolean } = {}
 ): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
@@ -306,6 +306,7 @@ export async function postAoe2DesignClick(
   const holdMs = timing.holdMs ?? 120;
   const synchronous = timing.synchronous ?? false;
   const primeMove = timing.primeMove ?? false;
+  const requireMove = timing.requireMove ?? true;
   const windowRect = {} as Rect;
   const hasWindowRect = Boolean(GetWindowRect!(window, windowRect));
   const ownerPid: [number | null] = [null];
@@ -325,7 +326,7 @@ export async function postAoe2DesignClick(
   const pixelAfterDown = readWindowRgb(window, x, y);
   const up = send(0x0202, 0);
   const pixelAfterUp = readWindowRgb(window, x, y);
-  const sent = moved.dispatched && down.dispatched && up.dispatched;
+  const sent = (!requireMove || moved.dispatched) && down.dispatched && up.dispatched;
 
   return {
     sent,
@@ -339,6 +340,7 @@ export async function postAoe2DesignClick(
       `HoverMs=${hoverMs}`,
       `HoldMs=${holdMs}`,
       `PrimeMove=${primeMove}`,
+      `RequireMove=${requireMove}`,
       `Window=${String(window)}`,
       `TargetPid=${processId}`,
       `WindowPid=${ownerPid[0] ?? 0}`,
@@ -389,6 +391,29 @@ export async function sendAoe2Enter(processId: number): Promise<NativeInputResul
     detail: [
       sent ? "SENT" : "SEND_FAILED",
       "Mode=WindowMessageSync",
+      "Key=ENTER",
+      `Window=${String(window)}`,
+      `Down=${down.dispatched}`,
+      `DownMs=${down.elapsedMs}`,
+      `Up=${up.dispatched}`,
+      `UpMs=${up.elapsedMs}`
+    ].join("|")
+  };
+}
+
+export async function postAoe2Enter(processId: number): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+  const down = postMouseMessage(window, 0x0100, 0x0d, 0x001c0001);
+  await delay(15);
+  const up = postMouseMessage(window, 0x0101, 0x0d, -1071906815);
+  const sent = down.dispatched && up.dispatched;
+  return {
+    sent,
+    detail: [
+      sent ? "SENT" : "SEND_FAILED",
+      "Mode=WindowMessageQueued",
       "Key=ENTER",
       `Window=${String(window)}`,
       `Down=${down.dispatched}`,
@@ -656,7 +681,14 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
   const hasLobbyParchment = leftRed > 150 && leftGreen > 110 && leftBlue > 70
     && centerRed > 140 && centerGreen > 110 && centerBlue > 70;
   const hasMultiplayerPanel = panelRed > 180 && panelGreen > 180 && panelBlue > 160;
-  const state = hasReadyButton || hasLobbyParchment
+  // The map/scenario picker retains parchment in the upper samples, but its
+  // center-right lobby panel becomes nearly black. Recognize it before the
+  // broader lobby parchment heuristic.
+  const hasContentPicker = hasLobbyParchment
+    && panelRed < 50 && panelGreen < 50 && panelBlue < 50;
+  const state = hasContentPicker
+    ? "content-picker"
+    : hasReadyButton || hasLobbyParchment
     ? "lobby-room"
     : hasMultiplayerPanel
       ? "multiplayer-menu"
