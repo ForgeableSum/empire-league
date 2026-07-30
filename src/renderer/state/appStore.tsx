@@ -107,6 +107,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [page, setPage] = useState<AppPage>("home");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileReturnPage, setProfileReturnPage] = useState<AppPage>("leaderboard");
+  const profileReturnScrollRef = useRef(0);
+  const pendingScrollRestoreRef = useRef<{ page: AppPage; top: number } | null>(null);
   const [authStatus, setAuthStatus] = useState<AppContextValue["authStatus"]>("loading");
   const [authError, setAuthError] = useState<string | null>(null);
   const [state, setState] = useState<AppState>(() => ({
@@ -143,6 +145,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const replayResultInFlightRef = useRef(false);
   const familySharingNoticeShownRef = useRef(false);
+
+  useEffect(() => {
+    const pending = pendingScrollRestoreRef.current;
+    if (!pending || pending.page !== page) return;
+    pendingScrollRestoreRef.current = null;
+    const firstFrame = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>(".main-area")?.scrollTo({ top: pending.top });
+      });
+    });
+    return () => window.cancelAnimationFrame(firstFrame);
+  }, [page]);
 
   const services = useMemo(
     () => ({
@@ -1357,11 +1371,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPage,
     selectedProfileId,
     openPlayerProfile: (playerId) => {
-      if (page !== "profile") setProfileReturnPage(page);
+      if (page !== "profile") {
+        setProfileReturnPage(page);
+        profileReturnScrollRef.current = document.querySelector<HTMLElement>(".main-area")?.scrollTop ?? 0;
+      }
       setSelectedProfileId(playerId);
       setPage("profile");
     },
     returnFromPlayerProfile: () => {
+      pendingScrollRestoreRef.current = {
+        page: profileReturnPage,
+        top: profileReturnScrollRef.current
+      };
       setSelectedProfileId(null);
       setPage(profileReturnPage);
     },
