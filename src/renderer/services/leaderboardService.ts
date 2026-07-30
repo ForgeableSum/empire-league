@@ -6,10 +6,12 @@ export interface LeaderboardPageResult {
   page: number;
   pageSize: number;
   total: number;
+  division: string;
 }
 
 export const leaderboardService = {
-  async list(page = 1): Promise<LeaderboardPageResult> {
-    return matchmakerTransport.request<LeaderboardPageResult>(`/leaderboard?page=${page}`);
+  async list(page = 1, division = "all"): Promise<LeaderboardPageResult> {
+    const params = new URLSearchParams({ page: String(page), division });
+    return matchmakerTransport.request<LeaderboardPageResult>(`/leaderboard?${params}`);
   }
 };

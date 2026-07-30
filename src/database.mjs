@@ -255,22 +255,51 @@ export async function getPlayerMatchHistory(playerId) {
   }));
 }
 
-export async function getLeaderboard(page = 1, pageSize = 100) {
+const leaderboardDivisionRanges = {
+  copper: { maximum: 500 },
+  bronze: { minimum: 501, maximum: 799 },
+  silver: { minimum: 800, maximum: 999 },
+  gold: { minimum: 1000, maximum: 1199 },
+  platinum: { minimum: 1200, maximum: 1399 },
+  diamond: { minimum: 1400, maximum: 1799 },
+  master: { minimum: 1800, maximum: 2199 },
+  grandmaster: { minimum: 2200 }
+};
+
+export async function getLeaderboard(page = 1, pageSize = 100, division = "all") {
   const safePageSize = Math.max(1, Math.min(100, Number(pageSize) || 100));
   const safePage = Math.max(1, Math.floor(Number(page) || 1));
+  const normalizedDivision = String(division).trim().toLowerCase();
+  const range = leaderboardDivisionRanges[normalizedDivision];
+  const conditions = [];
+  const filterValues = [];
+  if (range?.minimum !== undefined) {
+    conditions.push("rating >= ?");
+    filterValues.push(range.minimum);
+  }
+  if (range?.maximum !== undefined) {
+    conditions.push("rating <= ?");
+    filterValues.push(range.maximum);
+  }
+  const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const offset = (safePage - 1) * safePageSize;
   const [[rows], [countRows]] = await Promise.all([
     database.query(
-    `SELECT id, aoe_profile_id, steam_id, display_name, avatar_url, country_code,
-            rating, peak_rating, team_rating, team_peak_rating,
-            legacy_solo_wins, legacy_solo_losses, legacy_team_wins, legacy_team_losses,
-            wins, losses, streak,
-            RANK() OVER (ORDER BY rating DESC) AS ladder_rank
-     FROM players
+    `SELECT *
+     FROM (
+       SELECT id, aoe_profile_id, steam_id, display_name, avatar_url, country_code,
+              rating, peak_rating, team_rating, team_peak_rating,
+              legacy_solo_wins, legacy_solo_losses, legacy_team_wins, legacy_team_losses,
+              wins, losses, streak,
+              RANK() OVER (ORDER BY rating DESC) AS ladder_rank
+       FROM players
+     ) AS ranked_players
+     ${whereClause}
      ORDER BY rating DESC, wins DESC, display_name ASC
-     LIMIT ${safePageSize} OFFSET ${offset}`
+     LIMIT ${safePageSize} OFFSET ${offset}`,
+      filterValues
     ),
-    database.query("SELECT COUNT(*) AS total FROM players")
+    database.query(`SELECT COUNT(*) AS total FROM players ${whereClause}`, filterValues)
   ]);
   const players = rows.map((row) => {
     const wins = Number(row.wins);
@@ -306,7 +335,8 @@ export async function getLeaderboard(page = 1, pageSize = 100) {
     players,
     page: safePage,
     pageSize: safePageSize,
-    total: Number(countRows[0]?.total ?? 0)
+    total: Number(countRows[0]?.total ?? 0),
+    division: range ? normalizedDivision : "all"
   };
 }
 

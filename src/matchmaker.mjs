@@ -31,6 +31,9 @@ const playersJoiningQueue = new Set();
 const rematchCooldowns = new Map();
 const leaderboardCache = new Map();
 const leaderboardCacheTtlMs = 3 * 60 * 1000;
+const leaderboardDivisions = new Set([
+  "copper", "bronze", "silver", "gold", "platinum", "diamond", "master", "grandmaster"
+]);
 const minimumQueueTimeMs = 15_000;
 const declinedPairCooldownMs = 30 * 1000;
 const matchSetupTimeoutMs = Number(process.env.MATCH_SETUP_TIMEOUT_MS ?? 120_000);
@@ -53,30 +56,33 @@ const teamRatingRangeSchedule = [
 let eventSequence = 0;
 let rematchCooldownCleanupTimer;
 
-async function getCachedLeaderboard(page) {
+async function getCachedLeaderboard(page, division) {
   const safePage = Math.max(1, Math.floor(Number(page) || 1));
+  const requestedDivision = String(division ?? "all").trim().toLowerCase();
+  const safeDivision = leaderboardDivisions.has(requestedDivision) ? requestedDivision : "all";
+  const cacheKey = `${safeDivision}:${safePage}`;
   const now = Date.now();
-  const cached = leaderboardCache.get(safePage);
+  const cached = leaderboardCache.get(cacheKey);
   if (cached?.value && cached.expiresAt > now) return cached.value;
   if (cached?.promise) return cached.promise;
 
-  for (const [cachedPage, entry] of leaderboardCache) {
-    if (!entry.promise && entry.expiresAt <= now) leaderboardCache.delete(cachedPage);
+  for (const [key, entry] of leaderboardCache) {
+    if (!entry.promise && entry.expiresAt <= now) leaderboardCache.delete(key);
   }
 
-  const promise = getLeaderboard(safePage, 100)
+  const promise = getLeaderboard(safePage, 100, safeDivision)
     .then((value) => {
-      leaderboardCache.set(safePage, {
+      leaderboardCache.set(cacheKey, {
         value,
         expiresAt: Date.now() + leaderboardCacheTtlMs
       });
       return value;
     })
     .catch((error) => {
-      leaderboardCache.delete(safePage);
+      leaderboardCache.delete(cacheKey);
       throw error;
     });
-  leaderboardCache.set(safePage, { promise, expiresAt: 0 });
+  leaderboardCache.set(cacheKey, { promise, expiresAt: 0 });
   return promise;
 }
 
@@ -811,7 +817,8 @@ async function handleRequest(request, response) {
 
     if (request.method === "GET" && url.pathname === "/leaderboard") {
       const page = Number(url.searchParams.get("page") ?? 1);
-      return send(response, 200, await getCachedLeaderboard(page));
+      const division = url.searchParams.get("division") ?? "all";
+      return send(response, 200, await getCachedLeaderboard(page, division));
     }
 
     if (request.method === "POST" && url.pathname === "/queue") {

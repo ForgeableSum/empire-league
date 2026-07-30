@@ -22,7 +22,7 @@ export function LeaderboardPage() {
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    void leaderboardService.list(page)
+    void leaderboardService.list(page, division)
       .then((result) => {
         if (!cancelled) {
           setPlayers(result.players);
@@ -36,15 +36,13 @@ export function LeaderboardPage() {
         if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [page]);
+  }, [division, page]);
   const rows = useMemo(
     () =>
       players.filter((player) => {
-        const byName = player.displayName.toLowerCase().includes(query.toLowerCase());
-        const byDivision = division === "all" || player.division === division;
-        return byName && byDivision;
+        return player.displayName.toLowerCase().includes(query.toLowerCase());
       }),
-    [division, players, query]
+    [players, query]
   );
   const divisionOptions = [
     { value: "all", label: "All" },
@@ -73,7 +71,16 @@ export function LeaderboardPage() {
           Search
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Player name" />
         </label>
-        <ThemedSelect className="division-field" label="Division" options={divisionOptions} value={division} onChange={setDivision} />
+        <ThemedSelect
+          className="division-field"
+          label="Division"
+          options={divisionOptions}
+          value={division}
+          onChange={(value) => {
+            setPage(1);
+            setDivision(value);
+          }}
+        />
       </div>
       <div className="panel">
         <div className="leaderboard-pagination-top">{pagination}</div>
