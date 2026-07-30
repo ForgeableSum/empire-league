@@ -416,6 +416,7 @@
 }
 
 .topbar {
+  position: relative;
   min-height: 74px;
   display: flex;
   align-items: center;
@@ -647,6 +648,20 @@
 .profile-friend-status {
   margin-top: 12px;
   color: var(--success);
+}
+
+.linked-profile-topbar {
+  min-height: 96px;
+  padding-top: 38px;
+}
+
+.profile-header-back {
+  position: absolute;
+  top: -14px;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
 }
 
 /* Social */

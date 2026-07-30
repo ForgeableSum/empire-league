@@ -1,4 +1,4 @@
-import { BarChart3, History, Home, LogOut, Play, Settings, User, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, History, Home, LogOut, Play, Settings, User, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import appIcon from "../../assets/el_icon_no_plume.png";
 import { presenceService } from "../../services/presenceService";
@@ -16,7 +16,8 @@ const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
 ];
 
 export function Shell({ children }: { children: ReactNode }) {
-  const { page, setPage, state, signOut, selectedProfileId, openPlayerProfile } = useAppStore();
+  const { page, setPage, state, signOut, selectedProfileId, openPlayerProfile, returnFromPlayerProfile } = useAppStore();
+  const viewingLinkedProfile = page === "profile" && selectedProfileId !== null && selectedProfileId !== state.currentUser.id;
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
   const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
 
@@ -95,9 +96,15 @@ export function Shell({ children }: { children: ReactNode }) {
       </aside>
       <main className={`main-area page-${page}`}>
         <div className="content-shell">
-          <header className="topbar">
+          <header className={viewingLinkedProfile ? "topbar linked-profile-topbar" : "topbar"}>
+            {viewingLinkedProfile && (
+              <button className="secondary profile-header-back" type="button" onClick={returnFromPlayerProfile}>
+                <ArrowLeft size={16} />
+                Back
+              </button>
+            )}
             <div>
-              <h1>{page === "profile" && selectedProfileId && selectedProfileId !== state.currentUser.id ? "Player Profile" : titleFor(page)}</h1>
+              <h1>{titleFor(page)}</h1>
             </div>
           </header>
           {children}

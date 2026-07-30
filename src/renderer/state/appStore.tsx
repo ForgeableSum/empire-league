@@ -28,6 +28,7 @@ interface AppContextValue {
   setPage: (page: AppPage) => void;
   selectedProfileId: string | null;
   openPlayerProfile: (playerId: string) => void;
+  returnFromPlayerProfile: () => void;
   queues: QueueDefinition[];
   startQueue: (queue: QueueDefinition) => Promise<void>;
   updateActiveQueue: (queue: QueueDefinition) => Promise<void>;
@@ -105,6 +106,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [page, setPage] = useState<AppPage>("home");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [profileReturnPage, setProfileReturnPage] = useState<AppPage>("leaderboard");
   const [authStatus, setAuthStatus] = useState<AppContextValue["authStatus"]>("loading");
   const [authError, setAuthError] = useState<string | null>(null);
   const [state, setState] = useState<AppState>(() => ({
@@ -1355,8 +1357,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPage,
     selectedProfileId,
     openPlayerProfile: (playerId) => {
+      if (page !== "profile") setProfileReturnPage(page);
       setSelectedProfileId(playerId);
       setPage("profile");
+    },
+    returnFromPlayerProfile: () => {
+      setSelectedProfileId(null);
+      setPage(profileReturnPage);
     },
     queues: queueDefinitions,
     startQueue,
