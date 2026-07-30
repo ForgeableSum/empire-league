@@ -340,6 +340,115 @@ export async function getLeaderboard(page = 1, pageSize = 100, division = "all")
   };
 }
 
+export async function getPlayerByDisplayName(displayName) {
+  const normalizedName = String(displayName ?? "").trim();
+  if (!normalizedName) return null;
+  const [rows] = await database.query(
+    `SELECT id, display_name
+     FROM players
+     WHERE LOWER(display_name) = LOWER(?)
+     LIMIT 1`,
+    [normalizedName]
+  );
+  return rows[0]
+    ? { id: rows[0].id, displayName: rows[0].display_name }
+    : null;
+}
+
+function socialPair(leftId, rightId) {
+  return leftId < rightId ? [leftId, rightId] : [rightId, leftId];
+}
+
+export async function getSocialSnapshot(playerId) {
+  const [connectionRows] = await database.execute(
+    `SELECT c.id AS connection_id, c.status, c.requested_by_id,
+            p.id, p.display_name, p.avatar_url, p.rating,
+            (SELECT COUNT(*)
+             FROM social_connections mutual
+             WHERE mutual.status = 'accepted'
+               AND (mutual.player_one_id = p.id OR mutual.player_two_id = p.id)
+               AND (
+                 CASE WHEN mutual.player_one_id = p.id THEN mutual.player_two_id ELSE mutual.player_one_id END
+               ) IN (
+                 SELECT CASE WHEN mine.player_one_id = ? THEN mine.player_two_id ELSE mine.player_one_id END
+                 FROM social_connections mine
+                 WHERE mine.status = 'accepted' AND (mine.player_one_id = ? OR mine.player_two_id = ?)
+               )) AS mutual_friends
+     FROM social_connections c
+     JOIN players p ON p.id = CASE WHEN c.player_one_id = ? THEN c.player_two_id ELSE c.player_one_id END
+     WHERE c.player_one_id = ? OR c.player_two_id = ?
+     ORDER BY p.display_name`,
+    [playerId, playerId, playerId, playerId, playerId, playerId]
+  );
+  const friends = [];
+  const requests = [];
+  const outgoing = [];
+  for (const row of connectionRows) {
+    const player = {
+      id: row.id,
+      name: row.display_name,
+      avatarUrl: row.avatar_url ?? undefined,
+      rating: Number(row.rating),
+      mutualFriends: Number(row.mutual_friends)
+    };
+    if (row.status === "accepted") friends.push(player);
+    else if (row.requested_by_id === playerId) outgoing.push(player);
+    else requests.push({ ...player, connectionId: String(row.connection_id) });
+  }
+  return { friends, requests, outgoing };
+}
+
+export async function createFriendRequest(requesterId, targetId) {
+  const [playerOneId, playerTwoId] = socialPair(requesterId, targetId);
+  try {
+    await database.execute(
+      `INSERT INTO social_connections
+       (player_one_id, player_two_id, requested_by_id, status)
+       VALUES (?, ?, ?, 'pending')`,
+      [playerOneId, playerTwoId, requesterId]
+    );
+  } catch (error) {
+    if (error?.code === "ER_DUP_ENTRY") throw new Error("A friendship or pending request already exists.");
+    throw error;
+  }
+}
+
+export async function acceptFriendRequest(connectionId, playerId) {
+  const [result] = await database.execute(
+    `UPDATE social_connections
+     SET status = 'accepted'
+     WHERE id = ? AND status = 'pending' AND requested_by_id <> ?
+       AND (player_one_id = ? OR player_two_id = ?)`,
+    [connectionId, playerId, playerId, playerId]
+  );
+  return result.affectedRows === 1;
+}
+
+export async function deleteSocialConnection(connectionId, playerId) {
+  const [rows] = await database.execute(
+    `SELECT CASE WHEN player_one_id = ? THEN player_two_id ELSE player_one_id END AS other_player_id
+     FROM social_connections
+     WHERE id = ? AND (player_one_id = ? OR player_two_id = ?)`,
+    [playerId, connectionId, playerId, playerId]
+  );
+  if (!rows.length) return null;
+  const [result] = await database.execute(
+    "DELETE FROM social_connections WHERE id = ? AND (player_one_id = ? OR player_two_id = ?)",
+    [connectionId, playerId, playerId]
+  );
+  return result.affectedRows === 1 ? rows[0].other_player_id : null;
+}
+
+export async function areFriends(leftId, rightId) {
+  const [playerOneId, playerTwoId] = socialPair(leftId, rightId);
+  const [rows] = await database.execute(
+    `SELECT id FROM social_connections
+     WHERE player_one_id = ? AND player_two_id = ? AND status = 'accepted'`,
+    [playerOneId, playerTwoId]
+  );
+  return rows.length > 0;
+}
+
 function divisionForRating(rating) {
   if (rating >= 2200) return "Grandmaster";
   if (rating >= 1800) return "Master";

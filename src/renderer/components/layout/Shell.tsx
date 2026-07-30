@@ -1,4 +1,4 @@
-import { BarChart3, History, Home, LogOut, Play, Settings, User } from "lucide-react";
+import { BarChart3, History, Home, LogOut, Play, Settings, User, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import appIcon from "../../assets/el_icon_no_plume.png";
 import { presenceService } from "../../services/presenceService";
@@ -11,6 +11,7 @@ const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
   { page: "match-history", label: "Match History", icon: <History size={18} /> },
   { page: "leaderboard", label: "Leaderboard", icon: <BarChart3 size={18} /> },
   { page: "profile", label: "Profile", icon: <User size={18} /> },
+  { page: "social", label: "Social", icon: <Users size={18} /> },
   { page: "settings", label: "Settings", icon: <Settings size={18} /> }
 ];
 
@@ -116,6 +117,7 @@ function titleFor(page: AppPage): string {
     "match-history": "Match History",
     leaderboard: "Leaderboard",
     profile: "Player Profile",
+    social: "Social",
     settings: "Settings"
   }[page];
 }

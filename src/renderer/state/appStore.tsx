@@ -20,7 +20,7 @@ import { estimateLobbySetupMs, recordLobbySetupDuration } from "../services/lobb
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
 
-type AppPage = "home" | "play" | "match-history" | "leaderboard" | "profile" | "settings";
+type AppPage = "home" | "play" | "match-history" | "leaderboard" | "profile" | "social" | "settings";
 
 interface AppContextValue {
   state: AppState;

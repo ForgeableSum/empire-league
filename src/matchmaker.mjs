@@ -7,6 +7,12 @@ import {
   database,
   checkDatabase,
   getLeaderboard,
+  getPlayerByDisplayName,
+  getSocialSnapshot,
+  createFriendRequest,
+  acceptFriendRequest,
+  deleteSocialConnection,
+  areFriends,
   getPlayerMatchHistory,
   linkPlayerAoeProfile,
   recordMatchResultConflict,
@@ -55,6 +61,66 @@ const teamRatingRangeSchedule = [
 ];
 let eventSequence = 0;
 let rematchCooldownCleanupTimer;
+const socialPresence = new Map();
+const socialFriendIds = new Map();
+const socialMessages = new Map();
+const socialUnread = new Map();
+const maxSocialMessagesPerConversation = 100;
+
+function conversationKey(leftId, rightId) {
+  return [leftId, rightId].sort().join(":");
+}
+
+function publicPresence(playerId) {
+  const connected = [...webSocketServer.clients].some(
+    (socket) => socket.readyState === WebSocket.OPEN && socketSessions.get(socket)?.player?.id === playerId
+  );
+  if (!connected) return { presence: "offline", activity: "Offline" };
+  const value = socialPresence.get(playerId);
+  if (!value) return { presence: "online", activity: "Online" };
+  return value;
+}
+
+function sendToPlayer(playerId, message) {
+  for (const socket of webSocketServer.clients) {
+    if (socketSessions.get(socket)?.player?.id === playerId) sendSocket(socket, message);
+  }
+}
+
+async function refreshSocialCache(playerId) {
+  const snapshot = await getSocialSnapshot(playerId);
+  socialFriendIds.set(playerId, new Set(snapshot.friends.map((friend) => friend.id)));
+  return {
+    ...snapshot,
+    friends: snapshot.friends.map((friend) => ({
+      ...friend,
+      ...publicPresence(friend.id),
+      unread: socialUnread.get(playerId)?.get(friend.id) ?? 0
+    }))
+  };
+}
+
+async function emitSocialGraphChanged(...playerIds) {
+  for (const playerId of new Set(playerIds)) {
+    const snapshot = await refreshSocialCache(playerId);
+    sendToPlayer(playerId, { type: "social_event", event: { type: "snapshot", snapshot } });
+  }
+}
+
+function broadcastPresence(playerId) {
+  const event = { type: "presence", playerId, ...publicPresence(playerId) };
+  for (const friendId of socialFriendIds.get(playerId) ?? []) {
+    sendToPlayer(friendId, { type: "social_event", event });
+  }
+}
+
+async function ensureFriends(leftId, rightId) {
+  if (socialFriendIds.get(leftId)?.has(rightId)) return true;
+  if (!await areFriends(leftId, rightId)) return false;
+  socialFriendIds.get(leftId)?.add(rightId);
+  socialFriendIds.get(rightId)?.add(leftId);
+  return true;
+}
 
 async function getCachedLeaderboard(page, division) {
   const safePage = Math.max(1, Math.floor(Number(page) || 1));
@@ -821,6 +887,108 @@ async function handleRequest(request, response) {
       return send(response, 200, await getCachedLeaderboard(page, division));
     }
 
+    if (request.method === "GET" && url.pathname === "/players/lookup") {
+      const name = url.searchParams.get("name")?.trim() ?? "";
+      if (!name || name.length > 64) return send(response, 400, { error: "A valid player name is required." });
+      const player = await getPlayerByDisplayName(name);
+      return player
+        ? send(response, 200, { player })
+        : send(response, 404, { error: "No Empire League player was found with that name." });
+    }
+
+    if (request.method === "GET" && url.pathname === "/social") {
+      return send(response, 200, { snapshot: await refreshSocialCache(authenticatedPlayer.id) });
+    }
+
+    if (request.method === "POST" && url.pathname === "/social/requests") {
+      const body = await readJson(request);
+      const target = await getPlayerByDisplayName(body.displayName);
+      if (!target) return send(response, 404, { error: "No Empire League player was found with that name." });
+      if (target.id === authenticatedPlayer.id) return send(response, 400, { error: "You can’t invite yourself." });
+      try {
+        await createFriendRequest(authenticatedPlayer.id, target.id);
+      } catch (error) {
+        return send(response, 409, { error: error instanceof Error ? error.message : "The request already exists." });
+      }
+      await emitSocialGraphChanged(authenticatedPlayer.id, target.id);
+      return send(response, 201, { player: target });
+    }
+
+    const acceptSocialRequest = url.pathname.match(/^\/social\/requests\/(\d+)\/accept$/);
+    if (request.method === "POST" && acceptSocialRequest) {
+      const connectionId = acceptSocialRequest[1];
+      const previousFriendIds = new Set(socialFriendIds.get(authenticatedPlayer.id) ?? []);
+      if (!await acceptFriendRequest(connectionId, authenticatedPlayer.id)) {
+        return send(response, 404, { error: "Friend request not found." });
+      }
+      const snapshot = await refreshSocialCache(authenticatedPlayer.id);
+      const friend = snapshot.friends.find((item) => !previousFriendIds.has(item.id));
+      await emitSocialGraphChanged(authenticatedPlayer.id, ...(friend ? [friend.id] : []));
+      return send(response, 200, { accepted: true });
+    }
+
+    const declineSocialRequest = url.pathname.match(/^\/social\/requests\/(\d+)$/);
+    if (request.method === "DELETE" && declineSocialRequest) {
+      const otherPlayerId = await deleteSocialConnection(declineSocialRequest[1], authenticatedPlayer.id);
+      if (!otherPlayerId) {
+        return send(response, 404, { error: "Friend request not found." });
+      }
+      await emitSocialGraphChanged(authenticatedPlayer.id, otherPlayerId);
+      return send(response, 200, { deleted: true });
+    }
+
+    if (request.method === "POST" && url.pathname === "/social/presence") {
+      const body = await readJson(request);
+      const allowed = new Set(["online", "idle", "in_game"]);
+      const presence = allowed.has(body.presence) ? body.presence : "online";
+      const activity = String(body.activity ?? (presence === "idle" ? "Idle" : "Online")).trim().slice(0, 120);
+      const mapName = typeof body.mapName === "string" ? body.mapName.trim().slice(0, 100) : undefined;
+      socialPresence.set(authenticatedPlayer.id, { presence, activity, ...(mapName ? { mapName } : {}) });
+      broadcastPresence(authenticatedPlayer.id);
+      return send(response, 200, { updated: true });
+    }
+
+    const socialMessageHistory = url.pathname.match(/^\/social\/messages\/([^/]+)$/);
+    if (request.method === "GET" && socialMessageHistory) {
+      const friendId = decodeURIComponent(socialMessageHistory[1]);
+      if (!await ensureFriends(authenticatedPlayer.id, friendId)) return send(response, 403, { error: "You can only message friends." });
+      return send(response, 200, {
+        messages: socialMessages.get(conversationKey(authenticatedPlayer.id, friendId)) ?? []
+      });
+    }
+
+    const socialMessageRead = url.pathname.match(/^\/social\/messages\/([^/]+)\/read$/);
+    if (request.method === "POST" && socialMessageRead) {
+      const friendId = decodeURIComponent(socialMessageRead[1]);
+      socialUnread.get(authenticatedPlayer.id)?.delete(friendId);
+      return send(response, 200, { read: true });
+    }
+
+    if (request.method === "POST" && url.pathname === "/social/messages") {
+      const body = await readJson(request);
+      const recipientId = String(body.recipientId ?? "");
+      const text = String(body.text ?? "").trim().slice(0, 1000);
+      if (!recipientId || !text) return send(response, 400, { error: "A recipient and message are required." });
+      if (!await ensureFriends(authenticatedPlayer.id, recipientId)) return send(response, 403, { error: "You can only message friends." });
+      const message = {
+        id: randomUUID(),
+        senderId: authenticatedPlayer.id,
+        recipientId,
+        text,
+        sentAt: new Date().toISOString()
+      };
+      const key = conversationKey(authenticatedPlayer.id, recipientId);
+      const history = socialMessages.get(key) ?? [];
+      history.push(message);
+      if (history.length > maxSocialMessagesPerConversation) history.splice(0, history.length - maxSocialMessagesPerConversation);
+      socialMessages.set(key, history);
+      const unreadBySender = socialUnread.get(recipientId) ?? new Map();
+      unreadBySender.set(authenticatedPlayer.id, (unreadBySender.get(authenticatedPlayer.id) ?? 0) + 1);
+      socialUnread.set(recipientId, unreadBySender);
+      sendToPlayer(recipientId, { type: "social_event", event: { type: "message", message } });
+      return send(response, 201, { message });
+    }
+
     if (request.method === "POST" && url.pathname === "/queue") {
       const body = await readJson(request);
       if (!body.queue?.id) return send(response, 400, { error: "queue is required" });
@@ -1260,6 +1428,8 @@ webSocketServer.on("connection", (socket) => {
         session.player = player;
         session.token = message.token;
         sendSocket(socket, { type: "authenticated", player });
+        await refreshSocialCache(player.id);
+        broadcastPresence(player.id);
         return;
       }
 
@@ -1356,7 +1526,22 @@ webSocketServer.on("connection", (socket) => {
     }
   });
 
-  socket.on("close", () => unsubscribeSocket(socket));
+  socket.on("close", () => {
+    const playerId = socketSessions.get(socket)?.player?.id;
+    unsubscribeSocket(socket);
+    if (playerId) queueMicrotask(() => {
+      const friends = [...(socialFriendIds.get(playerId) ?? [])];
+      const stillConnected = [...webSocketServer.clients].some(
+        (candidate) => candidate.readyState === WebSocket.OPEN && socketSessions.get(candidate)?.player?.id === playerId
+      );
+      if (!stillConnected) {
+        socialPresence.delete(playerId);
+        socialFriendIds.delete(playerId);
+      }
+      const event = { type: "presence", playerId, ...publicPresence(playerId) };
+      for (const friendId of friends) sendToPlayer(friendId, { type: "social_event", event });
+    });
+  });
   socket.on("error", (error) => console.warn("[matchmaker websocket]", error.message));
 });
 

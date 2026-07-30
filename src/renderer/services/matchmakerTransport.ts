@@ -14,6 +14,11 @@ interface Subscription {
   listener: QueueEventListener;
 }
 
+export type SocialEvent =
+  | { type: "snapshot"; snapshot: import("./socialService").SocialSnapshot }
+  | { type: "presence"; playerId: string; presence: import("../pages/SocialPage").FriendPresence; activity: string; mapName?: string }
+  | { type: "message"; message: import("./socialService").SocialMessage };
+
 class MatchmakerTransport {
   private token: string | null = null;
   private socket: WebSocket | null = null;
@@ -25,6 +30,7 @@ class MatchmakerTransport {
   private reconnectTimer: number | null = null;
   private reconnectAttempts = 0;
   private deliberatelyClosed = false;
+  private socialListeners = new Set<(event: SocialEvent) => void>();
 
   setToken(token: string | null): void {
     if (this.token === token) return;
@@ -65,6 +71,11 @@ class MatchmakerTransport {
     };
   }
 
+  onSocialEvent(listener: (event: SocialEvent) => void): UnsubscribeFunction {
+    this.socialListeners.add(listener);
+    return () => this.socialListeners.delete(listener);
+  }
+
   private connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN && !this.connectPromise) return Promise.resolve();
     if (this.connectPromise) return this.connectPromise;
@@ -99,7 +110,7 @@ class MatchmakerTransport {
       message?: string;
       ticketId?: string;
       sequence?: number;
-      event?: Parameters<QueueEventListener>[0];
+      event?: Parameters<QueueEventListener>[0] | SocialEvent;
     };
     try {
       message = JSON.parse(String(event.data));
@@ -109,6 +120,10 @@ class MatchmakerTransport {
     }
     if (message.type === "authenticated") {
       this.finishConnecting();
+      return;
+    }
+    if (message.type === "social_event" && message.event) {
+      for (const listener of this.socialListeners) listener(message.event as SocialEvent);
       return;
     }
     if (message.type === "response" && message.id) {
@@ -131,7 +146,7 @@ class MatchmakerTransport {
       && message.ticketId === this.subscription.ticketId
       && message.event && Number.isSafeInteger(message.sequence)) {
       this.subscription.after = Math.max(this.subscription.after, message.sequence ?? 0);
-      this.subscription.listener(message.event);
+      this.subscription.listener(message.event as Parameters<QueueEventListener>[0]);
       return;
     }
     if (message.type === "error") {

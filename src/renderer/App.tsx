@@ -4,6 +4,8 @@ import { MatchHistoryPage } from "./pages/MatchHistoryPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SocialPage, type FriendRequest, type SocialFriend, type FriendPresence } from "./pages/SocialPage";
+import { ChatDock, type OpenChat } from "./components/social/ChatDock";
 import { Shell } from "./components/layout/Shell";
 import { MatchFoundOverlay } from "./components/match/MatchFoundOverlay";
 import { Toasts } from "./components/common/Toasts";
@@ -13,12 +15,16 @@ import { LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
 import loadingScreenArtwork from "./assets/el_full_1.png";
+import { socialService } from "./services/socialService";
 
 const permanentLoadingScreen = import.meta.env.VITE_PERMANENT_LOADING_SCREEN === "true";
 
 export function App() {
   const [mouseTestActive, setMouseTestActive] = useState(false);
   const [startupScreenVisible, setStartupScreenVisible] = useState(true);
+  const [friends, setFriends] = useState<SocialFriend[]>([]);
+  const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [chats, setChats] = useState<OpenChat[]>([]);
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
   useEffect(() => {
     if (permanentLoadingScreen) return;
@@ -27,6 +33,124 @@ export function App() {
   }, []);
 
   const { page, state, authStatus, authError, signInWithSteam } = useAppStore();
+
+  async function openChat(friend: SocialFriend) {
+    const history = await socialService.getMessages(friend.id).catch(() => []);
+    void socialService.markMessagesRead(friend.id);
+    setChats((current) => {
+      const existing = current.find((chat) => chat.friend.id === friend.id);
+      if (existing) return current.map((chat) => chat.friend.id === friend.id ? { ...chat, minimized: false } : chat);
+      return [...current.slice(-2), {
+        friend,
+        minimized: false,
+        messages: history.map((message) => ({
+          id: message.id,
+          from: message.senderId === state.currentUser.id ? "me" as const : "friend" as const,
+          text: message.text,
+          time: new Date(message.sentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        }))
+      }];
+    });
+    setFriends((current) => current.map((item) => item.id === friend.id ? { ...item, unread: 0 } : item));
+  }
+
+  async function acceptRequest(request: FriendRequest) {
+    await socialService.acceptRequest(request.connectionId);
+  }
+
+  async function inviteFriend(name: string): Promise<string> {
+    const normalizedName = name.trim().toLowerCase();
+    if (normalizedName === state.currentUser.displayName.toLowerCase()) {
+      throw new Error("You can’t send a friend invite to yourself.");
+    }
+    if (friends.some((friend) => friend.name.toLowerCase() === normalizedName)) {
+      throw new Error(`${name.trim()} is already your friend.`);
+    }
+    if (requests.some((request) => request.name.toLowerCase() === normalizedName)) {
+      throw new Error(`You already have a pending request from ${name.trim()}.`);
+    }
+    const player = await socialService.sendFriendRequest(name);
+    return player.displayName;
+  }
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") return;
+    const applySnapshot = (snapshot: import("./services/socialService").SocialSnapshot) => {
+      setFriends((current) => snapshot.friends.map((friend) => ({
+        ...friend,
+        initials: initialsFor(friend.name),
+        unread: friend.unread ?? current.find((item) => item.id === friend.id)?.unread ?? 0
+      })));
+      setRequests(snapshot.requests.map((request) => ({ ...request, initials: initialsFor(request.name) })));
+    };
+    void socialService.getSnapshot().then(applySnapshot);
+    return socialService.onEvent((event) => {
+      if (event.type === "snapshot") applySnapshot(event.snapshot);
+      if (event.type === "presence") {
+        setFriends((current) => current.map((friend) => friend.id === event.playerId
+          ? { ...friend, presence: event.presence, activity: event.activity, mapName: event.mapName }
+          : friend));
+        setChats((current) => current.map((chat) => chat.friend.id === event.playerId
+          ? { ...chat, friend: { ...chat.friend, presence: event.presence, activity: event.activity, mapName: event.mapName } }
+          : chat));
+      }
+      if (event.type === "message") {
+        const message = event.message;
+        setChats((current) => {
+          const open = current.some((chat) => chat.friend.id === message.senderId);
+          if (!open) {
+            setFriends((items) => items.map((friend) => friend.id === message.senderId
+              ? { ...friend, unread: (friend.unread ?? 0) + 1 }
+              : friend));
+            return current;
+          }
+          void socialService.markMessagesRead(message.senderId);
+          return current.map((chat) => chat.friend.id === message.senderId ? {
+            ...chat,
+            messages: [...chat.messages, {
+              id: message.id,
+              from: "friend",
+              text: message.text,
+              time: new Date(message.sentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+            }]
+          } : chat);
+        });
+      }
+    });
+  }, [authStatus, state.currentUser.id]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") return;
+    let idle = false;
+    let idleTimer = 0;
+    const publish = () => {
+      const match = state.activeMatch;
+      const inGame = state.queueStatus === "in_game" || state.gameStatus === "in_match";
+      const presence: FriendPresence = inGame ? "in_game" : idle ? "idle" : "online";
+      const activity = inGame
+        ? `In game${match?.selectedMap?.name ? ` · ${match.selectedMap.name}` : ""}`
+        : state.queueStatus === "searching" ? "Looking for a match"
+        : idle ? "Idle" : "Online";
+      void socialService.updatePresence(presence, activity, inGame ? match?.selectedMap?.name : undefined);
+    };
+    const resetIdle = () => {
+      const wasIdle = idle;
+      idle = false;
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => { idle = true; publish(); }, 5 * 60_000);
+      if (wasIdle) publish();
+    };
+    const events = ["pointerdown", "keydown", "wheel"];
+    events.forEach((event) => window.addEventListener(event, resetIdle, { passive: true }));
+    resetIdle();
+    publish();
+    const heartbeat = window.setInterval(publish, 30_000);
+    return () => {
+      events.forEach((event) => window.removeEventListener(event, resetIdle));
+      window.clearTimeout(idleTimer);
+      window.clearInterval(heartbeat);
+    };
+  }, [authStatus, state.queueStatus, state.gameStatus, state.activeMatch?.id, state.activeMatch?.selectedMap?.name]);
 
   if (startupScreenVisible || authStatus === "loading") {
     return (
@@ -80,13 +204,28 @@ export function App() {
         {page === "match-history" && <MatchHistoryPage />}
         {page === "leaderboard" && <LeaderboardPage />}
         {page === "profile" && <ProfilePage />}
+        {page === "social" && <SocialPage friends={friends} requests={requests} onMessage={(friend) => void openChat(friend)} onAccept={(request) => void acceptRequest(request)} onDecline={(id) => void socialService.declineRequest(requests.find((item) => item.id === id)?.connectionId ?? id)} onInvite={inviteFriend} />}
         {page === "settings" && <SettingsPage />}
       </Shell>
       {state.queueStatus === "match_found" && state.activeMatch && <MatchFoundOverlay />}
       <Toasts />
+      <ChatDock
+        chats={chats}
+        onToggle={(id) => setChats((current) => current.map((chat) => chat.friend.id === id ? { ...chat, minimized: !chat.minimized } : chat))}
+        onClose={(id) => setChats((current) => current.filter((chat) => chat.friend.id !== id))}
+        onSend={(id, text) => void socialService.sendMessage(id, text).then((message) => setChats((current) => current.map((chat) => chat.friend.id === id ? {
+          ...chat,
+          messages: [...chat.messages, { id: message.id, from: "me", text: message.text, time: new Date(message.sentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }]
+        } : chat)))}
+      />
       {mouseTestActive && <TestOverlay />}
     </>
   );
+}
+
+function initialsFor(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)?.[0]}` : name.slice(0, 2)).toUpperCase();
 }
 
 function LobbyInputForwarding({ locked }: { locked: boolean }) {
