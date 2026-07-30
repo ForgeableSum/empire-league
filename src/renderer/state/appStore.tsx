@@ -198,7 +198,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!window.electronApi) return;
     return window.electronApi.onReplayEnded((filePath) => {
       const match = stateRef.current.activeMatch;
-      if (!match || replayResultInFlightRef.current) return;
+      if (!match || stateRef.current.queueStatus !== "in_game" || replayResultInFlightRef.current) return;
       replayResultInFlightRef.current = true;
       void (async () => {
         let replay: Awaited<ReturnType<typeof parseReplayMetadata>>;
@@ -250,7 +250,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!window.electronApi) return;
     return window.electronApi.onReplayDetectionFailed((message) => {
       const match = stateRef.current.activeMatch;
-      if (!match || replayResultInFlightRef.current) return;
+      if (!match || stateRef.current.queueStatus !== "in_game" || replayResultInFlightRef.current) return;
       replayResultInFlightRef.current = true;
       setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
       log("Replay recording did not start; reporting the result as contested");
