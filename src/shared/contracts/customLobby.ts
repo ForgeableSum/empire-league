@@ -7,6 +7,8 @@ export interface LocalCustomContent {
   kind: CustomContentKind;
   path: string;
   source: string;
+  enabled: boolean;
+  modName?: string;
 }
 
 export interface LocalCustomContentCatalog {

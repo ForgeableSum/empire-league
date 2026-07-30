@@ -110,11 +110,18 @@ function selectScenarioVariants(
 async function scanLocalCustomContent() {
   const profilesRoot = join(homedir(), "Games", "Age of Empires 2 DE");
   const roots: string[] = [];
-  const maps: Array<{ id: string; name: string; gameName: string; kind: "map" | "scenario"; path: string; source: string }> = [];
-  const dataMods: Array<{ id: string; name: string; gameName: string; kind: "data_mod"; path: string; source: string }> = [];
+  const maps: Array<{ id: string; name: string; gameName: string; kind: "map" | "scenario"; path: string; source: string; enabled: boolean; modName?: string }> = [];
+  const dataMods: Array<{ id: string; name: string; gameName: string; kind: "data_mod"; path: string; source: string; enabled: boolean; modName?: string }> = [];
   const seen = new Set<string>();
 
-  const add = (kind: "map" | "scenario" | "data_mod", path: string, source: string, label?: string, gameName?: string) => {
+  const add = (
+    kind: "map" | "scenario" | "data_mod",
+    path: string,
+    source: string,
+    label?: string,
+    gameName?: string,
+    availability: { enabled?: boolean; modName?: string } = {}
+  ) => {
     const name = (label || basename(path, extname(path))).trim();
     const normalizedName = name.toLowerCase().replace(/\s+/g, " ");
     const key = `${kind}:${normalizedName}`;
@@ -126,7 +133,9 @@ async function scanLocalCustomContent() {
       gameName: gameName ?? basename(path, extname(path)),
       kind,
       path,
-      source
+      source,
+      enabled: availability.enabled !== false,
+      ...(availability.modName ? { modName: availability.modName } : {})
     };
     (kind === "data_mod" ? dataMods : maps).push(item as never);
   };
@@ -134,7 +143,7 @@ async function scanLocalCustomContent() {
   const walk = async (
     root: string,
     source: string,
-    options: { modRoot?: string; modName?: string; scenarioFiles?: Array<{ path: string; name: string; size: number }> } = {},
+    options: { modRoot?: string; modName?: string; enabled?: boolean; scenarioFiles?: Array<{ path: string; name: string; size: number }> } = {},
     depth = 0
   ): Promise<void> => {
     if (depth > 6) return;
@@ -151,21 +160,25 @@ async function scanLocalCustomContent() {
         continue;
       }
       const lower = entry.name.toLowerCase();
-      if (lower.endsWith(".rms")) add("map", path, source);
+      if (lower.endsWith(".rms")) add("map", path, source, undefined, undefined, options);
       if (lower.endsWith(".aoe2scenario") && options.modRoot && options.scenarioFiles) {
         const details = await stat(path).catch(() => null);
         if (details) options.scenarioFiles.push({ path, name: basename(path, extname(path)), size: details.size });
       }
-      if (lower.endsWith(".aoe2scenario") && !options.modRoot) add("scenario", path, source);
+      if (lower.endsWith(".aoe2scenario") && !options.modRoot) add("scenario", path, source, undefined, undefined, options);
       if (lower === "empires2_x2_p1.dat" || lower === "empires2_x2_p1.json") {
         const modRoot = options.modRoot
           ?? path.slice(0, Math.max(0, path.toLowerCase().lastIndexOf(`${join("resources", "_common").toLowerCase()}`)));
-        add("data_mod", modRoot || dirname(path), source, options.modName ?? basename(modRoot || dirname(path)));
+        add("data_mod", modRoot || dirname(path), source, options.modName ?? basename(modRoot || dirname(path)), undefined, options);
       }
     }
   };
 
-  const scanModsDirectory = async (modsRoot: string, source: string): Promise<void> => {
+  const scanModsDirectory = async (
+    modsRoot: string,
+    source: string,
+    modStatuses: Map<string, { enabled: boolean; title: string }>
+  ): Promise<void> => {
     let modDirectories;
     try {
       modDirectories = await readdir(modsRoot, { withFileTypes: true });
@@ -177,28 +190,52 @@ async function scanLocalCustomContent() {
       if (!mod.isDirectory()) continue;
       const modRoot = join(modsRoot, mod.name);
       const modName = mod.name.replace(/^\d+_/, "").trim();
+      const status = modStatuses.get(mod.name.toLowerCase());
+      const displayName = status?.title || modName;
       const scenarioFiles: Array<{ path: string; name: string; size: number }> = [];
-      await walk(modRoot, source, { modRoot, modName, scenarioFiles });
+      await walk(modRoot, source, { modRoot, modName: displayName, enabled: status?.enabled !== false, scenarioFiles });
       for (const scenario of selectScenarioVariants(modName, scenarioFiles)) {
         add(
           "scenario",
           scenario.path,
           source,
           `${modName} — ${scenario.variant}`,
-          basename(scenario.path, extname(scenario.path))
+          basename(scenario.path, extname(scenario.path)),
+          { enabled: status?.enabled !== false, modName: displayName }
         );
       }
     }
   };
 
   try {
-    for (const profile of await readdir(profilesRoot, { withFileTypes: true })) {
-      if (!profile.isDirectory()) continue;
+    const profiles = (await readdir(profilesRoot, { withFileTypes: true }))
+      .filter((profile) => profile.isDirectory() && /^\d{17}$/.test(profile.name));
+    const profileActivity = await Promise.all(profiles.map(async (profile) => {
       const profileRoot = join(profilesRoot, profile.name);
+      const status = await stat(join(profileRoot, "mods", "mod-status.json")).catch(() => null);
+      return { profile, activityMs: status?.mtimeMs ?? 0 };
+    }));
+    const activeProfile = profileActivity.sort((left, right) => right.activityMs - left.activityMs)[0]?.profile;
+    if (activeProfile) {
+      const profile = activeProfile;
+      const profileRoot = join(profilesRoot, profile.name);
+      const modStatuses = new Map<string, { enabled: boolean; title: string }>();
+      try {
+        const parsed = JSON.parse(await readFile(join(profileRoot, "mods", "mod-status.json"), "utf8")) as {
+          Mods?: Array<{ Path?: string; Enabled?: boolean; Title?: string }>;
+        };
+        for (const mod of parsed.Mods ?? []) {
+          const folder = String(mod.Path ?? "").replace(/\\/g, "/").split("/").filter(Boolean).at(-1)?.toLowerCase();
+          if (folder) modStatuses.set(folder, { enabled: mod.Enabled !== false, title: String(mod.Title ?? folder) });
+        }
+      } catch {
+        // A missing status file means AoE2 has not recorded enablement for this profile.
+      }
       for (const category of ["local", "subscribed"]) {
         await scanModsDirectory(
           join(profileRoot, "mods", category),
-          `${profile.name}/mods/${category}`
+          `${profile.name}/mods/${category}`,
+          modStatuses
         );
       }
       for (const candidate of [
@@ -220,7 +257,12 @@ async function scanLocalCustomContent() {
   }
 
   const byName = <T extends { name: string }>(left: T, right: T) => left.name.localeCompare(right.name);
-  return { maps: maps.sort(byName), dataMods: dataMods.sort(byName), scannedRoots: roots, scannedAt: new Date().toISOString() };
+  return {
+    maps: maps.sort(byName),
+    dataMods: dataMods.sort(byName),
+    scannedRoots: roots,
+    scannedAt: new Date().toISOString()
+  };
 }
 
 const replayPollIntervalMs = 1500;

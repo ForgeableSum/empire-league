@@ -89,6 +89,7 @@ export function CustomPage() {
           <label>Lobby name<input value={lobbyName} maxLength={64} onChange={(event) => setLobbyName(event.target.value)} /></label>
           <ContentSelect label="Map or scenario" items={catalog.maps} value={mapId} onChange={setMapId} />
           <ContentSelect label="Data mod (optional)" items={catalog.dataMods} value={dataModId} onChange={setDataModId} />
+          {[...catalog.maps, ...catalog.dataMods].some((item) => !item.enabled) && <small className="custom-disabled-mod-hint">Disabled mods must be enabled at the mods interface inside the game.</small>}
           <div className="custom-scan-meta"><span>{catalog.maps.length} maps/scenarios</span><span>{catalog.dataMods.length} data mods</span><span>{catalog.scannedRoots.length} folders scanned</span></div>
           <div className="custom-create-actions">
             <button className="primary large" type="button" disabled={!lobbyName.trim() || !mapId || pending} onClick={() => void createRoom()}>{pending ? "Creating…" : "Create Lobby"}</button>
@@ -118,7 +119,7 @@ export function CustomPage() {
 }
 
 function ContentSelect({ label, items, value, onChange }: { label: string; items: LocalCustomContent[]; value: string; onChange: (value: string) => void }) {
-  return <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}><option value="">Choose content…</option>{items.map((item) => <option key={item.id} value={item.id}>{item.kind === "scenario" ? "[Scenario] " : "[Map] "}{item.name}</option>)}</select>{value && <small>{items.find((item) => item.id === value)?.source}</small>}</label>;
+  return <label>{label}<select value={value} onChange={(event) => onChange(event.target.value)}><option value="">Choose content…</option>{items.map((item) => <option key={item.id} value={item.id} disabled={!item.enabled}>{item.kind === "scenario" ? "[Scenario] " : "[Map] "}{item.name}{item.enabled ? "" : ` — Disabled (${item.modName ?? "enable in AoE2 Mods"})`}</option>)}</select>{value && <small>{items.find((item) => item.id === value)?.source}</small>}</label>;
 }
 
 function NetworkLobby({ room, currentPlayerId, notify }: {

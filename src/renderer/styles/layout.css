@@ -3416,6 +3416,12 @@
   gap: 12px;
 }
 
+.custom-disabled-mod-hint {
+  color: var(--warning);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .custom-room-list {
   display: grid;
   overflow: hidden;
