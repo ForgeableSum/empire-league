@@ -672,7 +672,7 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
   const [leftRed, leftGreen, leftBlue] = upperLeft;
   const [centerRed, centerGreen, centerBlue] = upperCenter;
   const [panelRed, panelGreen, panelBlue] = multiplayerPanel;
-  const [buttonRed, buttonGreen] = lowerButton;
+  const [buttonRed, buttonGreen, buttonBlue] = lowerButton;
   const hasReadyButton = (buttonRed > buttonGreen * 2 && buttonRed > 80)
     || (buttonGreen > buttonRed * 2 && buttonGreen > 80);
   // The host and guest Ready buttons sit at different heights. The lower
@@ -681,11 +681,15 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
   const hasLobbyParchment = leftRed > 150 && leftGreen > 110 && leftBlue > 70
     && centerRed > 140 && centerGreen > 110 && centerBlue > 70;
   const hasMultiplayerPanel = panelRed > 180 && panelGreen > 180 && panelBlue > 160;
-  // The map/scenario picker retains parchment in the upper samples, but its
-  // center-right lobby panel becomes nearly black. Recognize it before the
-  // broader lobby parchment heuristic.
-  const hasContentPicker = hasLobbyParchment
+  // Content pickers retain parchment in the upper samples. Scenario selection
+  // uses a dark center-right panel, while the random-map picker uses parchment
+  // there and replaces the lobby's red lower button with a tan control.
+  const hasDarkContentPicker = hasLobbyParchment
     && panelRed < 50 && panelGreen < 50 && panelBlue < 50;
+  const hasMapContentPicker = hasLobbyParchment
+    && panelRed > 140 && panelGreen > 110 && panelBlue > 70
+    && buttonRed > 170 && buttonGreen > 120 && buttonBlue > 80;
+  const hasContentPicker = hasDarkContentPicker || hasMapContentPicker;
   const state = hasContentPicker
     ? "content-picker"
     : hasReadyButton || hasLobbyParchment
