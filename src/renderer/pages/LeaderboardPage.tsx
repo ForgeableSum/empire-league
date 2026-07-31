@@ -6,13 +6,14 @@ import {
 } from "../../shared/contracts/matchmaking";
 import type { PlayerProfile } from "../../shared/contracts/players";
 import { ThemedSelect } from "../components/common/ThemedSelect";
-import { leaderboardService } from "../services/leaderboardService";
+import { leaderboardService, type LeaderboardMode } from "../services/leaderboardService";
 import { useAppStore } from "../state/appStore";
 
 export function LeaderboardPage() {
   const { state, openPlayerProfile } = useAppStore();
   const [query, setQuery] = useState("");
   const [division, setDivision] = useState("all");
+  const [mode, setMode] = useState<LeaderboardMode>("solo");
   const [players, setPlayers] = useState<PlayerProfile[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -22,7 +23,7 @@ export function LeaderboardPage() {
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    void leaderboardService.list(page, division)
+    void leaderboardService.list(page, division, mode)
       .then((result) => {
         if (!cancelled) {
           setPlayers(result.players);
@@ -36,7 +37,7 @@ export function LeaderboardPage() {
         if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [division, page]);
+  }, [division, mode, page]);
   const rows = useMemo(
     () =>
       players.filter((player) => {
@@ -67,6 +68,22 @@ export function LeaderboardPage() {
   return (
     <section className="stack">
       <div className="toolbar">
+        <div className="leaderboard-mode" role="group" aria-label="Leaderboard mode">
+          <button
+            type="button"
+            aria-pressed={mode === "solo"}
+            onClick={() => { setMode("solo"); setPage(1); }}
+          >
+            1v1
+          </button>
+          <button
+            type="button"
+            aria-pressed={mode === "team"}
+            onClick={() => { setMode("team"); setPage(1); }}
+          >
+            Teams
+          </button>
+        </div>
         <label>
           Search
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Player name" />

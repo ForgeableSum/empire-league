@@ -196,11 +196,12 @@ async function ensureFriends(leftId, rightId) {
   return true;
 }
 
-async function getCachedLeaderboard(page, division) {
+async function getCachedLeaderboard(page, division, mode) {
   const safePage = Math.max(1, Math.floor(Number(page) || 1));
   const requestedDivision = String(division ?? "all").trim().toLowerCase();
   const safeDivision = leaderboardDivisions.has(requestedDivision) ? requestedDivision : "all";
-  const cacheKey = `${safeDivision}:${safePage}`;
+  const safeMode = mode === "team" ? "team" : "solo";
+  const cacheKey = `${safeMode}:${safeDivision}:${safePage}`;
   const now = Date.now();
   const cached = leaderboardCache.get(cacheKey);
   if (cached?.value && cached.expiresAt > now) return cached.value;
@@ -210,7 +211,7 @@ async function getCachedLeaderboard(page, division) {
     if (!entry.promise && entry.expiresAt <= now) leaderboardCache.delete(key);
   }
 
-  const promise = getLeaderboard(safePage, 100, safeDivision)
+  const promise = getLeaderboard(safePage, 100, safeDivision, safeMode)
     .then((value) => {
       leaderboardCache.set(cacheKey, {
         value,
@@ -1183,7 +1184,8 @@ async function handleRequest(request, response) {
     if (request.method === "GET" && url.pathname === "/leaderboard") {
       const page = Number(url.searchParams.get("page") ?? 1);
       const division = url.searchParams.get("division") ?? "all";
-      return send(response, 200, await getCachedLeaderboard(page, division));
+      const mode = url.searchParams.get("mode") ?? "solo";
+      return send(response, 200, await getCachedLeaderboard(page, division, mode));
     }
 
     if (request.method === "GET" && url.pathname === "/players/lookup") {

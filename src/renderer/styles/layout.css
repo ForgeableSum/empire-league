@@ -581,6 +581,29 @@
   margin-bottom: 14px;
 }
 
+.leaderboard-mode {
+  display: inline-flex;
+  align-self: end;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #171512;
+}
+
+.leaderboard-mode button {
+  width: auto;
+  min-width: 78px;
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.leaderboard-mode button[aria-pressed="true"] {
+  background: var(--accent);
+  color: #17120c;
+}
+
 .table,
 .leaderboard-table,
 .status-list,

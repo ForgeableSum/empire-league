@@ -307,19 +307,24 @@ const leaderboardDivisionRanges = {
   grandmaster: { minimum: 2200 }
 };
 
-export async function getLeaderboard(page = 1, pageSize = 100, division = "all") {
+export async function getLeaderboard(page = 1, pageSize = 100, division = "all", mode = "solo") {
   const safePageSize = Math.max(1, Math.min(100, Number(pageSize) || 100));
   const safePage = Math.max(1, Math.floor(Number(page) || 1));
   const normalizedDivision = String(division).trim().toLowerCase();
   const range = leaderboardDivisionRanges[normalizedDivision];
+  const safeMode = mode === "team" ? "team" : "solo";
+  const ratingColumn = safeMode === "team" ? "team_rating" : "rating";
+  const winsColumn = safeMode === "team" ? "team_wins" : "wins";
+  const lossesColumn = safeMode === "team" ? "team_losses" : "losses";
+  const streakColumn = safeMode === "team" ? "team_streak" : "streak";
   const conditions = [];
   const filterValues = [];
   if (range?.minimum !== undefined) {
-    conditions.push("rating >= ?");
+    conditions.push("ladder_rating >= ?");
     filterValues.push(range.minimum);
   }
   if (range?.maximum !== undefined) {
-    conditions.push("rating <= ?");
+    conditions.push("ladder_rating <= ?");
     filterValues.push(range.maximum);
   }
   const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -331,20 +336,25 @@ export async function getLeaderboard(page = 1, pageSize = 100, division = "all")
        SELECT id, aoe_profile_id, steam_id, display_name, avatar_url, country_code,
               rating, peak_rating, team_rating, team_peak_rating,
               legacy_solo_wins, legacy_solo_losses, legacy_team_wins, legacy_team_losses,
-              wins, losses, streak,
-              RANK() OVER (ORDER BY rating DESC) AS ladder_rank
+              ${ratingColumn} AS ladder_rating,
+              ${winsColumn} AS ladder_wins, ${lossesColumn} AS ladder_losses,
+              ${streakColumn} AS ladder_streak,
+              RANK() OVER (ORDER BY ${ratingColumn} DESC) AS ladder_rank
        FROM players
      ) AS ranked_players
      ${whereClause}
-     ORDER BY rating DESC, wins DESC, display_name ASC
+     ORDER BY ladder_rating DESC, ladder_wins DESC, display_name ASC
      LIMIT ${safePageSize} OFFSET ${offset}`,
       filterValues
     ),
-    database.query(`SELECT COUNT(*) AS total FROM players ${whereClause}`, filterValues)
+    database.query(
+      `SELECT COUNT(*) AS total FROM (SELECT ${ratingColumn} AS ladder_rating FROM players) AS ranked_players ${whereClause}`,
+      filterValues
+    )
   ]);
   const players = rows.map((row) => {
-    const wins = Number(row.wins);
-    const losses = Number(row.losses);
+    const wins = Number(row.ladder_wins);
+    const losses = Number(row.ladder_losses);
     const games = wins + losses;
     return {
       id: row.id,
@@ -353,7 +363,7 @@ export async function getLeaderboard(page = 1, pageSize = 100, division = "all")
       displayName: row.display_name,
       avatarUrl: row.avatar_url ?? undefined,
       countryCode: row.country_code ?? undefined,
-      rating: Number(row.rating),
+      rating: Number(row.ladder_rating),
       peakRating: Number(row.peak_rating),
       teamRating: Number(row.team_rating),
       teamPeakRating: Number(row.team_peak_rating),
@@ -362,11 +372,11 @@ export async function getLeaderboard(page = 1, pageSize = 100, division = "all")
       legacyTeamWins: Number(row.legacy_team_wins),
       legacyTeamLosses: Number(row.legacy_team_losses),
       rank: Number(row.ladder_rank),
-      division: divisionForRating(Number(row.rating)),
+      division: divisionForRating(Number(row.ladder_rating)),
       wins,
       losses,
       winRate: games ? Number(((wins / games) * 100).toFixed(1)) : 0,
-      streak: Number(row.streak),
+      streak: Number(row.ladder_streak),
       preferredMaps: [],
       favoriteCivilizations: [],
       recentForm: []
@@ -377,7 +387,8 @@ export async function getLeaderboard(page = 1, pageSize = 100, division = "all")
     page: safePage,
     pageSize: safePageSize,
     total: Number(countRows[0]?.total ?? 0),
-    division: range ? normalizedDivision : "all"
+    division: range ? normalizedDivision : "all",
+    mode: safeMode
   };
 }
 
