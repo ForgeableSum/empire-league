@@ -72,8 +72,6 @@ h1 { margin: 18px 0 24px; font-size: clamp(38px, 4vw, 56px); line-height: 1.1; l
 .download-button svg { width: 26px; fill: currentColor; }
 .download-button span { display: flex; flex-direction: column; text-align: left; }
 .download-button small { margin-top: 3px; font-size: 12px; font-weight: 400; opacity: .78; }
-.fine-print { display: block; margin: 10px 0 0 85px; color: var(--faint); font-size: 10px; }
-
 .real-app-preview { position: relative; min-width: 0; aspect-ratio: 16/9; overflow: hidden; border: 1px solid #8c642e; background: var(--panel); box-shadow: 0 24px 70px rgba(0,0,0,.45), 0 0 0 1px rgba(32,20,8,.9), inset 0 0 0 1px rgba(245,211,139,.18); }
 .real-app-preview::after { content: ""; position: absolute; inset: 0; background: rgba(10,9,8,.58); transition: background 160ms ease; }
 .real-app-preview:hover::after { background: rgba(10,9,8,.48); }
