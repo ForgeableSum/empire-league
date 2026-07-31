@@ -4,6 +4,7 @@ import appIcon from "../../assets/el_icon_no_plume.png";
 import { presenceService } from "../../services/presenceService";
 import { useAppStore, type AppPage } from "../../state/appStore";
 import { WindowControls } from "./WindowControls";
+import { isPreviewMode } from "../../previewMode";
 
 const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
   { page: "home", label: "Home", icon: <Home size={18} /> },
@@ -23,6 +24,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
 
   useEffect(() => {
+    if (isPreviewMode) return;
     let cancelled = false;
     const refresh = () => {
       void presenceService.getOnlinePlayerCount()

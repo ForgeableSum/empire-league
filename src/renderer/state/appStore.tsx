@@ -19,6 +19,8 @@ import { parseReplayMetadata, ReplayNotFinishedError } from "../services/replayM
 import { estimateLobbySetupMs, recordLobbySetupDuration } from "../services/lobbyTimingService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
+import { isPreviewCapture, isPreviewMode } from "../previewMode";
+import { previewMatches } from "../mocks/previewData";
 
 type AppPage = "home" | "ranked" | "custom" | "match-history" | "leaderboard" | "profile" | "social" | "settings";
 
@@ -111,7 +113,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [profileReturnPage, setProfileReturnPage] = useState<AppPage>("leaderboard");
   const profileReturnScrollRef = useRef(0);
   const pendingScrollRestoreRef = useRef<{ page: AppPage; top: number } | null>(null);
-  const [authStatus, setAuthStatus] = useState<AppContextValue["authStatus"]>("loading");
+  const [authStatus, setAuthStatus] = useState<AppContextValue["authStatus"]>(isPreviewMode ? "authenticated" : "loading");
   const [authError, setAuthError] = useState<string | null>(null);
   const [state, setState] = useState<AppState>(() => ({
     currentUser,
@@ -123,12 +125,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     roomSetupMilestone: null,
     transitionInputLocked: false,
     activeMatch: null,
-    recentMatches: [],
+    recentMatches: isPreviewMode ? previewMatches : [],
     connectionStatus: "online",
     gameStatus: "installed",
     searchRange: { min: currentUser.rating - 50, max: currentUser.rating + 50 },
     error: null,
-    notifications: [],
+    notifications: isPreviewMode && !isPreviewCapture ? [{
+      id: "preview-data-notice",
+      tone: "info",
+      message: "Preview mode",
+      detail: "All accounts, ratings, matches, messages, and lobbies use dummy data.",
+      durationMs: null,
+      dismissible: true
+    }] : [],
     eventLog: [],
     mockConfig: defaultMockServiceConfig,
     settings: loadSettings()
@@ -162,7 +171,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const services = useMemo(
     () => ({
-      matchmaking: import.meta.env.DEV
+      matchmaking: import.meta.env.DEV && !isPreviewMode
         ? new LocalMatchmakingService()
         : new MockMatchmakingService(() => configRef.current),
       game: new MockGameIntegrationService(() => configRef.current),
@@ -172,6 +181,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
+    if (isPreviewMode) return;
     let cancelled = false;
     void authService.restore().then((player) => {
       if (cancelled) return;
@@ -286,6 +296,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut(): Promise<void> {
+    if (isPreviewMode) return;
     clearRoomSetupWatchdog();
     if (ticketRef.current) await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
     unsubscribeRef.current?.();
@@ -298,6 +309,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    if (isPreviewMode) return;
     if (import.meta.env.VITE_SKIP_AOE_AUTO_LAUNCH === "true") return;
 
     let cancelled = false;

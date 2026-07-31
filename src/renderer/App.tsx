@@ -17,15 +17,17 @@ import { useEffect, useRef, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
 import loadingScreenArtwork from "./assets/el_full_1.png";
 import { socialService } from "./services/socialService";
+import { isPreviewMode } from "./previewMode";
+import { previewFriendRequests, previewFriends } from "./mocks/previewData";
 
 const permanentLoadingScreen = import.meta.env.VITE_PERMANENT_LOADING_SCREEN === "true";
 
 export function App() {
   const [mouseTestActive, setMouseTestActive] = useState(false);
-  const [startupScreenVisible, setStartupScreenVisible] = useState(true);
-  const [friends, setFriends] = useState<SocialFriend[]>([]);
+  const [startupScreenVisible, setStartupScreenVisible] = useState(!isPreviewMode);
+  const [friends, setFriends] = useState<SocialFriend[]>(isPreviewMode ? previewFriends : []);
   const friendsRef = useRef<SocialFriend[]>([]);
-  const [requests, setRequests] = useState<FriendRequest[]>([]);
+  const [requests, setRequests] = useState<FriendRequest[]>(isPreviewMode ? previewFriendRequests : []);
   const [outgoingRequestIds, setOutgoingRequestIds] = useState<string[]>([]);
   const [chats, setChats] = useState<OpenChat[]>([]);
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
@@ -98,6 +100,7 @@ export function App() {
   }
 
   useEffect(() => {
+    if (isPreviewMode) return;
     if (authStatus !== "authenticated") return;
     const applySnapshot = (snapshot: import("./services/socialService").SocialSnapshot) => {
       setFriends((current) => snapshot.friends.map((friend) => ({
@@ -152,6 +155,7 @@ export function App() {
   }, [authStatus, state.currentUser.id]);
 
   useEffect(() => {
+    if (isPreviewMode) return;
     if (authStatus !== "authenticated") return;
     let idle = false;
     let idleTimer = 0;

@@ -18,6 +18,7 @@
     "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
     "build": "tsc -p tsconfig.json && npm run build:electron && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
+    "build:landing-preview": "vite build --config vite.preview.config.ts && node scripts/inline-landing-preview.mjs",
     "package": "npm run build && electron-builder --dir",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test:maps": "node --test src/map-catalog.test.mjs",
