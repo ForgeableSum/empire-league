@@ -2,8 +2,10 @@ import { formatDivisionForRating } from "../../shared/contracts/matchmaking";
 import { Metric } from "../components/common/Metric";
 import { FormPips } from "../components/common/FormPips";
 import { MapPool } from "../components/common/MapPool";
-import { maps } from "../mocks/mockPlayers";
+import { mapGroups } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
+
+const openLandMaps = mapGroups.find((group) => group.id === "land-open")?.maps ?? [];
 
 export function HomePage() {
   const { state } = useAppStore();
@@ -56,8 +58,8 @@ export function HomePage() {
         </div>
       </div>
       <div className="panel">
-        <h2>Current Map Pool</h2>
-        <MapPool maps={state.selectedQueue?.mapPool ?? maps} limit={6} />
+        <h2>Current Open Land Map Pool</h2>
+        <MapPool maps={openLandMaps} />
       </div>
       <div className="panel">
         <h2>Platform Status</h2>
