@@ -3504,6 +3504,16 @@
   line-height: 1.45;
 }
 
+.custom-room-section {
+  display: grid;
+  gap: 10px;
+}
+
+.custom-room-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .custom-room-list {
   display: grid;
   overflow: hidden;

@@ -16,7 +16,8 @@ export function CustomPage() {
   const { state, notify, ensureAoe2Ready } = useAppStore();
   const [rooms, setRooms] = useState<CustomLobbyRoom[]>([]);
   const [catalog, setCatalog] = useState(emptyCatalog);
-  const [loading, setLoading] = useState(true);
+  const [loadingRooms, setLoadingRooms] = useState(true);
+  const [scanningContent, setScanningContent] = useState(true);
   const [creating, setCreating] = useState(false);
   const [lobbyName, setLobbyName] = useState(`${state.currentUser.displayName}'s Lobby`);
   const [contentKind, setContentKind] = useState<"map" | "scenario">("map");
@@ -27,24 +28,35 @@ export function CustomPage() {
 
   const activeRoom = rooms.find((room) => room.players.some((player) => player.id === state.currentUser.id));
 
-  async function refresh() {
-    setLoading(true);
+  async function refreshRooms() {
+    setLoadingRooms(true);
     try {
-      const [nextRooms, nextCatalog] = await Promise.all([
-        customLobbyService.list(),
-        window.electronApi?.scanLocalCustomContent() ?? Promise.resolve(emptyCatalog)
-      ]);
-      setRooms(nextRooms);
-      setCatalog(nextCatalog);
+      setRooms(await customLobbyService.list());
     } catch (error) {
       notify("Custom lobbies could not be loaded.", "danger", { detail: messageFor(error) });
     } finally {
-      setLoading(false);
+      setLoadingRooms(false);
+    }
+  }
+
+  async function rescanContent() {
+    setScanningContent(true);
+    try {
+      const nextCatalog = await (window.electronApi?.scanLocalCustomContent() ?? Promise.resolve(emptyCatalog));
+      setCatalog(nextCatalog);
+      setMapId((current) => nextCatalog.maps.some((item) => item.id === current) ? current : "");
+      setScenarioId((current) => nextCatalog.maps.some((item) => item.id === current) ? current : "");
+      setDataModId((current) => nextCatalog.dataMods.some((item) => item.id === current) ? current : "");
+    } catch (error) {
+      notify("Local content could not be scanned.", "danger", { detail: messageFor(error) });
+    } finally {
+      setScanningContent(false);
     }
   }
 
   useEffect(() => {
-    void refresh();
+    void refreshRooms();
+    void rescanContent();
     return customLobbyService.onEvent((event) => {
       setRooms((current) => {
         const closedRoom = event.closedRoomId
@@ -92,14 +104,16 @@ export function CustomPage() {
           <p>Browse live Empire League rooms or create one using content installed on your PC.</p>
         </div>
         <div className="button-row">
-          <button className="secondary" type="button" onClick={() => void refresh()} disabled={loading}><RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh</button>
           {!creating && <button className="primary" type="button" disabled={state.gameStatus === "loading"} onClick={() => void openCreateRoom()}><Plus size={17} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "Create Lobby"}</button>}
         </div>
       </div>
 
       {creating && (
         <article className="panel custom-create-card">
-          <div className="custom-create-heading"><div><span className="eyebrow">New room</span><h2>Lobby settings</h2></div></div>
+          <div className="custom-create-heading">
+            <div><span className="eyebrow">New room</span><h2>Lobby settings</h2></div>
+            <button className="secondary" type="button" onClick={() => void rescanContent()} disabled={scanningContent}><RefreshCw size={16} className={scanningContent ? "spin" : ""} /> {scanningContent ? "Scanning…" : "Rescan Content"}</button>
+          </div>
           <label>Lobby name<input value={lobbyName} maxLength={64} onChange={(event) => setLobbyName(event.target.value)} /></label>
           <div className="custom-content-kind-field">
             <span>Content type</span>
@@ -121,21 +135,26 @@ export function CustomPage() {
         </article>
       )}
 
-      <div className="custom-room-list">
-        <div className="custom-room-list-header"><span>Room</span><span>Content</span><span>Players</span><span>Status</span><span /></div>
-        {rooms.map((room) => (
-          <article className="custom-room-row" key={room.id}>
-            <div><strong>{room.name}</strong><small>{room.demo ? "Demo room · " : ""}Hosted by {room.players.find((player) => player.host)?.displayName ?? "Unknown"}</small></div>
-            <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
-            <div className="room-player-count"><Users size={16} /> {room.players.length}/{room.maxPlayers}</div>
-            <span className={`custom-room-status ${room.status}`}>{customRoomStatusLabel(room.status)}</span>
-            <button className="secondary" type="button" disabled={room.status !== "open" || room.players.length >= room.maxPlayers || pending} onClick={() => {
-              setPending(true);
-              void customLobbyService.join(room.id).catch((error) => notify("Could not join the lobby.", "danger", { detail: messageFor(error) })).finally(() => setPending(false));
-            }}><LogIn size={16} /> Join</button>
-          </article>
-        ))}
-        {!loading && !rooms.length && <div className="panel empty-state">No custom rooms are open. Create the first one.</div>}
+      <div className="custom-room-section">
+        <div className="custom-room-toolbar">
+          <button className="secondary" type="button" onClick={() => void refreshRooms()} disabled={loadingRooms}><RefreshCw size={16} className={loadingRooms ? "spin" : ""} /> {loadingRooms ? "Refreshing…" : "Refresh Rooms"}</button>
+        </div>
+        <div className="custom-room-list">
+          <div className="custom-room-list-header"><span>Room</span><span>Content</span><span>Players</span><span>Status</span><span /></div>
+          {rooms.map((room) => (
+            <article className="custom-room-row" key={room.id}>
+              <div><strong>{room.name}</strong><small>{room.demo ? "Demo room · " : ""}Hosted by {room.players.find((player) => player.host)?.displayName ?? "Unknown"}</small></div>
+              <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
+              <div className="room-player-count"><Users size={16} /> {room.players.length}/{room.maxPlayers}</div>
+              <span className={`custom-room-status ${room.status}`}>{customRoomStatusLabel(room.status)}</span>
+              <button className="secondary" type="button" disabled={room.status !== "open" || room.players.length >= room.maxPlayers || pending} onClick={() => {
+                setPending(true);
+                void customLobbyService.join(room.id).catch((error) => notify("Could not join the lobby.", "danger", { detail: messageFor(error) })).finally(() => setPending(false));
+              }}><LogIn size={16} /> Join</button>
+            </article>
+          ))}
+          {!loadingRooms && !rooms.length && <div className="panel empty-state">No custom rooms are open. Create the first one.</div>}
+        </div>
       </div>
     </section>
   );
