@@ -75,6 +75,20 @@ let replayEndPoller: NodeJS.Timeout | undefined;
 let replayFocusTimers: NodeJS.Timeout[] = [];
 let returnToMenuPoller: NodeJS.Timeout | undefined;
 let replayDetectionGeneration = 0;
+const builtInGameMapNames = new Set<string>();
+
+function normalizeContentName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function builtInMapName(fileName: string) {
+  return basename(fileName, extname(fileName))
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 
 function selectScenarioVariants(
   modName: string,
@@ -112,7 +126,7 @@ function selectScenarioVariants(
 async function scanLocalCustomContent() {
   const profilesRoot = join(homedir(), "Games", "Age of Empires 2 DE");
   const roots: string[] = [];
-  const maps: Array<{ id: string; name: string; gameName: string; kind: "map" | "scenario"; path: string; source: string; enabled: boolean; modName?: string }> = [];
+  const maps: Array<{ id: string; name: string; gameName: string; kind: "map" | "scenario"; path: string; source: string; enabled: boolean; modName?: string; builtIn?: boolean }> = [];
   const dataMods: Array<{ id: string; name: string; gameName: string; kind: "data_mod"; path: string; source: string; enabled: boolean; modName?: string }> = [];
   const seen = new Set<string>();
 
@@ -122,12 +136,12 @@ async function scanLocalCustomContent() {
     source: string,
     label?: string,
     gameName?: string,
-    availability: { enabled?: boolean; modName?: string } = {}
+    availability: { enabled?: boolean; modName?: string; builtIn?: boolean } = {}
   ) => {
     const name = (label || basename(path, extname(path))).trim();
     const normalizedName = name.toLowerCase().replace(/\s+/g, " ");
     const key = `${kind}:${normalizedName}`;
-    if (seen.has(key)) return;
+    if (seen.has(key)) return false;
     seen.add(key);
     const item = {
       id: Buffer.from(`${key}:${path.toLowerCase()}`).toString("base64url"),
@@ -137,9 +151,11 @@ async function scanLocalCustomContent() {
       path,
       source,
       enabled: availability.enabled !== false,
-      ...(availability.modName ? { modName: availability.modName } : {})
+      ...(availability.modName ? { modName: availability.modName } : {}),
+      ...(availability.builtIn ? { builtIn: true } : {})
     };
     (kind === "data_mod" ? dataMods : maps).push(item as never);
+    return true;
   };
 
   const walk = async (
@@ -261,9 +277,29 @@ async function scanLocalCustomContent() {
     // AoE2 has not created a local profile directory yet.
   }
 
+  builtInGameMapNames.clear();
+  const installation = await detectAoe2Installation();
+  if (installation.installed && installation.path) {
+    const gameMapsRoot = join(installation.path, "resources", "_common", "drs", "gamedata_x2");
+    try {
+      const entries = await readdir(gameMapsRoot, { withFileTypes: true });
+      roots.push(gameMapsRoot);
+      for (const entry of entries) {
+        if (!entry.isFile() || !/\.rms2?$/i.test(entry.name)) continue;
+        if (/^(?:br[ _-]|ctr[ _-]|em[ _-]|qs[ _-]|real[ _-]world[ _-]|special[ _-]map[ _-]|network[ _-]test)/i.test(entry.name)) continue;
+        const name = builtInMapName(entry.name);
+        if (add("map", join(gameMapsRoot, entry.name), "AoE2 built-in maps", name, name, { builtIn: true })) {
+          builtInGameMapNames.add(normalizeContentName(name));
+        }
+      }
+    } catch {
+      // Some installations package built-in maps differently.
+    }
+  }
+
   const byName = <T extends { name: string }>(left: T, right: T) => left.name.localeCompare(right.name);
   return {
-    maps: maps.sort(byName),
+    maps: maps.sort((left, right) => Number(Boolean(left.builtIn)) - Number(Boolean(right.builtIn)) || byName(left, right)),
     dataMods: dataMods.sort(byName),
     scannedRoots: roots,
     scannedAt: new Date().toISOString()
@@ -2429,7 +2465,8 @@ export function registerGameHandlers(): void {
           }
         }
         await delay(mapPicker.openSettleMs);
-        const isCustomMap = !knownMap || (mapPicker.customMapNames as readonly string[]).includes(normalizedMapName);
+        const isBuiltInMap = builtInGameMapNames.has(normalizeContentName(normalizedMapName));
+        const isCustomMap = !isBuiltInMap && (!knownMap || (mapPicker.customMapNames as readonly string[]).includes(normalizedMapName));
         const mapStyle = isCustomMap ? "Custom" : "Standard";
         const mapStylePoint = isCustomMap ? mapPicker.customStylePoint : mapPicker.standardStylePoint;
         await clickStep("Open Map Style", mapPicker.mapStylePoint[0], mapPicker.mapStylePoint[1], { synchronous: true });

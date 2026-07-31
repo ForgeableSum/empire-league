@@ -142,7 +142,11 @@ export function CustomPage() {
 }
 
 function ContentSelect({ label, items, value, onChange }: { label: string; items: LocalCustomContent[]; value: string; onChange: (value: string) => void }) {
-  const orderedItems = [...items.filter((item) => item.enabled), ...items.filter((item) => !item.enabled)];
+  const orderedItems = [
+    ...items.filter((item) => item.enabled && !item.builtIn),
+    ...items.filter((item) => !item.enabled && !item.builtIn),
+    ...items.filter((item) => item.builtIn)
+  ];
   return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${item.name}${item.enabled ? "" : ` — Disabled (${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
 }
 

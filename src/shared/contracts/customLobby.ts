@@ -9,6 +9,7 @@ export interface LocalCustomContent {
   source: string;
   enabled: boolean;
   modName?: string;
+  builtIn?: boolean;
 }
 
 export interface LocalCustomContentCatalog {
