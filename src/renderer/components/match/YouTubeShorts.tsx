@@ -54,7 +54,14 @@ function loadYouTubeApi(): Promise<void> {
   return youtubeApiPromise;
 }
 
+// Temporarily keep Shorts out of the UI without removing its implementation.
+const youtubeShortsEnabled = false;
+
 export function YouTubeShorts() {
+  return youtubeShortsEnabled ? <YouTubeShortsContent /> : null;
+}
+
+function YouTubeShortsContent() {
   const [shorts, setShorts] = useState<YouTubeShort[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);

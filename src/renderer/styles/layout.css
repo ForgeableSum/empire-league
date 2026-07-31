@@ -436,6 +436,7 @@
 .panel,
 .queue-card,
 .search-state,
+.matchmaking-brand,
 .match-focus,
 .result-screen,
 .error-panel,
@@ -462,6 +463,7 @@
 .panel::before,
 .queue-card::before,
 .search-state::before,
+.matchmaking-brand::before,
 .shorts-panel::before,
 .match-focus::before,
 .result-screen::before,
@@ -487,6 +489,7 @@
 .panel::after,
 .queue-card::after,
 .search-state::after,
+.matchmaking-brand::after,
 .shorts-panel::after,
 .match-focus::after,
 .result-screen::after,
@@ -2325,6 +2328,24 @@
   min-width: 0;
 }
 
+.matchmaking-brand {
+  min-width: 0;
+  min-height: 440px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at center, rgba(197, 141, 69, 0.14), transparent 62%),
+    linear-gradient(135deg, rgba(229, 185, 93, 0.07), transparent 18% 82%, rgba(120, 76, 24, 0.1)),
+    var(--panel);
+}
+
+.matchmaking-brand img {
+  width: min(88%, 380px);
+  max-height: 400px;
+  object-fit: contain;
+}
+
 .civilization-matchup {
   display: grid;
   grid-column: 1;
@@ -3949,6 +3970,16 @@
 
 }
 
+@media (max-width: 1199px) {
+  .search-waiting-layout:has(.matchmaking-brand) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .matchmaking-brand {
+    display: none;
+  }
+}
+
 @media (max-width: 999px) {
   .queue-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -3976,6 +4007,10 @@
   }
 
   .search-waiting-layout .shorts-panel {
+    grid-row: 3;
+  }
+
+  .search-waiting-layout .matchmaking-brand {
     grid-row: 3;
   }
 

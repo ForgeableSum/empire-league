@@ -7,7 +7,7 @@ import { ThemedSelect } from "../components/common/ThemedSelect";
 import { LobbyPreparation } from "../components/match/LobbyPreparation";
 import { ActiveMatch } from "../components/match/ActiveMatch";
 import { ResultScreen } from "../components/match/ResultScreen";
-import { YouTubeShorts } from "../components/match/YouTubeShorts";
+import { MatchmakingBrand } from "../components/match/MatchmakingBrand";
 import { GroupedMapPool } from "../components/common/GroupedMapPool";
 import { mapGroups } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
@@ -364,7 +364,7 @@ export function QueuePage() {
               </>
             )}
           </div>
-          <YouTubeShorts />
+          <MatchmakingBrand />
         </div>
       )}
       {selectedQueue ? (

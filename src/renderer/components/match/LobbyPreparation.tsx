@@ -5,7 +5,7 @@ import type { CivilizationPreference } from "../../../shared/contracts/matchmaki
 import { getCatalogMap } from "../../../shared/mapCatalog";
 import { maps } from "../../mocks/mockPlayers";
 import { useAppStore } from "../../state/appStore";
-import { YouTubeShorts } from "./YouTubeShorts";
+import { MatchmakingBrand } from "./MatchmakingBrand";
 
 type CivilizationName = keyof typeof civBonuses;
 
@@ -51,7 +51,7 @@ export function LobbyPreparation() {
           </div>
         )}
       </div>
-      <YouTubeShorts />
+      <MatchmakingBrand />
       <div className="civilization-matchup">
         <article className="upcoming-map-card">
           <span className="eyebrow">Map</span>
