@@ -1,4 +1,3 @@
-import { Play } from "lucide-react";
 import { formatDivisionForRating } from "../../shared/contracts/matchmaking";
 import { Metric } from "../components/common/Metric";
 import { FormPips } from "../components/common/FormPips";
@@ -7,7 +6,7 @@ import { maps } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
 
 export function HomePage() {
-  const { state, setPage } = useAppStore();
+  const { state } = useAppStore();
   const user = state.currentUser;
   const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
   return (
@@ -18,9 +17,6 @@ export function HomePage() {
           <div className="rating-display">{user.rating}</div>
           <p>{formatDivisionForRating(user.rating)} · Global Rank #{user.rank.toLocaleString()}</p>
         </div>
-        <button className="primary large" type="button" onClick={() => setPage("ranked")}>
-          <Play size={20} /> Play 1v1
-        </button>
       </div>
       <div className="metrics-grid">
         <Metric label="Division" value={formatDivisionForRating(user.rating)} detail={`${user.wins + user.losses} ranked matches`} />
