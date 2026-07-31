@@ -2,6 +2,8 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import civBonuses from "../../../shared/civBonuses.json";
 import type { CivilizationPreference } from "../../../shared/contracts/matchmaking";
+import { getCatalogMap } from "../../../shared/mapCatalog";
+import { maps } from "../../mocks/mockPlayers";
 import { useAppStore } from "../../state/appStore";
 import { YouTubeShorts } from "./YouTubeShorts";
 
@@ -13,6 +15,8 @@ export function LobbyPreparation() {
   const match = state.activeMatch;
   const countdownMs = state.roomSetupEstimateMs ?? 60_000;
   const [remaining, setRemaining] = useState(() => getRemaining(state.roomSetupStartedAt, countdownMs));
+  const selectedMap = maps.find((map) => map.id === match?.selectedMap?.id) ?? match?.selectedMap;
+  const mapDescription = selectedMap ? getCatalogMap(selectedMap.id)?.description : undefined;
   const playerCivilization = resolveCivilization(
     match?.queue.civilizationPreference,
     match?.opponentCivilizationPreference
@@ -49,8 +53,17 @@ export function LobbyPreparation() {
       </div>
       <YouTubeShorts />
       <div className="civilization-matchup">
+        <article className="upcoming-map-card">
+          <span className="eyebrow">Map</span>
+          <h3>{selectedMap?.name ?? "Map pending"}</h3>
+          {selectedMap?.thumbnailUrl ? (
+            <img src={selectedMap.thumbnailUrl} alt={`Preview of ${selectedMap.name}`} />
+          ) : (
+            <div className="upcoming-map-placeholder">Map preview unavailable</div>
+          )}
+          {mapDescription && <p className="upcoming-map-description">{mapDescription}</p>}
+        </article>
         <CivilizationBonuses civilization={playerCivilization} side="player" />
-        <div className="civilization-versus" aria-hidden="true">VS</div>
         <CivilizationBonuses civilization={opponentCivilization} side="opponent" />
       </div>
     </section>

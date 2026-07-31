@@ -2306,7 +2306,7 @@
   display: grid;
   grid-column: 1;
   grid-row: 2;
-  grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -2314,18 +2314,59 @@
   background: var(--panel);
 }
 
-.civilization-versus {
+.upcoming-map-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 28px 24px;
+  overflow: hidden;
+  border-right: 1px solid var(--line);
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 44%),
+    var(--panel);
+  text-align: left;
+}
+
+.upcoming-map-card h3 {
+  margin: 7px 0 20px;
+  color: var(--text);
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+}
+
+.upcoming-map-card img,
+.upcoming-map-placeholder {
+  width: 100%;
+  min-height: 180px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.upcoming-map-card img {
+  display: block;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+.upcoming-map-placeholder {
   display: grid;
   place-items: center;
-  color: var(--accent-2);
-  font-size: 1.45rem;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 42%, transparent);
+  padding: 20px;
+  color: var(--faint);
+  background: #1a1816;
+  text-align: center;
+}
+
+.upcoming-map-description {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .civ-bonus-card {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
   padding: 28px 24px;
   overflow: hidden;
   border: 0;
@@ -2351,7 +2392,7 @@
 .civ-bonus-card ul {
   display: grid;
   gap: 11px;
-  margin: 0;
+  margin: 0 0 22px;
   padding: 0;
   list-style: none;
 }
@@ -2382,7 +2423,7 @@
 }
 
 .team-bonus {
-  margin-top: 22px;
+  margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid var(--line);
 }
