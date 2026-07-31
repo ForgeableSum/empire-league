@@ -30,7 +30,7 @@ interface AppContextValue {
   openPlayerProfile: (playerId: string) => void;
   returnFromPlayerProfile: () => void;
   queues: QueueDefinition[];
-  ensureAoe2Ready: () => Promise<boolean>;
+  ensureAoe2Ready: (purpose?: "matchmaking" | "custom") => Promise<boolean>;
   startQueue: (queue: QueueDefinition) => Promise<void>;
   updateActiveQueue: (queue: QueueDefinition) => Promise<void>;
   cancelQueue: () => Promise<void>;
@@ -381,7 +381,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function launchAoe2ForMatchmaking(): Promise<boolean> {
+  async function launchAoe2ForActivity(purpose: "matchmaking" | "custom"): Promise<boolean> {
     let loadingNotificationId: string | null = null;
     try {
       if (!window.electronApi) throw new Error("The Electron game integration bridge is unavailable.");
@@ -404,7 +404,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       setState((previous) => ({ ...previous, gameStatus: "loading" }));
       loadingNotificationId = notify("Launching AoE2 DE…", "loading", {
-        detail: "Matchmaking will begin automatically when the game is ready.",
+        detail: purpose === "custom"
+          ? "Your custom game action will continue automatically when the game is ready."
+          : "Matchmaking will begin automatically when the game is ready.",
         durationMs: null
       });
 
@@ -422,7 +424,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateNotification(loadingNotificationId, {
         message: "AoE2 DE is ready",
         tone: "success",
-        detail: "Starting matchmaking.",
+        detail: purpose === "custom" ? "Continuing with your custom game." : "Starting matchmaking.",
         durationMs: 3000
       });
       return true;
@@ -434,11 +436,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function ensureAoe2Ready(): Promise<boolean> {
+  async function ensureAoe2Ready(purpose: "matchmaking" | "custom" = "matchmaking"): Promise<boolean> {
     if (!window.electronApi) return true;
     const gameProcess = await window.electronApi.detectAoe2Process();
     if (gameProcess.running && gameProcess.windowReady && gameProcess.owned) return true;
-    return launchAoe2ForMatchmaking();
+    return launchAoe2ForActivity(purpose);
   }
 
   async function recoverAoe2AfterLobbyFailure(): Promise<boolean> {

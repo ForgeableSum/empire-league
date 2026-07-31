@@ -90,7 +90,19 @@ export function CustomPage() {
   }
 
   async function openCreateRoom() {
-    if (await ensureAoe2Ready()) setCreating(true);
+    if (await ensureAoe2Ready("custom")) setCreating(true);
+  }
+
+  async function joinRoom(roomId: string) {
+    if (!(await ensureAoe2Ready("custom"))) return;
+    setPending(true);
+    try {
+      await customLobbyService.join(roomId);
+    } catch (error) {
+      notify("Could not join the lobby.", "danger", { detail: messageFor(error) });
+    } finally {
+      setPending(false);
+    }
   }
 
   if (activeRoom) {
@@ -158,10 +170,7 @@ export function CustomPage() {
               <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
               <div className="room-player-count"><Users size={16} /> {room.players.length}/{room.maxPlayers}</div>
               <span className={`custom-room-status ${room.status}`}>{customRoomStatusLabel(room.status)}</span>
-              <button className="secondary" type="button" disabled={room.status !== "open" || room.players.length >= room.maxPlayers || pending} onClick={() => {
-                setPending(true);
-                void customLobbyService.join(room.id).catch((error) => notify("Could not join the lobby.", "danger", { detail: messageFor(error) })).finally(() => setPending(false));
-              }}><LogIn size={16} /> Join</button>
+              <button className="secondary" type="button" disabled={room.status !== "open" || room.players.length >= room.maxPlayers || pending || state.gameStatus === "loading"} onClick={() => void joinRoom(room.id)}><LogIn size={16} /> {state.gameStatus === "loading" ? "Launching…" : "Join"}</button>
             </article>
           ))}
           {!loadingRooms && !rooms.length && <div className="panel empty-state">No custom rooms are open. Create the first one.</div>}
