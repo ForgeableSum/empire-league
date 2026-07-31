@@ -653,10 +653,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (ticketRef.current) {
-        await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
+        const staleTicketId = ticketRef.current;
         unsubscribeRef.current?.();
         unsubscribeRef.current = null;
         ticketRef.current = null;
+        await services.matchmaking.leaveQueue(staleTicketId).catch(() => undefined);
       }
       const currentUser = await authService.reportSteamLicense(state.currentUser);
       showFamilySharingLoginNotice(currentUser);
@@ -968,6 +969,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           completeResult(event.result);
         }
         if (event.type === "error") {
+          if (event.code === "TICKET_NOT_FOUND") {
+            queueJoinInFlightRef.current = false;
+            matchedSessionRef.current = null;
+            ticketRef.current = null;
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+            setState((previous) => ({
+              ...previous,
+              queueStatus: "cancelled",
+              activeMatch: null,
+              error: null
+            }));
+            notify("The matchmaking server restarted. Rejoining the queue…", "warning", {
+              durationMs: 5000,
+              dismissible: false
+            });
+            log("Queue ticket expired after a server restart; rejoining");
+            window.setTimeout(() => void startQueue(queue), 0);
+            return;
+          }
           if (event.code === "MATCH_DISCONNECTED" || event.code === "MATCH_SETUP_FAILED") {
             void handleLobbySetupFailure(queue, event.message);
             return;

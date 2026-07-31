@@ -168,7 +168,7 @@ class MatchmakerTransport {
     if (message.type === "error") {
       const detail = message.message ?? message.code ?? "Matchmaker WebSocket error.";
       if (this.connectReject) this.rejectConnecting(new Error(detail));
-      else this.failSubscription(detail);
+      else this.failSubscription(detail, message.code);
     }
   }
 
@@ -224,10 +224,10 @@ class MatchmakerTransport {
     this.pending.clear();
   }
 
-  private failSubscription(message: string): void {
+  private failSubscription(message: string, code = "MATCHMAKER_UNAVAILABLE"): void {
     const subscription = this.subscription;
     this.subscription = null;
-    subscription?.listener({ type: "error", code: "MATCHMAKER_UNAVAILABLE", message });
+    subscription?.listener({ type: "error", code, message });
   }
 }
 
