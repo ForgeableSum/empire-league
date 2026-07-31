@@ -740,8 +740,10 @@ export function readAoe2HostSetupState(
   // there and replaces the lobby's red lower button with a tan control.
   const hasDarkContentPicker = hasLobbyParchment
     && panelRed < 50 && panelGreen < 50 && panelBlue < 50;
+  // The map grid occupies the panel sample point, so its color changes with
+  // the visible map thumbnail (for example, Graveyard samples green there).
+  // The surrounding parchment and tan lower control are stable picker cues.
   const hasMapContentPicker = hasLobbyParchment
-    && panelRed > 140 && panelGreen > 110 && panelBlue > 70
     && buttonRed > 170 && buttonGreen > 120 && buttonBlue > 80;
   const hasContentPicker = hasDarkContentPicker || hasMapContentPicker;
   const state = options.contentPickerExpected && hasContentPicker
