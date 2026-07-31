@@ -2390,10 +2390,23 @@ export function registerGameHandlers(): void {
         emitLog(`SCENARIO_SELECT|Complete=True|Scenario=${normalizedMapName}`);
       } else {
         const mapPicker = aoe2UiManifest.mapPicker;
+        const modePicker = aoe2UiManifest.scenarioPicker;
         const knownMap = normalizedMapName in aoe2UiManifest.mapPicker.entries;
         const mapPoint = knownMap
           ? mapDesignPoint(normalizedMapName as Aoe2MapSelection)
           : [mapPicker.resultColumnCenters[0], mapPicker.resultRowCenters[0]] as const;
+        await clickStep("Open Game Mode", modePicker.gameModePoint[0], modePicker.gameModePoint[1], { synchronous: true });
+        await delay(modePicker.modeMenuSettleMs);
+        const firstGameMode = await sendAoe2Home(process.pid);
+        emitLog(`MAP_SELECT|Step=RandomMap|Key=HOME|${firstGameMode.detail}`);
+        if (!firstGameMode.sent) throw new Error("Random Map game mode could not be selected.");
+        const confirmGameMode = await sendAoe2Enter(process.pid);
+        if (!confirmGameMode.sent) throw new Error("Random Map game mode could not be confirmed.");
+        await delay(modePicker.recommendedSettingsSettleMs);
+        const acceptRecommended = await sendAoe2Enter(process.pid);
+        emitLog(`MAP_SELECT|Step=RecommendedSettings|Key=ENTER|${acceptRecommended.detail}`);
+        if (!acceptRecommended.sent) throw new Error("Recommended random-map settings could not be accepted.");
+        await delay(modePicker.recommendedSettingsSettleMs);
         // A reset can keep AoE2's window thread busy for several seconds while
         // custom content is reloaded. Queue the picker click behind that work,
         // then wait for the lobby pixels to change instead of requiring an
