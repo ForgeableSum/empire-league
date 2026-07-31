@@ -21,6 +21,17 @@ document.querySelectorAll('.faq-item button').forEach((button) => {
   });
 });
 
+const plannedFeaturesToggle = document.querySelector('.planned-features-toggle');
+if (plannedFeaturesToggle) {
+  plannedFeaturesToggle.addEventListener('click', () => {
+    const isExpanded = plannedFeaturesToggle.getAttribute('aria-expanded') === 'true';
+    const plannedFeatures = document.getElementById(plannedFeaturesToggle.getAttribute('aria-controls'));
+    plannedFeaturesToggle.setAttribute('aria-expanded', String(!isExpanded));
+    plannedFeaturesToggle.querySelector('span').textContent = isExpanded ? 'Show Planned Features' : 'Hide Planned Features';
+    plannedFeatures.hidden = isExpanded;
+  });
+}
+
 const toast = document.querySelector('.toast');
 document.querySelectorAll('[data-download]').forEach((button) => {
   button.addEventListener('click', (event) => {
