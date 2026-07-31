@@ -2347,12 +2347,12 @@ export function registerGameHandlers(): void {
           synchronous: !isCustomAutomation
         });
         if (isCustomAutomation) {
-          let scenarioPickerState = readAoe2HostSetupState(process.pid);
+          let scenarioPickerState = readAoe2HostSetupState(process.pid, { contentPickerExpected: true });
           let scenarioPickerDeadline = Date.now() + 5_000;
           while (scenarioPickerState.state !== "content-picker" && Date.now() < scenarioPickerDeadline) {
             if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
             await delay(250);
-            scenarioPickerState = readAoe2HostSetupState(process.pid);
+            scenarioPickerState = readAoe2HostSetupState(process.pid, { contentPickerExpected: true });
           }
           if (scenarioPickerState.state !== "content-picker") {
             emitLog(`STEP_RETRY|Set Scenario|Reason=ControlNotReady|${scenarioPickerState.detail}`);
@@ -2363,7 +2363,7 @@ export function registerGameHandlers(): void {
             while (scenarioPickerState.state !== "content-picker" && Date.now() < scenarioPickerDeadline) {
               if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
               await delay(250);
-              scenarioPickerState = readAoe2HostSetupState(process.pid);
+              scenarioPickerState = readAoe2HostSetupState(process.pid, { contentPickerExpected: true });
             }
           }
           emitLog(`STEP_VERIFY|Set Scenario|Expected=content-picker|${scenarioPickerState.detail}`);
@@ -2400,12 +2400,12 @@ export function registerGameHandlers(): void {
           requireMove: false
         });
         if (isCustomAutomation) {
-          let mapPickerState = readAoe2HostSetupState(process.pid);
+          let mapPickerState = readAoe2HostSetupState(process.pid, { contentPickerExpected: true });
           const mapPickerDeadline = Date.now() + 15_000;
           while (mapPickerState.state !== "content-picker" && Date.now() < mapPickerDeadline) {
             if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
             await delay(250);
-            mapPickerState = readAoe2HostSetupState(process.pid);
+            mapPickerState = readAoe2HostSetupState(process.pid, { contentPickerExpected: true });
           }
           emitLog(`STEP_VERIFY|Open Map Picker|Expected=content-picker|${mapPickerState.detail}`);
           if (mapPickerState.state !== "content-picker") {

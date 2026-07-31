@@ -683,7 +683,10 @@ export function readAoe2CivilizationPickerState(processId: number): NativeCivili
   };
 }
 
-export function readAoe2HostSetupState(processId: number): NativeHostSetupStateResult {
+export function readAoe2HostSetupState(
+  processId: number,
+  options: { contentPickerExpected?: boolean } = {}
+): NativeHostSetupStateResult {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return { state: "unknown", detail: "WINDOW_NOT_FOUND" };
@@ -741,9 +744,11 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
     && panelRed > 140 && panelGreen > 110 && panelBlue > 70
     && buttonRed > 170 && buttonGreen > 120 && buttonBlue > 80;
   const hasContentPicker = hasDarkContentPicker || hasMapContentPicker;
-  const state = hasReadyButton
-    ? "lobby-room"
-    : hasContentPicker
+  const state = options.contentPickerExpected && hasContentPicker
+    ? "content-picker"
+    : hasReadyButton
+      ? "lobby-room"
+      : hasContentPicker
       ? "content-picker"
       : hasLobbyParchment
         ? "lobby-room"
@@ -759,6 +764,7 @@ export function readAoe2HostSetupState(processId: number): NativeHostSetupStateR
     state,
     detail: [
       `State=${state}`,
+      `ContentPickerExpected=${options.contentPickerExpected ?? false}`,
       `Window=${String(window)}`,
       `Viewport=${formatViewport(transform)}`,
       `UpperLeftRGB=${upperLeft.join(",")}`,
