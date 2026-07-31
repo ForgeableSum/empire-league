@@ -960,6 +960,10 @@ async function handleRequest(request, response) {
       const body = await readJson(request);
       const name = String(body.name ?? "").trim().slice(0, 64);
       if (!name) return send(response, 400, { error: "A lobby name is required." });
+      const maxPlayers = Number(body.maxPlayers ?? 8);
+      if (!Number.isInteger(maxPlayers) || maxPlayers < 2 || maxPlayers > 8) {
+        return send(response, 400, { error: "A custom lobby must allow between 2 and 8 players." });
+      }
       const room = {
         id: randomUUID(),
         name,
@@ -978,7 +982,7 @@ async function handleRequest(request, response) {
           slot: 1, team: 1, civilization: "Random", ready: false, host: true
         }],
         messages: [],
-        maxPlayers: 8,
+        maxPlayers,
         status: "open",
         createdAt: new Date().toISOString()
       };

@@ -5,10 +5,10 @@ export const customLobbyService = {
   async list(): Promise<CustomLobbyRoom[]> {
     return (await matchmakerTransport.request<{ rooms: CustomLobbyRoom[] }>("/custom-lobbies")).rooms;
   },
-  async create(input: { name: string; map?: LocalCustomContent; dataMod?: LocalCustomContent }): Promise<CustomLobbyRoom> {
+  async create(input: { name: string; maxPlayers: number; map?: LocalCustomContent; dataMod?: LocalCustomContent }): Promise<CustomLobbyRoom> {
     return (await matchmakerTransport.request<{ room: CustomLobbyRoom }>("/custom-lobbies", {
       method: "POST",
-      body: { name: input.name, map: summarize(input.map), dataMod: summarize(input.dataMod) }
+      body: { name: input.name, maxPlayers: input.maxPlayers, map: summarize(input.map), dataMod: summarize(input.dataMod) }
     })).room;
   },
   async join(roomId: string): Promise<CustomLobbyRoom> {

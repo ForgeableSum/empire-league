@@ -2206,7 +2206,7 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:run-create-lobby-sequence", async (
     event,
     mapName: string,
-    playerCount: 2 | 4 | 8 = 2,
+    playerCount = 2,
     contentKind: "map" | "scenario" = "map",
     automationContext: "ranked" | "custom" = "ranked"
   ) => {
@@ -2223,8 +2223,8 @@ export function registerGameHandlers(): void {
     if (contentKind === "scenario" && !normalizedMapName) {
       return { sent: false, message: "An AoE2 scenario name is required." };
     }
-    if (![2, 4, 8].includes(playerCount)) {
-      return { sent: false, message: "The lobby must contain 2, 4, or 8 players." };
+    if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 8) {
+      return { sent: false, message: "The lobby must contain between 2 and 8 players." };
     }
 
     const emitLog = (message: string) => {
@@ -2352,7 +2352,7 @@ export function registerGameHandlers(): void {
       }
       await delay(100);
       const confirmPlayerCount = await sendAoe2Enter(process.pid);
-      emitLog(`STEP|Confirm 2 Players|Key=ENTER|${confirmPlayerCount.detail}`);
+      emitLog(`STEP|Confirm ${playerCount} Players|Key=ENTER|${confirmPlayerCount.detail}`);
       if (!confirmPlayerCount.sent) throw new Error(`The ${playerCount}-player lobby size could not be confirmed.`);
       await delay(250);
       await actionStep("createLobby");

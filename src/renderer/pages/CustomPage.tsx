@@ -24,6 +24,7 @@ export function CustomPage() {
   const [mapId, setMapId] = useState("");
   const [scenarioId, setScenarioId] = useState("");
   const [dataModId, setDataModId] = useState("");
+  const [maxPlayers, setMaxPlayers] = useState(8);
   const [pending, setPending] = useState(false);
 
   const activeRoom = rooms.find((room) => room.players.some((player) => player.id === state.currentUser.id));
@@ -76,6 +77,7 @@ export function CustomPage() {
       const contentId = contentKind === "map" ? mapId : scenarioId;
       await customLobbyService.create({
         name: lobbyName.trim(),
+        maxPlayers,
         map: catalog.maps.find((item) => item.id === contentId),
         dataMod: catalog.dataMods.find((item) => item.id === dataModId)
       });
@@ -115,6 +117,15 @@ export function CustomPage() {
             <button className="secondary" type="button" onClick={() => void rescanContent()} disabled={scanningContent}><RefreshCw size={16} className={scanningContent ? "spin" : ""} /> {scanningContent ? "Scanning…" : "Rescan Content"}</button>
           </div>
           <label>Lobby name<input value={lobbyName} maxLength={64} onChange={(event) => setLobbyName(event.target.value)} /></label>
+          <ThemedSelect
+            label="Maximum players"
+            value={String(maxPlayers)}
+            onChange={(value) => setMaxPlayers(Number(value))}
+            options={Array.from({ length: 7 }, (_, index) => {
+              const count = index + 2;
+              return { value: String(count), label: `${count} players` };
+            })}
+          />
           <div className="custom-content-kind-field">
             <span>Content type</span>
             <div className="custom-content-kind" role="group" aria-label="Content type">
@@ -202,7 +213,7 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
         try {
           if (!content) throw new Error("Choose a map or scenario before starting.");
           await ensureAoe2Running();
-          const result = await window.electronApi!.runAoe2CreateLobbySequence(content.gameName, 8, content.kind === "scenario" ? "scenario" : "map", "custom");
+          const result = await window.electronApi!.runAoe2CreateLobbySequence(content.gameName, room.maxPlayers, content.kind === "scenario" ? "scenario" : "map", "custom");
           if (!result.sent || !result.lobbyUri) throw new Error(result.message || "AoE2 lobby creation failed.");
           await customLobbyService.publish(room.id, result.lobbyUri);
         } catch (error) {
