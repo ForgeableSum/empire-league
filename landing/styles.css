@@ -194,7 +194,7 @@ h1 { margin: 18px 0 24px; font-size: clamp(38px, 4vw, 56px); line-height: 1.1; l
 .faq-item button[aria-expanded="true"] i { transform: rotate(45deg); }
 .faq-answer { padding: 0 54px 24px 4px; }
 .faq-answer p { max-width: 760px; font-size: 13px; }
-.final-cta { width: min(1280px,calc(100% - 48px)); margin: 0 auto 80px; padding: 34px 40px; display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 24px; border: 1px solid #8c642e; background: linear-gradient(90deg,rgba(197,141,69,.12),transparent),var(--panel); }
+.final-cta { width: min(1280px,calc(100% - 48px)); margin: 64px auto 80px; padding: 34px 40px; display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 24px; border: 1px solid #8c642e; background: linear-gradient(90deg,rgba(197,141,69,.12),transparent),var(--panel); }
 .final-cta > img { width: 58px; }.final-cta h2 { margin-bottom: 6px; }.final-cta p { font-size: 12px; }.final-cta .download-button { margin: 0; min-width: 230px; min-height: 52px; }
 footer { width: min(1280px,calc(100% - 48px)); min-height: 90px; margin: auto; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--line-soft); color: var(--faint); font-size: 10px; } footer p { font-size: 10px; }
 .toast { position: fixed; left: 50%; bottom: 24px; z-index: 20; transform: translate(-50%,100px); padding: 13px 20px; border: 1px solid #a97838; border-radius: var(--radius); background: var(--panel-2); color: var(--text); font-size: 12px; box-shadow: 0 10px 30px #000; transition: 200ms ease; }.toast.show { transform: translate(-50%,0); }
