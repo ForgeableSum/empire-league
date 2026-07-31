@@ -19,7 +19,9 @@ export function CustomPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [lobbyName, setLobbyName] = useState(`${state.currentUser.displayName}'s Lobby`);
+  const [contentKind, setContentKind] = useState<"map" | "scenario">("map");
   const [mapId, setMapId] = useState("");
+  const [scenarioId, setScenarioId] = useState("");
   const [dataModId, setDataModId] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -59,9 +61,10 @@ export function CustomPage() {
   async function createRoom() {
     setPending(true);
     try {
+      const contentId = contentKind === "map" ? mapId : scenarioId;
       await customLobbyService.create({
         name: lobbyName.trim(),
-        map: catalog.maps.find((item) => item.id === mapId),
+        map: catalog.maps.find((item) => item.id === contentId),
         dataMod: catalog.dataMods.find((item) => item.id === dataModId)
       });
       setCreating(false);
@@ -98,12 +101,21 @@ export function CustomPage() {
         <article className="panel custom-create-card">
           <div className="custom-create-heading"><div><span className="eyebrow">New room</span><h2>Lobby settings</h2></div></div>
           <label>Lobby name<input value={lobbyName} maxLength={64} onChange={(event) => setLobbyName(event.target.value)} /></label>
-          <ContentSelect label="Map or scenario" items={catalog.maps} value={mapId} onChange={setMapId} />
+          <div className="custom-content-kind-field">
+            <span>Content type</span>
+            <div className="custom-content-kind" role="group" aria-label="Content type">
+              <button type="button" aria-pressed={contentKind === "map"} onClick={() => setContentKind("map")}>Map</button>
+              <button type="button" aria-pressed={contentKind === "scenario"} onClick={() => setContentKind("scenario")}>Scenario</button>
+            </div>
+          </div>
+          {contentKind === "map"
+            ? <ContentSelect label="Map" items={catalog.maps.filter((item) => item.kind === "map")} value={mapId} onChange={setMapId} />
+            : <ContentSelect label="Scenario" items={catalog.maps.filter((item) => item.kind === "scenario")} value={scenarioId} onChange={setScenarioId} />}
           <ContentSelect label="Data mod (optional)" items={catalog.dataMods} value={dataModId} onChange={setDataModId} />
           {[...catalog.maps, ...catalog.dataMods].some((item) => !item.enabled) && <small className="custom-disabled-mod-hint">Disabled mods must be enabled at the mods interface inside the game.</small>}
           <div className="custom-scan-meta"><span>{catalog.maps.length} maps/scenarios</span><span>{catalog.dataMods.length} data mods</span><span>{catalog.scannedRoots.length} folders scanned</span></div>
           <div className="custom-create-actions">
-            <button className="primary large" type="button" disabled={!lobbyName.trim() || !mapId || pending} onClick={() => void createRoom()}>{pending ? "Creating…" : "Create Lobby"}</button>
+            <button className="primary large" type="button" disabled={!lobbyName.trim() || !(contentKind === "map" ? mapId : scenarioId) || pending} onClick={() => void createRoom()}>{pending ? "Creating…" : "Create Lobby"}</button>
             <button className="secondary large" type="button" disabled={pending} onClick={() => setCreating(false)}>Cancel</button>
           </div>
         </article>
@@ -130,7 +142,8 @@ export function CustomPage() {
 }
 
 function ContentSelect({ label, items, value, onChange }: { label: string; items: LocalCustomContent[]; value: string; onChange: (value: string) => void }) {
-  return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: "Choose content…" }, ...items.map((item) => ({ value: item.id, label: `${item.kind === "scenario" ? "[Scenario] " : "[Map] "}${item.name}${item.enabled ? "" : ` — Disabled (${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
+  const orderedItems = [...items.filter((item) => item.enabled), ...items.filter((item) => !item.enabled)];
+  return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${item.name}${item.enabled ? "" : ` — Disabled (${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
 }
 
 function NetworkLobby({ room, currentPlayerId, notify }: {

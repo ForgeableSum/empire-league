@@ -3456,6 +3456,41 @@
   gap: 16px;
 }
 
+.custom-content-kind-field {
+  display: grid;
+  gap: 8px;
+}
+
+.custom-content-kind-field > span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.custom-content-kind {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #181614;
+}
+
+.custom-content-kind button {
+  min-height: 44px;
+  padding: 10px 18px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.custom-content-kind button[aria-pressed="true"] {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--accent-2);
+}
+
 .custom-create-actions {
   display: flex;
   align-items: center;
