@@ -194,8 +194,11 @@ async function scanLocalCustomContent() {
       const modName = mod.name.replace(/^\d+_/, "").trim();
       const status = modStatuses.get(mod.name.toLowerCase());
       const displayName = status?.title || modName;
+      // A subscribed folder can remain on disk even when AoE2 no longer
+      // registers it. Require an explicit enabled status before offering it.
+      const enabled = status?.enabled === true;
       const scenarioFiles: Array<{ path: string; name: string; size: number }> = [];
-      await walk(modRoot, source, { modRoot, modName: displayName, enabled: status?.enabled !== false, scenarioFiles });
+      await walk(modRoot, source, { modRoot, modName: displayName, enabled, scenarioFiles });
       for (const scenario of selectScenarioVariants(modName, scenarioFiles)) {
         add(
           "scenario",
@@ -203,7 +206,7 @@ async function scanLocalCustomContent() {
           source,
           `${modName} — ${scenario.variant}`,
           basename(scenario.path, extname(scenario.path)),
-          { enabled: status?.enabled !== false, modName: displayName }
+          { enabled, modName: displayName }
         );
       }
     }
