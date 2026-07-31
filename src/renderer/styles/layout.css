@@ -189,6 +189,10 @@
   padding: 10px;
 }
 
+.user-block {
+  padding-left: 15px;
+}
+
 .avatar {
   width: 42px;
   height: 42px;
@@ -207,6 +211,10 @@
   height: 100%;
   display: block;
   object-fit: cover;
+}
+
+.user-block > .avatar {
+  display: none;
 }
 
 .large-avatar {
