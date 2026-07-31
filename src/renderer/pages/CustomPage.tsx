@@ -200,12 +200,20 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
       automationSteps.current.add(guestReadyKey);
       void (async () => {
         try {
-          let ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready", "custom");
-          if (!ready.sent) {
-            await window.electronApi!.runAoe2LobbyCursorAction("content-confirm", "custom");
+          const deadline = Date.now() + lobbySetupTiming.customMapTransferTimeoutMs;
+          let contentConfirmationAttempted = false;
+          let ready: Awaited<ReturnType<typeof window.electronApi.runAoe2LobbyCursorAction>>;
+          do {
+            await new Promise((resolve) => window.setTimeout(resolve, lobbySetupTiming.customMapTransferPollMs));
             ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready", "custom");
+            if (!ready.sent && !contentConfirmationAttempted) {
+              contentConfirmationAttempted = true;
+              await window.electronApi!.runAoe2LobbyCursorAction("content-confirm", "custom");
+            }
+          } while (!ready.sent && Date.now() < deadline);
+          if (!ready.sent) {
+            throw new Error("The guest Ready button remained unavailable after the file-transfer timeout.");
           }
-          if (!ready.sent) throw new Error(ready.message || "AoE2 could not ready the player.");
           await customLobbyService.reportAoeReady(room.id);
         } catch (error) {
           notify("Could not ready in the AoE2 lobby.", "danger", { detail: messageFor(error), durationMs: null });
