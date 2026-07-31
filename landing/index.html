@@ -15,7 +15,7 @@
   <body>
     <header>
       <a class="brand" href="#top"><img src="assets/empire-league.png" alt="" /><span>Empire League</span></a>
-      <nav aria-label="Main navigation"><a href="#features">Features</a><a href="#faq">FAQ</a></nav>
+      <nav aria-label="Main navigation"><a href="#features">Features</a><a href="#how-it-works">How it works</a><a href="#faq">FAQ</a></nav>
     </header>
 
     <main id="top">
@@ -57,11 +57,6 @@
       </section>
 
       <section class="features" id="features">
-        <div class="section-intro">
-          <span class="eyebrow">Features</span>
-          <h2>Features.</h2>
-        </div>
-
         <ul class="feature-list">
           <li><span class="feature-check" aria-hidden="true">✓</span><div><h3>Lightweight, modern interface</h3><p>An Electron app that runs on top of the game.</p></div></li>
           <li><span class="feature-check" aria-hidden="true">✓</span><div><h3>Choose exactly which maps you play</h3><p>Select individual maps or sensible categories: Open Land (Arabia-like), Closed Land (Arena-like), and Water.</p></div></li>
@@ -124,10 +119,35 @@
         </div>
       </section>
 
+      <section class="how-it-works" id="how-it-works">
+        <div class="section-intro">
+          <h2>How it works</h2>
+          <p>Empire League uses your existing account to establish a starting point, then maintains its own rating from matches played on the platform.</p>
+        </div>
+
+        <ol class="steps">
+          <li>
+            <span class="step-number">01</span>
+            <h3>Connect through Steam</h3><p>Sign in with Steam so Empire League can identify your AoE2 account and game installation.</p>
+          </li>
+          <li>
+            <span class="step-number">02</span>
+            <h3>Start with a seeded rating</h3><p>Your AoE2 account data is used to estimate your initial Empire League rating, so you begin near an appropriate skill level.</p>
+          </li>
+          <li>
+            <span class="step-number">03</span>
+            <h3>Build your Empire League rating</h3><p>After the initial seed, your Empire League rating is updated only by your performance in Empire League matches.</p>
+          </li>
+          <li>
+            <span class="step-number">04</span>
+            <h3>Play verified private matches</h3><p>Empire League matches run as private custom games in AoE2. After each match, the app reads the recorded-game data and verifies the reported result before updating player ratings.</p>
+          </li>
+        </ol>
+      </section>
+
       <section class="faq" id="faq">
         <div class="section-intro">
-          <span class="eyebrow">FAQ</span>
-          <h2>Frequently asked questions.</h2>
+          <h2>Frequently asked questions</h2>
         </div>
         <div class="faq-list">
           <article class="faq-item">
