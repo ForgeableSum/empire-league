@@ -61,7 +61,7 @@ const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
 const aoe2LaunchAttemptTimeoutMs = 30_000;
 const roomSetupTimeoutMs = 65_000;
-const restartAoe2AfterLobbyAutomationFailure = false;
+const restartAoe2AfterLobbyAutomationFailure = import.meta.env.VITE_DISABLE_AOE2_LOBBY_AUTO_RESTART !== "true";
 const defaultSettings: UserSettings = {
   launchAoe2OnStartup: false,
   serverRegion: "US East",
