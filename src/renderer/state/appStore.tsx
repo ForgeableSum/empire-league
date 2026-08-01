@@ -311,8 +311,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isPreviewMode) return;
-    if (import.meta.env.VITE_SKIP_AOE_AUTO_LAUNCH === "true") return;
-
     let cancelled = false;
 
     async function autoLaunchAoe2(): Promise<void> {

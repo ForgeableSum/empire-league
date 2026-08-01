@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { request } from "node:http";
 
 const clientOnly = process.argv.includes("--client-only");
-const skipAoeAutoLaunch = process.argv.includes("--no-aoe");
 const permanentLoadingScreen = process.argv.includes("--permanent-loading-screen");
 const independentMinimize = process.argv.includes("--independent-minimize");
 const opacityMode = process.argv.includes("--opacity");
@@ -11,7 +10,6 @@ const vite = spawn(process.execPath, ["node_modules/vite/bin/vite.js", "--host",
   stdio: "inherit",
   env: {
     ...process.env,
-    VITE_SKIP_AOE_AUTO_LAUNCH: skipAoeAutoLaunch ? "true" : process.env.VITE_SKIP_AOE_AUTO_LAUNCH,
     VITE_PERMANENT_LOADING_SCREEN: permanentLoadingScreen ? "true" : process.env.VITE_PERMANENT_LOADING_SCREEN,
     VITE_INDEPENDENT_WINDOW_MINIMIZE: independentMinimize ? "true" : "false",
     VITE_DISABLE_AOE2_LOBBY_AUTO_RESTART: disableAoe2LobbyAutoRestart ? "true" : "false"
