@@ -358,7 +358,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       return z.H.useSyncExternalStore(v, H, $);
     }, be.useTransition = function() {
       return z.H.useTransition();
-    }, be.version = "19.2.8", be;
+    }, be.version = "19.2.7", be;
   }
   var j1;
   function bc() {
@@ -700,7 +700,7 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
       return x.H.useFormState(k, y, C);
     }, yt.useFormStatus = function() {
       return x.H.useHostTransitionStatus();
-    }, yt.version = "19.2.8", yt;
+    }, yt.version = "19.2.7", yt;
   }
   var E1;
   function ep() {
@@ -8789,7 +8789,7 @@ Error generating stack: ` + n.message + `
       }
     };
     var S1 = c.version;
-    if (S1 !== "19.2.8") throw Error(u(527, S1, "19.2.8"));
+    if (S1 !== "19.2.7") throw Error(u(527, S1, "19.2.7"));
     R.findDOMNode = function(e) {
       var t = e._reactInternals;
       if (t === void 0) throw typeof e.render == "function" ? Error(u(188)) : (e = Object.keys(e).join(","), Error(u(268, e)));
@@ -8797,10 +8797,10 @@ Error generating stack: ` + n.message + `
     };
     var Vh = {
       bundleType: 0,
-      version: "19.2.8",
+      version: "19.2.7",
       rendererPackageName: "react-dom",
       currentDispatcherRef: w,
-      reconcilerVersion: "19.2.8"
+      reconcilerVersion: "19.2.7"
     };
     if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ < "u") {
       var Tl = __REACT_DEVTOOLS_GLOBAL_HOOK__;
@@ -8817,7 +8817,7 @@ Error generating stack: ` + n.message + `
       if (!m(e)) throw Error(u(299));
       var n = false, s = "", l = Id, o = Nd, d = Ed, g = null;
       return a != null && (a.unstable_strictMode === true && (n = true), a.identifierPrefix !== void 0 && (s = a.identifierPrefix), a.onUncaughtError !== void 0 && (l = a.onUncaughtError), a.onCaughtError !== void 0 && (o = a.onCaughtError), a.onRecoverableError !== void 0 && (d = a.onRecoverableError), a.formState !== void 0 && (g = a.formState)), t = u1(e, 1, true, t, a ?? null, n, s, g, l, o, d, k1), t.context = d1(null), a = t.current, n = Lt(), n = Bl(n), s = Ba(n), s.callback = null, qa(a, s, n), a = n, t.current.lanes = a, ws(t, a), sa(t), e[Rn] = t.current, Ro(e), new Rl(t);
-    }, di.version = "19.2.8", di;
+    }, di.version = "19.2.7", di;
   }
   var T1;
   function ap() {
@@ -11302,7 +11302,7 @@ Error generating stack: ` + n.message + `
     var _a2;
     if (!window.electronApi) return false;
     const { parse_rec: c } = await ym(async () => {
-      const { parse_rec: h } = await import("./aoe2rec_js-u0v_7Je2.js").then(async (m2) => {
+      const { parse_rec: h } = await import("./aoe2rec_js-C8zJ4VVt.js").then(async (m2) => {
         await m2.__tla;
         return m2;
       });
@@ -11328,7 +11328,7 @@ Error generating stack: ` + n.message + `
     var _a2, _b;
     if (!window.electronApi) throw new Error("Replay files are only available in the desktop app.");
     const { parse_rec: f, parse_rec_summary: u } = await ym(async () => {
-      const { parse_rec: K, parse_rec_summary: ne } = await import("./aoe2rec_js-u0v_7Je2.js").then(async (m2) => {
+      const { parse_rec: K, parse_rec_summary: ne } = await import("./aoe2rec_js-C8zJ4VVt.js").then(async (m2) => {
         await m2.__tla;
         return m2;
       });
@@ -13355,7 +13355,7 @@ Error generating stack: ` + n.message + `
     Vietnamese: Ig,
     Wei: Ng,
     Wu: Eg
-  }, Rg = "" + new URL("el4-ranked-BYeJ67OI.png", import.meta.url).href;
+  }, Rg = "" + new URL("el4-ranked-D5FXYSG-.png", import.meta.url).href;
   function jm() {
     return i.jsx("aside", {
       className: "matchmaking-brand",
@@ -18301,7 +18301,7 @@ Error generating stack: ` + n.message + `
       ]
     });
   }
-  const Sy = "" + new URL("el4-loading-Cx8fKbeM.png", import.meta.url).href, $t = {
+  const Sy = "" + new URL("el4-loading-C42nA83f.png", import.meta.url).href, $t = {
     async getSnapshot() {
       return ye ? {
         friends: pm,
