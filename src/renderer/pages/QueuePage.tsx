@@ -10,6 +10,7 @@ import { ResultScreen } from "../components/match/ResultScreen";
 import { MatchmakingBrand } from "../components/match/MatchmakingBrand";
 import { GroupedMapPool } from "../components/common/GroupedMapPool";
 import { mapGroups } from "../mocks/mockPlayers";
+import { previewSection } from "../previewMode";
 import { useAppStore } from "../state/appStore";
 
 const favoriteMapsKey = "empire-league-favorite-maps";
@@ -39,6 +40,13 @@ const civilizationModes: Array<{
 export function QueuePage() {
   const { state, queues, startQueue, updateActiveQueue, cancelQueue } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (previewSection !== "map-pool") return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("map-pool")?.scrollIntoView({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const [initialMapPreferences] = useState(() => buildInitialMapPreferences(queues));
   const [selectedQueueId, setSelectedQueueId] = useState(() => {
     const savedQueueId = loadMapPreferences().selectedQueueId;
@@ -507,7 +515,7 @@ export function QueuePage() {
                   })}
                 </div>
               </div>
-              <div className="preference-section map-preference-section">
+              <div className="preference-section map-preference-section" id="map-pool">
                 <div className="preference-heading">
                   <div>
                     <span className="eyebrow">Map pool</span>

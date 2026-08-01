@@ -19,10 +19,15 @@ import { parseReplayMetadata, ReplayNotFinishedError } from "../services/replayM
 import { estimateLobbySetupMs, recordLobbySetupDuration } from "../services/lobbyTimingService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSettings } from "./types";
-import { isPreviewCapture, isPreviewMode } from "../previewMode";
+import { isPreviewCapture, isPreviewMode, previewPage } from "../previewMode";
 import { previewMatches } from "../mocks/previewData";
 
 type AppPage = "home" | "ranked" | "custom" | "match-history" | "leaderboard" | "profile" | "social" | "settings";
+
+function isAppPage(value: string | null): value is AppPage {
+  return value === "home" || value === "ranked" || value === "custom" || value === "match-history"
+    || value === "leaderboard" || value === "profile" || value === "social" || value === "settings";
+}
 
 interface AppContextValue {
   state: AppState;
@@ -109,7 +114,7 @@ export const queueDefinitions: QueueDefinition[] = [
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [page, setPage] = useState<AppPage>("home");
+  const [page, setPage] = useState<AppPage>(() => isAppPage(previewPage) ? previewPage : "home");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileReturnPage, setProfileReturnPage] = useState<AppPage>("leaderboard");
   const profileReturnScrollRef = useRef(0);
