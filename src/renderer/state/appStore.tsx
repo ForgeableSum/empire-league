@@ -59,6 +59,7 @@ interface AppContextValue {
 
 const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
+const aoe2LaunchAttemptTimeoutMs = 30_000;
 const roomSetupTimeoutMs = 65_000;
 const restartAoe2AfterLobbyAutomationFailure = false;
 const defaultSettings: UserSettings = {
@@ -348,12 +349,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           durationMs: null
         });
 
-        const result = await window.electronApi.launchAoe2();
-        if (!result.launched) {
-          throw new Error(result.message ?? "Steam did not accept the AoE2 DE launch request.");
-        }
-
-        const ready = await waitForAoe2Window(120_000);
+        const ready = await launchAoe2WithRetry((detail) => {
+          if (loadingNotificationId) updateNotification(loadingNotificationId, { detail });
+        });
         if (!ready) throw new Error("AoE2 started, but its game window did not become ready in time.");
 
         if (loadingNotificationId) {
@@ -422,12 +420,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         durationMs: null
       });
 
-      const result = await window.electronApi.launchAoe2();
-      if (!result.launched) {
-        throw new Error(result.message ?? "Steam did not accept the AoE2 DE launch request.");
-      }
-
-      const ready = await waitForAoe2Window(120_000);
+      const ready = await launchAoe2WithRetry((detail) => {
+        if (loadingNotificationId) updateNotification(loadingNotificationId, { detail });
+      });
       if (!ready) throw new Error("AoE2 started, but its game window did not become ready in time.");
 
       updateNotification(loadingNotificationId, { detail: "Finishing game startup." });
@@ -1478,6 +1473,29 @@ async function waitForAoe2Window(timeoutMs: number): Promise<boolean> {
     await new Promise((resolve) => window.setTimeout(resolve, 500));
   }
   return false;
+}
+
+async function launchAoe2WithRetry(onRetry: (detail: string) => void): Promise<boolean> {
+  if (!window.electronApi) return false;
+
+  const firstLaunch = await window.electronApi.launchAoe2();
+  if (!firstLaunch.launched) {
+    throw new Error(firstLaunch.message ?? "Steam did not accept the AoE2 DE launch request.");
+  }
+  if (await waitForAoe2Window(aoe2LaunchAttemptTimeoutMs)) return true;
+
+  const process = await window.electronApi.detectAoe2Process();
+  if (process.running) {
+    onRetry("AoE2 is still starting. Waiting another 30 seconds.");
+  } else {
+    onRetry("AoE2 did not start. Retrying the Steam launch once.");
+    const retry = await window.electronApi.launchAoe2();
+    if (!retry.launched) {
+      throw new Error(retry.message ?? "Steam did not accept the AoE2 DE retry request.");
+    }
+  }
+
+  return waitForAoe2Window(aoe2LaunchAttemptTimeoutMs);
 }
 
 function delayForStartup(milliseconds: number): Promise<void> {

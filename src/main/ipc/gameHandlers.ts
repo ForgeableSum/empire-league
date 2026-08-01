@@ -61,6 +61,7 @@ const execFileAsync = promisify(execFile);
 const aoe2AppId = "813780";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 let launchRequested = false;
+let launchRequestedAt = 0;
 let ownedAoe2Pid: number | undefined;
 let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
@@ -2011,6 +2012,7 @@ export function registerGameHandlers(): void {
     const closed = await waitForAoe2Exit(force ? 5000 : 8000);
     if (closed) {
       launchRequested = false;
+      launchRequestedAt = 0;
       if (ownedAoe2Pid === processStatus.pid) ownedAoe2Pid = undefined;
     }
     return {
@@ -2022,14 +2024,22 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:launch", async (event) => {
     if (launchRequested) {
-      return { launched: true, status: "running", message: "AoE2 DE launch was already requested." };
+      const status = await detectAoe2Process();
+      if (status.running || Date.now() - launchRequestedAt < 30_000) {
+        return { launched: true, status: "running", message: "AoE2 DE launch was already requested." };
+      }
+      // Steam accepted the previous request, but no AoE2 process appeared
+      // within the renderer's startup window. Permit one fresh request.
+      launchRequested = false;
     }
     launchRequested = true;
+    launchRequestedAt = Date.now();
 
     try {
       const installation = await detectAoe2Installation();
       if (!installation.installed) {
         launchRequested = false;
+        launchRequestedAt = 0;
         return {
           launched: false,
           status: "not_detected",
@@ -2040,6 +2050,7 @@ export function registerGameHandlers(): void {
       const steamExecutable = await getSteamExecutable();
       if (!steamExecutable) {
         launchRequested = false;
+        launchRequestedAt = 0;
         return { launched: false, status: "not_detected", message: "Steam could not be launched." };
       }
 
@@ -2061,6 +2072,7 @@ export function registerGameHandlers(): void {
     } catch (error) {
       restoreAoe2Window();
       launchRequested = false;
+      launchRequestedAt = 0;
       throw error;
     }
   });
