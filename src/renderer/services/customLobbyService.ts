@@ -1,4 +1,4 @@
-import type { CustomLobbyRoom, LocalCustomContent } from "../../shared/contracts/customLobby";
+import type { CustomLobbyGameSettings, CustomLobbyRoom, LocalCustomContent } from "../../shared/contracts/customLobby";
 import { matchmakerTransport } from "./matchmakerTransport";
 import { isPreviewMode } from "../previewMode";
 import { previewCustomRooms } from "../mocks/previewData";
@@ -26,6 +26,10 @@ export const customLobbyService = {
   async updatePlayer(roomId: string, patch: { team?: number; civilization?: string; ready?: boolean }): Promise<void> {
     if (isPreviewMode) return;
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/player`, { method: "PATCH", body: patch });
+  },
+  async updateSettings(roomId: string, patch: Partial<CustomLobbyGameSettings>): Promise<void> {
+    if (isPreviewMode) return;
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/settings`, { method: "PATCH", body: patch });
   },
   async sendMessage(roomId: string, text: string): Promise<void> {
     if (isPreviewMode) return;

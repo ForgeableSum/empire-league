@@ -41,6 +41,40 @@ export interface CustomLobbyMessage {
   system?: boolean;
 }
 
+export interface CustomLobbyGameSettings {
+  lockTeams: boolean;
+  teamTogether: boolean;
+  teamPositions: boolean;
+  sharedExploration: boolean;
+  lockSpeed: boolean;
+  allowHandicap: boolean;
+  allowCheats: boolean;
+  turboMode: boolean;
+  fullTechTree: boolean;
+  empireWarsMode: boolean;
+  suddenDeathMode: boolean;
+  regicideMode: boolean;
+  antiquityMode: boolean;
+  recordGame: boolean;
+}
+
+export const defaultCustomLobbyGameSettings: CustomLobbyGameSettings = {
+  lockTeams: true,
+  teamTogether: true,
+  teamPositions: false,
+  sharedExploration: false,
+  lockSpeed: true,
+  allowHandicap: false,
+  allowCheats: false,
+  turboMode: false,
+  fullTechTree: false,
+  empireWarsMode: false,
+  suddenDeathMode: false,
+  regicideMode: false,
+  antiquityMode: false,
+  recordGame: true
+};
+
 export interface CustomLobbyRoom {
   id: string;
   name: string;
@@ -49,6 +83,7 @@ export interface CustomLobbyRoom {
   dataMod?: Pick<LocalCustomContent, "id" | "name" | "kind">;
   players: CustomLobbyPlayer[];
   messages: CustomLobbyMessage[];
+  gameSettings: CustomLobbyGameSettings;
   maxPlayers: number;
   status: "open" | "launching" | "started";
   gameStartedAt?: string;

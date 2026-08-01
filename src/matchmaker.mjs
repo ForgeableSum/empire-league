@@ -983,6 +983,12 @@ async function handleRequest(request, response) {
           slot: 1, team: 1, civilization: "Random", ready: false, host: true
         }],
         messages: [],
+        gameSettings: {
+          lockTeams: true, teamTogether: true, teamPositions: false, sharedExploration: false,
+          lockSpeed: true, allowHandicap: false, allowCheats: false, turboMode: false,
+          fullTechTree: false, empireWarsMode: false, suddenDeathMode: false,
+          regicideMode: false, antiquityMode: false, recordGame: true
+        },
         maxPlayers,
         status: "open",
         createdAt: new Date().toISOString()
@@ -1045,6 +1051,22 @@ async function handleRequest(request, response) {
     }
 
     const customLobbyMessages = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/messages$/);
+
+    const updateCustomSettings = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/settings$/);
+    if (request.method === "PATCH" && updateCustomSettings) {
+      const room = customLobbies.get(decodeURIComponent(updateCustomSettings[1]));
+      if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can change game settings." });
+      if (room.status !== "open") return send(response, 409, { error: "The lobby has already started." });
+      const body = await readJson(request);
+      for (const key of Object.keys(room.gameSettings)) {
+        if (key !== "recordGame" && typeof body[key] === "boolean") room.gameSettings[key] = body[key];
+      }
+      room.gameSettings.recordGame = true;
+      for (const player of room.players) player.ready = player.id === room.hostId ? player.ready : false;
+      broadcastCustomRooms();
+      return send(response, 200, { gameSettings: room.gameSettings });
+    }
+
     if (request.method === "POST" && customLobbyMessages) {
       const room = customLobbies.get(decodeURIComponent(customLobbyMessages[1]));
       if (!room?.players.some((player) => player.id === authenticatedPlayer.id)) return send(response, 403, { error: "You are not in that lobby." });

@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
 import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
+import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings } from "../../shared/contracts/customLobby.js";
 import {
   aoe2UiManifest,
   civilizationDesignPoint,
@@ -2220,11 +2221,14 @@ export function registerGameHandlers(): void {
     mapName: string,
     playerCount = 2,
     contentKind: "map" | "scenario" = "map",
-    automationContext: "ranked" | "custom" = "ranked"
+    automationRequest: "ranked" | "custom" | { context: "custom"; gameSettings: CustomLobbyGameSettings } = "ranked",
+    requestedGameSettings?: CustomLobbyGameSettings
   ) => {
     stopTabTest();
     setMouseCoordinateOverlayEnabled(false);
     const normalizedMapName = typeof mapName === "string" ? mapName.trim() : "";
+    const automationContext = typeof automationRequest === "object" ? automationRequest.context : automationRequest;
+    requestedGameSettings = typeof automationRequest === "object" ? automationRequest.gameSettings : requestedGameSettings;
     const isCustomAutomation = automationContext === "custom";
     if (process.platform !== "win32") {
       return { sent: false, message: "Lobby automation is only supported on Windows." };
@@ -2243,6 +2247,7 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
+    emitLog(`GAME_SETTINGS_PAYLOAD|${JSON.stringify(requestedGameSettings ?? null)}`);
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     const gameProcess = await detectAoe2Process();
     if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
@@ -2506,6 +2511,19 @@ export function registerGameHandlers(): void {
       }
       if (contentLobbyState.state !== "lobby-room") {
         throw new Error(`${normalizedMapName} selection did not return to the lobby room.`);
+      }
+
+      if (isCustomAutomation) {
+        const settings = { ...defaultCustomLobbyGameSettings, ...(requestedGameSettings ?? {}), recordGame: true };
+        const defaults = defaultCustomLobbyGameSettings;
+        const points = aoe2UiManifest.advancedSettings.points;
+        for (const key of Object.keys(points) as Array<keyof CustomLobbyGameSettings>) {
+          if (settings[key] === defaults[key]) continue;
+          const point = points[key];
+          await clickStep(`${settings[key] ? "Enable" : "Disable"} ${key}`, point[0], point[1], { synchronous: true });
+          await delay(aoe2UiManifest.advancedSettings.settleMs);
+          emitLog(`GAME_SETTING|${key}=${settings[key]}`);
+        }
       }
 
       clipboard.writeText("EL_CURSOR_COPY_PENDING");

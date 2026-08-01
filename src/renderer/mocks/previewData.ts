@@ -1,4 +1,4 @@
-import type { CustomLobbyRoom } from "../../shared/contracts/customLobby";
+import { defaultCustomLobbyGameSettings, type CustomLobbyRoom } from "../../shared/contracts/customLobby";
 import type { MatchSummary } from "../../shared/contracts/matches";
 import type { FriendRequest, SocialFriend } from "../pages/SocialPage";
 
@@ -62,6 +62,7 @@ function room(id: string, name: string, mapName: string, maxPlayers: number, nam
       host: index === 0
     })),
     messages: [],
+    gameSettings: { ...defaultCustomLobbyGameSettings },
     maxPlayers,
     status: "open",
     createdAt: new Date(Date.now() - names.length * 120_000).toISOString(),

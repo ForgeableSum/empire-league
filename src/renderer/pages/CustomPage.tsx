@@ -2,7 +2,7 @@ import { Check, Crown, LogIn, MessageSquare, Plus, RefreshCw, Send, Shield, User
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { civilizations } from "../../shared/civilizations";
 import type { Aoe2CivilizationSelection } from "../../shared/aoe2UiManifest";
-import type { CustomLobbyRoom, LocalCustomContent, LocalCustomContentCatalog } from "../../shared/contracts/customLobby";
+import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings, type CustomLobbyRoom, type LocalCustomContent, type LocalCustomContentCatalog } from "../../shared/contracts/customLobby";
 import { lobbySetupTiming } from "../../shared/runtimeConfig";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { customLobbyService } from "../services/customLobbyService";
@@ -222,7 +222,12 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
         try {
           if (!content) throw new Error("Choose a map or scenario before starting.");
           await ensureAoe2Running();
-          const result = await window.electronApi!.runAoe2CreateLobbySequence(content.gameName, room.maxPlayers, content.kind === "scenario" ? "scenario" : "map", "custom");
+          // Keep settings inside the original fourth argument so an app whose
+          // preload has not hot-reloaded cannot silently discard them.
+          const result = await window.electronApi!.runAoe2CreateLobbySequence(content.gameName, room.maxPlayers, content.kind === "scenario" ? "scenario" : "map", {
+            context: "custom",
+            gameSettings: room.gameSettings
+          });
           if (!result.sent || !result.lobbyUri) throw new Error(result.message || "AoE2 lobby creation failed.");
           await customLobbyService.publish(room.id, result.lobbyUri);
         } catch (error) {
@@ -427,12 +432,52 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
           <form onSubmit={submitChat}><input placeholder="Message lobby…" value={draft} onChange={(event) => setDraft(event.target.value)} /><button className="primary" aria-label="Send"><Send size={17} /></button></form>
         </aside>
       </div>
+      <LobbyGameSettings
+        settings={room.gameSettings ?? defaultCustomLobbyGameSettings}
+        editable={isHost && room.status === "open"}
+        onChange={(key, checked) => act(customLobbyService.updateSettings(room.id, { [key]: checked }))}
+      />
       <div className={`custom-lobby-actions${room.status !== "open" ? " launching" : ""}`}>
         <span>{room.status === "started" ? <GameStartCountdown startedAt={room.gameStartedAt} /> : room.status === "launching" ? <>Creating and synchronizing the AoE2 lobby<AnimatedEllipsis /></> : room.automationError ? room.automationError : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>
         {isHost && <button className="primary large" disabled={room.status !== "open" || !room.map || !room.players.every((player) => player.ready)} onClick={() => act(customLobbyService.start(room.id))}>{room.status !== "open" ? <>Starting<AnimatedEllipsis /></> : "Start Game"}</button>}
       </div>
     </section>
   );
+}
+
+const customLobbySettingLabels: Array<[keyof CustomLobbyGameSettings, string]> = [
+  ["lockTeams", "Lock Teams"],
+  ["teamTogether", "Team Together"],
+  ["teamPositions", "Team Positions"],
+  ["sharedExploration", "Shared Exploration"],
+  ["lockSpeed", "Lock Speed"],
+  ["allowHandicap", "Allow Handicap"],
+  ["allowCheats", "Allow Cheats"],
+  ["turboMode", "Turbo Mode"],
+  ["fullTechTree", "Full Tech Tree"],
+  ["empireWarsMode", "Empire Wars Mode"],
+  ["suddenDeathMode", "Sudden Death Mode"],
+  ["regicideMode", "Regicide Mode"],
+  ["antiquityMode", "Antiquity Mode"]
+];
+
+function LobbyGameSettings({ settings, editable, onChange }: {
+  settings: CustomLobbyGameSettings;
+  editable: boolean;
+  onChange: (key: keyof CustomLobbyGameSettings, checked: boolean) => void;
+}) {
+  return <article className="panel custom-game-settings">
+    <div className="custom-game-settings-heading"><div><span className="eyebrow">Team & advanced settings</span><h3>Game options</h3></div><small>{editable ? "Host controls" : "Set by host"}</small></div>
+    <div className="custom-game-settings-grid">{customLobbySettingLabels.map(([key, label]) => <label key={key} className={settings[key] ? "selected" : ""}>
+      <input type="checkbox" checked={settings[key]} disabled={!editable} onChange={(event) => onChange(key, event.target.checked)} />
+      <span>{label}</span>
+    </label>)}
+      <label className="selected required-setting" title="Empire League requires recorded games to verify results.">
+        <input type="checkbox" checked disabled />
+        <span>Record Game <small>Required</small></span>
+      </label>
+    </div>
+  </article>;
 }
 
 function messageFor(error: unknown) {

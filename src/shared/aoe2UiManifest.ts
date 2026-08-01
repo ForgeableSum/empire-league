@@ -150,6 +150,27 @@ export const aoe2UiManifest = {
     selectionSettleMs: 300,
     loadSettleMs: 2_000
   },
+  advancedSettings: {
+    // Measured from the native 2560x1440 PNG pixel grid (not the inspection
+    // viewer's scaled preview), then converted to 3840x2160 design space.
+    points: {
+      lockTeams: [2447, 1554],
+      teamTogether: [2447, 1598],
+      teamPositions: [2447, 1643],
+      sharedExploration: [2447, 1689],
+      allowHandicap: [2447, 1734],
+      lockSpeed: [2916, 1554],
+      allowCheats: [2916, 1598],
+      turboMode: [2916, 1643],
+      fullTechTree: [2916, 1689],
+      empireWarsMode: [2916, 1734],
+      suddenDeathMode: [2916, 1779],
+      regicideMode: [2916, 1824],
+      antiquityMode: [2916, 1869],
+      recordGame: [2916, 1914]
+    },
+    settleMs: 120
+  },
   civilizationGrid: {
     columns: 9,
     columnCenters: [248, 501, 755, 1007, 1259, 1512, 1764, 2018, 2271],

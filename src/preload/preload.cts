@@ -34,8 +34,8 @@ const electronApi: ElectronGameApi = {
   startAoe2TabTest: () => ipcRenderer.invoke("game:start-tab-test"),
   stopAoe2TabTest: () => ipcRenderer.invoke("game:stop-tab-test"),
   sendAoe2Key: (key) => ipcRenderer.invoke("game:send-background-key", key),
-  runAoe2CreateLobbySequence: (mapName, playerCount, contentKind, context) =>
-    ipcRenderer.invoke("game:run-create-lobby-sequence", mapName, playerCount, contentKind, context),
+  runAoe2CreateLobbySequence: (mapName, playerCount, contentKind, context, gameSettings) =>
+    ipcRenderer.invoke("game:run-create-lobby-sequence", mapName, playerCount, contentKind, context, gameSettings),
   runAoe2LobbyCursorAction: (target, context) => ipcRenderer.invoke("game:run-lobby-cursor-action", target, context),
   selectAoe2Civilization: (civilization, slot, context) => ipcRenderer.invoke("game:select-civilization", civilization, slot, context),
   selectAoe2Team: (team, slot, context) => ipcRenderer.invoke("game:select-team", team, slot, context),
