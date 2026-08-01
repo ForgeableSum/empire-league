@@ -46,7 +46,7 @@ nav a:hover { color: var(--accent-2); }
   grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
   align-items: center;
   gap: 56px;
-  padding: 84px 0 100px;
+  padding: 84px 0 72px;
 }
 .hero-copy { max-width: 520px; }
 .eyebrow { display: block; color: var(--accent-2); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
@@ -107,14 +107,14 @@ h1 { margin: 18px 0 24px; font-size: clamp(38px, 4vw, 56px); line-height: 1.1; l
 .maps article > span { position: absolute; top: 5px; right: 5px; width: 17px; height: 17px; display: grid; place-items: center; border: 1px solid #e0b561; background: #785020; color: #f0c66e; font-size: 9px; }
 .app-panel button { width: 100%; margin-top: 18px; border: 0; }
 
-.how-it-works, .features, .roadmap, .faq { padding: 110px max(24px,calc((100vw - 1080px)/2)); }
+.how-it-works, .features, .roadmap, .faq { padding: 72px max(24px,calc((100vw - 1080px)/2)); }
 .how-it-works { background: var(--bg); }
 .steps { max-width: 900px; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 .steps li { display: grid; grid-template-columns: 54px minmax(180px, 280px) 1fr; gap: 22px; align-items: baseline; padding: 24px 4px; border-bottom: 1px solid var(--line); }
 .step-number { color: var(--accent-2); font-size: 11px; font-weight: 700; letter-spacing: .1em; }
 .steps h3 { font-size: 18px; line-height: 1.35; }
 .steps p { max-width: 650px; font-size: 13px; }
-.features { padding-top: 72px; background: var(--bg-2); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.features { background: var(--bg-2); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
 .section-intro { max-width: 680px; margin-bottom: 30px; }
 .section-intro h2 { margin: 10px 0 16px; font-size: clamp(32px,4vw,46px); }
 .section-intro > h2:first-child { margin-top: 0; }
@@ -215,9 +215,9 @@ footer { width: min(1080px,calc(100% - 48px)); min-height: 90px; margin: auto; d
 }
 @media (max-width: 640px) {
   header,.hero,.final-cta,footer { width: calc(100% - 30px); }
-  nav { display: none; }.hero { padding: 65px 0 80px; gap: 50px; }.hero h1 { font-size: 36px; }
+  nav { display: none; }.hero { padding: 65px 0 56px; gap: 50px; }.hero h1 { font-size: 36px; }
   .app { grid-template-columns: 1fr; height: auto; }.app aside { display: none; }.app-content { padding: 26px 14px; }.maps img { height: 55px; }
-  .how-it-works,.features,.roadmap,.faq { padding: 80px 15px; }.feature-grid,.roadmap-grid { grid-template-columns: 1fr; }.feature.featured { display: block; padding: 28px; }.feature-copy { margin-bottom: 28px; }.feature { min-height: 220px; }
+  .how-it-works,.features,.roadmap,.faq { padding: 56px 15px; }.feature-grid,.roadmap-grid { grid-template-columns: 1fr; }.feature.featured { display: block; padding: 28px; }.feature-copy { margin-bottom: 28px; }.feature { min-height: 220px; }
   .steps li { grid-template-columns: 30px 1fr; gap: 10px; padding: 18px 2px; }
   .steps h3, .steps p { grid-column: 2; }
   .steps p { margin-top: -5px; }
