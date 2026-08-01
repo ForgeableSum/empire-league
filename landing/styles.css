@@ -151,6 +151,10 @@ h1 { margin: 18px 0 24px; font-size: clamp(38px, 4vw, 56px); line-height: 1.1; l
 .feature-copy { max-width: 560px; }
 .feature h3 { margin: 18px 0 12px; font-size: 20px; line-height: 1.35; }
 .feature.featured h3 { font-size: 30px; }
+.featured-heading { display: flex; align-items: flex-start; gap: 14px; margin: 0 0 12px; }
+.featured-heading h3 { margin: 0; }
+.feature-check.feature-check-large { flex: 0 0 auto; width: 34px; height: 34px; margin-top: 3px; font-size: 18px; }
+.featured-heading + p { margin-left: 48px; }
 .feature p { font-size: 12px; }
 .symbol { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--line); background: var(--panel-2); color: var(--accent-2); }
 .map-list { display: grid; gap: 8px; }
@@ -227,6 +231,8 @@ footer { width: min(1080px,calc(100% - 48px)); min-height: 90px; margin: auto; d
   .planned-features-toggle { padding-inline: 16px; }
   .feature-list h3 { font-size: 16px; }
   .feature-check { width: 18px; height: 18px; font-size: 10px; }
+  .feature-check.feature-check-large { width: 30px; height: 30px; font-size: 16px; }
+  .featured-heading + p { margin-left: 44px; }
   .final-cta { grid-template-columns: 48px 1fr; padding: 26px 20px; }.final-cta > img { width: 46px; }.final-cta .download-button { grid-column: 1/-1; width: 100%; }
   footer { flex-direction: column; justify-content: center; gap: 10px; padding: 24px 0; text-align: center; }
 }
