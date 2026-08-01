@@ -198,15 +198,24 @@ export function ProfilePage({
             ? <img src={user.avatarUrl} alt="" />
             : user.displayName.slice(0, 2).toUpperCase()}
         </div>
-        <h2>{user.displayName}</h2>
-        <span>{user.steamId ? `Steam ID ${user.steamId}` : "Steam account"}</span>
-        {recentForm.length > 0 && <FormPips form={recentForm} />}
+        <div className="profile-card-identity">
+          <h2>{user.displayName}</h2>
+          <span>{user.steamId ? `Steam ID ${user.steamId}` : "Steam account"}</span>
+        </div>
+        <div className="profile-card-status">
+          {recentForm.length > 0 && (
+            <div className="profile-recent-form">
+              <span>Recent W/L</span>
+              <FormPips form={recentForm} />
+            </div>
+          )}
         {!viewingOwnProfile && !isFriend && (
           <button className="primary profile-friend-button" type="button" disabled={addingFriend || isPending} onClick={() => void addFriend()}>
             {isPending ? "Friend request sent" : addingFriend ? "Sending…" : "Add friend"}
           </button>
         )}
-        {!viewingOwnProfile && isFriend && <span className="profile-friend-status">Friends</span>}
+          {!viewingOwnProfile && isFriend && <span className="profile-friend-status">Friends</span>}
+        </div>
       </div>
       <div className="metrics-grid">
         <Metric
@@ -215,13 +224,13 @@ export function ProfilePage({
           detail={`${user.legacy1v1Wins}-${user.legacy1v1Losses} legacy record`}
         />
         <Metric label="1v1 RM Peak" value={user.peakRating} />
+        <Metric label="Global Rank" value={`#${user.rank.toLocaleString()}`} />
         <Metric
           label="Team RM Rating"
           value={user.teamRating}
           detail={`${user.legacyTeamWins}-${user.legacyTeamLosses} legacy record`}
         />
         <Metric label="Team RM Peak" value={user.teamPeakRating} />
-        <Metric label="Global Rank" value={`#${user.rank.toLocaleString()}`} />
         <Metric label="Season Record" value={`${user.wins}-${user.losses}`} />
       </div>
       <div className="panel span-2">

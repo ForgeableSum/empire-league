@@ -16908,25 +16908,43 @@ Error generating stack: ` + n.message + `
                 alt: ""
               }) : p.displayName.slice(0, 2).toUpperCase()
             }),
-            i.jsx("h2", {
-              children: p.displayName
+            i.jsxs("div", {
+              className: "profile-card-identity",
+              children: [
+                i.jsx("h2", {
+                  children: p.displayName
+                }),
+                i.jsx("span", {
+                  children: p.steamId ? `Steam ID ${p.steamId}` : "Steam account"
+                })
+              ]
             }),
-            i.jsx("span", {
-              children: p.steamId ? `Steam ID ${p.steamId}` : "Steam account"
-            }),
-            V.length > 0 && i.jsx(am, {
-              form: V
-            }),
-            !h && !ee && i.jsx("button", {
-              className: "primary profile-friend-button",
-              type: "button",
-              disabled: C || oe,
-              onClick: () => void le(),
-              children: oe ? "Friend request sent" : C ? "Sending\u2026" : "Add friend"
-            }),
-            !h && ee && i.jsx("span", {
-              className: "profile-friend-status",
-              children: "Friends"
+            i.jsxs("div", {
+              className: "profile-card-status",
+              children: [
+                V.length > 0 && i.jsxs("div", {
+                  className: "profile-recent-form",
+                  children: [
+                    i.jsx("span", {
+                      children: "Recent W/L"
+                    }),
+                    i.jsx(am, {
+                      form: V
+                    })
+                  ]
+                }),
+                !h && !ee && i.jsx("button", {
+                  className: "primary profile-friend-button",
+                  type: "button",
+                  disabled: C || oe,
+                  onClick: () => void le(),
+                  children: oe ? "Friend request sent" : C ? "Sending\u2026" : "Add friend"
+                }),
+                !h && ee && i.jsx("span", {
+                  className: "profile-friend-status",
+                  children: "Friends"
+                })
+              ]
             })
           ]
         }),
@@ -16943,6 +16961,10 @@ Error generating stack: ` + n.message + `
               value: p.peakRating
             }),
             i.jsx(ia, {
+              label: "Global Rank",
+              value: `#${p.rank.toLocaleString()}`
+            }),
+            i.jsx(ia, {
               label: "Team RM Rating",
               value: p.teamRating,
               detail: `${p.legacyTeamWins}-${p.legacyTeamLosses} legacy record`
@@ -16950,10 +16972,6 @@ Error generating stack: ` + n.message + `
             i.jsx(ia, {
               label: "Team RM Peak",
               value: p.teamPeakRating
-            }),
-            i.jsx(ia, {
-              label: "Global Rank",
-              value: `#${p.rank.toLocaleString()}`
             }),
             i.jsx(ia, {
               label: "Season Record",
