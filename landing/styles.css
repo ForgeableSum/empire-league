@@ -149,7 +149,7 @@ h1 { margin: 18px 0 24px; font-size: clamp(38px, 4vw, 56px); line-height: 1.1; l
 .feature > *,.roadmap-grid article > * { position: relative; z-index: 1; }
 .feature.featured { grid-column: 1/-1; min-height: 330px; display: grid; grid-template-columns: 1fr 1fr; gap: 70px; align-items: center; padding: 42px; }
 .feature-copy { max-width: 560px; }
-.feature h3 { margin: 18px 0 12px; font-size: 20px; line-height: 1.35; }
+.feature h3 { margin: 18px 0 12px; font-size: 20px; line-height: 1; }
 .feature.featured h3 { font-size: 30px; }
 .featured-heading { display: flex; align-items: flex-start; gap: 14px; margin: 0 0 12px; }
 .featured-heading h3 { margin: 0; }
