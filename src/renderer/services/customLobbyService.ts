@@ -1,4 +1,4 @@
-import type { CustomLobbyGameSettings, CustomLobbyRoom, LocalCustomContent } from "../../shared/contracts/customLobby";
+import type { CustomLobbyGameSettings, CustomLobbyPlayer, CustomLobbyRoom, LocalCustomContent } from "../../shared/contracts/customLobby";
 import { matchmakerTransport } from "./matchmakerTransport";
 import { isPreviewMode } from "../previewMode";
 import { previewCustomRooms } from "../mocks/previewData";
@@ -15,8 +15,26 @@ export const customLobbyService = {
       body: { name: input.name, maxPlayers: input.maxPlayers, map: summarize(input.map), dataMod: summarize(input.dataMod) }
     })).room;
   },
-  async join(roomId: string): Promise<CustomLobbyRoom> {
-    if (isPreviewMode) return previewCustomRooms.find((room) => room.id === roomId) ?? previewCustomRooms[0];
+  async join(roomId: string, previewPlayer?: Pick<CustomLobbyPlayer, "id" | "displayName">): Promise<CustomLobbyRoom> {
+    if (isPreviewMode) {
+      const room = previewCustomRooms.find((candidate) => candidate.id === roomId);
+      if (!room || !previewPlayer) throw new Error("The preview lobby is unavailable.");
+      if (room.players.some((player) => player.id === previewPlayer.id)) return room;
+      const occupiedSlots = new Set(room.players.map((player) => player.slot));
+      const slot = Array.from({ length: room.maxPlayers }, (_, index) => index + 1).find((candidate) => !occupiedSlots.has(candidate));
+      if (!slot) throw new Error("The preview lobby is full.");
+      return {
+        ...room,
+        players: [...room.players, { ...previewPlayer, slot, team: 0, civilization: "Random", ready: false, host: false }],
+        messages: [...room.messages, {
+          id: `preview-join-${room.id}`,
+          author: "Empire League",
+          text: `${previewPlayer.displayName} joined the lobby.`,
+          sentAt: new Date().toISOString(),
+          system: true
+        }]
+      };
+    }
     return (await matchmakerTransport.request<{ room: CustomLobbyRoom }>(`/custom-lobbies/${encodeURIComponent(roomId)}/join`, { method: "POST" })).room;
   },
   async leave(roomId: string): Promise<void> {

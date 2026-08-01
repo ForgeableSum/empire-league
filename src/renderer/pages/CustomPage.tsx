@@ -97,7 +97,11 @@ export function CustomPage() {
     if (!(await ensureAoe2Ready("custom"))) return;
     setPending(true);
     try {
-      await customLobbyService.join(roomId);
+      const joinedRoom = await customLobbyService.join(roomId, {
+        id: state.currentUser.id,
+        displayName: state.currentUser.displayName
+      });
+      setRooms((current) => current.map((room) => room.id === joinedRoom.id ? joinedRoom : room));
     } catch (error) {
       notify("Could not join the lobby.", "danger", { detail: messageFor(error) });
     } finally {
