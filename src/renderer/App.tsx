@@ -16,7 +16,7 @@ import { useAppStore } from "./state/appStore";
 import { LogIn } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
-import loadingScreenArtwork from "./assets/el_full_1.png";
+import loadingScreenArtwork from "./assets/el4-loading.png";
 import { socialService } from "./services/socialService";
 import { isPreviewMode } from "./previewMode";
 import { previewFriendRequests, previewFriends } from "./mocks/previewData";
