@@ -1,6 +1,20 @@
 import { Star } from "lucide-react";
+import { useState } from "react";
 import type { MapGroupId } from "../../../shared/contracts/matchmaking";
 import type { RenderedMapGroupDefinition } from "../../mocks/mockPlayers";
+import { isPreviewMode } from "../../previewMode";
+
+const mapGuidanceTargetId = "arena";
+const mapGuidanceSeenKey = "empire-league-map-guidance-seen";
+
+function shouldShowMapGuidance(): boolean {
+  if (isPreviewMode) return true;
+  try {
+    return window.localStorage.getItem(mapGuidanceSeenKey) !== "1";
+  } catch {
+    return true;
+  }
+}
 
 interface GroupedMapPoolProps {
   groups: RenderedMapGroupDefinition[];
@@ -23,12 +37,25 @@ export function GroupedMapPool({
   onFavorite,
   disabled = false
 }: GroupedMapPoolProps) {
+  const [showMapGuidance, setShowMapGuidance] = useState(shouldShowMapGuidance);
+
+  function dismissMapGuidance() {
+    setShowMapGuidance(false);
+    if (isPreviewMode) return;
+    try {
+      window.localStorage.setItem(mapGuidanceSeenKey, "1");
+    } catch {
+      // Storage may be unavailable; dismiss the cue for the current session.
+    }
+  }
+
   return (
     <div className="grouped-map-pool">
       {groups.map((group) => {
         const groupEnabled = enabledGroupIds.includes(group.id);
+        const containsPreviewTarget = group.maps.some((map) => map.id === mapGuidanceTargetId);
         return (
-          <section className={groupEnabled ? "map-group enabled" : "map-group"} key={group.id}>
+          <section className={`${groupEnabled ? "map-group enabled" : "map-group"}${showMapGuidance && containsPreviewTarget ? " map-guidance-active" : ""}`} key={group.id}>
             <header className="map-group-header">
               <div>
                 <strong>{group.name}</strong>
@@ -52,7 +79,7 @@ export function GroupedMapPool({
                 const favorite = favoriteMapIds[group.id] === map.id;
                 return (
                   <article
-                    className={`group-map ${primary ? "primary" : ""} ${selected ? "selected" : ""}`}
+                    className={`group-map ${primary ? "primary" : ""} ${selected ? "selected" : ""}${showMapGuidance && map.id === mapGuidanceTargetId ? " map-guidance-target" : ""}`}
                     key={map.id}
                   >
                     <button
@@ -61,7 +88,10 @@ export function GroupedMapPool({
                       aria-pressed={selected}
                       aria-label={`${selected ? "Exclude" : "Include"} ${map.name}`}
                       disabled={disabled || !groupEnabled}
-                      onClick={() => onToggleMap(group.id, map.id)}
+                      onClick={() => {
+                        dismissMapGuidance();
+                        onToggleMap(group.id, map.id);
+                      }}
                     >
                       <img src={map.thumbnailUrl} alt="" />
                       <span className="group-map-shade" />
@@ -86,6 +116,11 @@ export function GroupedMapPool({
                 );
               })}
             </div>
+            {showMapGuidance && containsPreviewTarget && (
+              <span className="map-guidance-cue" aria-hidden="true">
+                Click a map to enable or disable it
+              </span>
+            )}
           </section>
         );
       })}
