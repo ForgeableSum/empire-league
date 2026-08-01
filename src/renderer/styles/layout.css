@@ -364,9 +364,12 @@
   --page-art: url("../assets/battles/settings.jpg");
 }
 
-.main-area.page-ranked,
-.main-area.page-custom {
+.main-area.page-ranked {
   --page-art: url("../assets/battles/play.jpg");
+}
+
+.main-area.page-custom {
+  --page-art: url("../assets/battles/custom-games.jpg");
 }
 
 .main-area.page-match-history {
