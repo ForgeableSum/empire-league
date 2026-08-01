@@ -125,7 +125,7 @@ export function LeaderboardPage() {
               <span>{player.wins}</span>
               <span>{player.losses}</span>
               <span>{player.winRate}%</span>
-              <span>{player.streak > 0 ? `W${player.streak}` : player.streak < 0 ? `L${Math.abs(player.streak)}` : "—"}</span>
+              <span>{player.streak > 0 ? `W${player.streak}` : player.streak < 0 ? `L${Math.abs(player.streak)}` : "0"}</span>
             </div>
           ))}
           {loading && <div className="empty-state">Loading leaderboard…</div>}
@@ -207,7 +207,7 @@ function LeaderboardPagination({
 
 function countryFlag(countryCode?: string) {
   const code = countryCode?.trim().toUpperCase();
-  if (!code) return "—";
+  if (!code) return "Unknown";
   if (!/^[A-Z]{2}$/.test(code)) return code;
 
   return (

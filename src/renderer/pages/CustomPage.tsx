@@ -190,7 +190,7 @@ function ContentSelect({ label, items, value, onChange }: { label: string; items
     ...items.filter((item) => !item.enabled && !item.builtIn),
     ...items.filter((item) => item.builtIn)
   ];
-  return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${item.name}${item.enabled ? "" : ` — Disabled (${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
+  return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${item.name}${item.enabled ? "" : ` (Disabled: ${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
 }
 
 function NetworkLobby({ room, currentPlayerId, notify }: {
@@ -423,10 +423,10 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
               {player && room.map?.kind === "scenario" ? <><span>Scenario</span><span>Scenario-defined</span>{player.id === currentPlayerId
                 ? <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
                 : <span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span>}</> : player && (player.id === currentPlayerId ? <>
-                <ThemedSelect className="lobby-inline-select" label="Team" value={String(player.team)} onChange={(team) => act(customLobbyService.updatePlayer(room.id, { team: Number(team) }))} options={[{ value: "0", label: "—" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />
+                <ThemedSelect className="lobby-inline-select" label="Team" value={String(player.team)} onChange={(team) => act(customLobbyService.updatePlayer(room.id, { team: Number(team) }))} options={[{ value: "0", label: "No team" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />
                 <ThemedSelect className="lobby-inline-select" label="Civilization" value={player.civilization} onChange={(civilization) => act(customLobbyService.updatePlayer(room.id, { civilization }))} options={["Random", ...civilizations].map((civilization) => ({ value: civilization, label: civilization }))} />
                 <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
-              </> : <><span>Team {player.team || "—"}</span><span>{player.civilization}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>)}
+              </> : <><span>{player.team ? `Team ${player.team}` : "No team"}</span><span>{player.civilization}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>)}
             </div>
           ))}
         </article>

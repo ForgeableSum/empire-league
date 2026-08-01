@@ -827,7 +827,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (event.type === "guest_lobby_joined" && window.electronApi) {
           setState((previous) => ({
             ...previous,
-            roomSetupMilestone: "Opponent joined — finalizing lobby files"
+            roomSetupMilestone: "Opponent joined. Finalizing lobby files..."
           }));
           void (async () => {
             try {
@@ -882,7 +882,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               clearRoomSetupWatchdog();
               setState((previous) => ({
                 ...previous,
-                roomSetupMilestone: "Ready — waiting for the host to start"
+                roomSetupMilestone: "Ready. Waiting for the host to start..."
               }));
             } catch (error) {
               const message = error instanceof Error ? error.message : "Lobby file transfer did not complete.";
@@ -898,7 +898,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ) {
           setState((previous) => ({
             ...previous,
-            roomSetupMilestone: "Opponent accepted lobby files — confirming host Ready"
+            roomSetupMilestone: "Opponent accepted lobby files. Confirming host readiness..."
           }));
           void (async () => {
             try {
@@ -921,7 +921,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (event.type === "guest_lobby_ready" && window.electronApi) {
           setState((previous) => ({
             ...previous,
-            roomSetupMilestone: "Opponent ready — starting game"
+            roomSetupMilestone: "Opponent ready. Starting game..."
           }));
           void (async () => {
             try {
@@ -1346,7 +1346,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
     if (result.verificationStatus === "contested") {
       log("Replay reports conflicted; result discarded");
-      notify("Result contested — no rating change", "warning");
+      notify("Result contested. No rating change.", "warning");
     } else {
       log("Match result verified");
     }

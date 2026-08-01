@@ -76,8 +76,8 @@ function demoPlayer(id, displayName, slot, team, civilization, ready = true) {
 
 for (const room of [
   {
-    id: "demo-cba-requiem", name: "CBA Requiem — all welcome", hostId: "demo-cedric",
-    map: { id: "demo-cba", name: "CBA Requiem v293 — Standard", gameName: "CBA_=REQUIEM=_V292", kind: "scenario" },
+    id: "demo-cba-requiem", name: "CBA Requiem (all welcome)", hostId: "demo-cedric",
+    map: { id: "demo-cba", name: "CBA Requiem v293: Standard", gameName: "CBA_=REQUIEM=_V292", kind: "scenario" },
     players: [demoPlayer("demo-cedric", "SirCedric", 1, 1, "Random"), demoPlayer("demo-wololo", "WololoEnjoyer", 2, 2, "Random", false)],
     maxPlayers: 8, status: "open", createdAt: new Date(Date.now() - 480_000).toISOString(), demo: true
   },
@@ -88,7 +88,7 @@ for (const room of [
     maxPlayers: 4, status: "open", createdAt: new Date(Date.now() - 260_000).toISOString(), demo: true
   },
   {
-    id: "demo-nomad", name: "Nomad FFA — beginners", hostId: "demo-sheep",
+    id: "demo-nomad", name: "Nomad FFA (beginners)", hostId: "demo-sheep",
     map: { id: "demo-nomad-map", name: "Land Nomad EL", gameName: "Land Nomad EL", kind: "map" },
     players: [demoPlayer("demo-sheep", "MissingSheep", 1, 0, "Random"), demoPlayer("demo-castle", "CastleDropper", 2, 0, "Spanish")],
     maxPlayers: 8, status: "open", createdAt: new Date(Date.now() - 90_000).toISOString(), demo: true

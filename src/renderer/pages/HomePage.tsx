@@ -47,7 +47,7 @@ export function HomePage() {
               <span>{match.map}</span>
               <span>{match.civilization && match.opponentCivilization
                 ? `${match.civilization} vs. ${match.opponentCivilization}`
-                : "—"}</span>
+                : "Unknown civilizations"}</span>
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
               <span>{match.durationMinutes}m</span>
             </div>

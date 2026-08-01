@@ -222,7 +222,7 @@ async function scanLocalCustomContent() {
           "scenario",
           scenario.path,
           source,
-          `${modName} — ${scenario.variant}`,
+          `${modName}: ${scenario.variant}`,
           basename(scenario.path, extname(scenario.path)),
           { enabled, modName: displayName }
         );
