@@ -385,6 +385,10 @@
   --page-art: url("../assets/battles/play.jpg");
 }
 
+.main-area.page-weekly {
+  --page-art: url("../assets/battles/weekly-background.jpg");
+}
+
 .main-area.page-custom {
   --page-art: url("../assets/battles/custom-games.jpg");
 }
@@ -407,6 +411,76 @@
 
 .main-area.page-settings {
   --page-art: url("../assets/battles/profile.jpg");
+}
+
+.weekly-page { display: grid; gap: 22px; }
+
+.weekly-hero {
+  position: relative;
+  min-height: 330px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, .65fr);
+  align-items: end;
+  gap: 28px;
+  padding: 34px;
+  overflow: hidden;
+  border: 1px solid #a77535;
+  background:
+    linear-gradient(90deg, rgba(14, 12, 10, .96) 0%, rgba(18, 15, 11, .82) 40%, rgba(18, 15, 11, .26) 72%),
+    url("../assets/battles/weekly.jpg") center 42% / cover;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .42), inset 0 0 0 4px rgba(231, 191, 111, .12);
+}
+
+.weekly-hero::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border: 1px solid rgba(231, 191, 111, .46);
+  pointer-events: none;
+}
+
+.weekly-hero-copy, .weekly-queue-card { position: relative; z-index: 1; }
+.weekly-hero-copy { max-width: 670px; }
+.weekly-kicker { display: inline-flex; align-items: center; gap: 7px; color: #f1cb79; font-size: 12px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+.weekly-hero h2 { margin: 9px 0 10px; color: #f1d58c; font-size: clamp(42px, 5vw, 68px); line-height: .98; text-shadow: 0 3px 16px #000; }
+.weekly-hero-copy > p { max-width: 620px; color: #ded2c0; font-size: 16px; }
+.weekly-mode-details { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 19px; }
+.weekly-mode-details span { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid rgba(226, 181, 109, .42); color: #eadbbd; background: rgba(13, 11, 9, .7); font-size: 12px; }
+
+.weekly-queue-card { display: grid; gap: 8px; align-self: end; padding: 18px; border: 1px solid rgba(230, 190, 111, .54); background: rgba(18, 15, 12, .88); box-shadow: 0 12px 30px rgba(0, 0, 0, .44); }
+.weekly-queue-card > span { color: var(--accent-2); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.weekly-queue-card > strong { margin-bottom: 5px; font-size: 15px; }
+.weekly-queue-card small { color: var(--faint); text-align: center; }
+.weekly-join { min-height: 46px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 16px; color: #24170a; background: linear-gradient(#edc87e, #bd8136); font-weight: 900; }
+.weekly-join:hover { filter: brightness(1.1); }
+.weekly-join.queued { color: #dcd2c3; background: #312b24; box-shadow: inset 0 0 0 1px #65584a; }
+
+.weekly-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
+.weekly-heading h2 { margin-top: 5px; font-size: 24px; }
+.weekly-reset { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; }
+.weekly-rotation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.weekly-rotation-card { position: relative; min-height: 226px; display: grid; grid-template-columns: 54px minmax(0, 1fr); border: 1px solid var(--line); background: linear-gradient(145deg, #28241f, #1c1a17); }
+.weekly-rotation-card.current { border-color: #b9833e; background: linear-gradient(145deg, rgba(150, 98, 36, .22), #211d18 58%); box-shadow: 0 10px 28px rgba(0, 0, 0, .26), inset 0 0 28px rgba(210, 154, 75, .05); }
+.weekly-week-marker { display: grid; place-items: start center; padding-top: 19px; border-right: 1px solid var(--line-soft); color: var(--faint); background: rgba(0, 0, 0, .14); }
+.weekly-week-marker span { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+.current .weekly-week-marker { color: #e9bd6e; }
+.weekly-card-copy { padding: 20px 20px 18px; }
+.weekly-timing { color: var(--faint); font-size: 11px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+.current .weekly-timing { color: var(--accent-2); }
+.weekly-card-copy h3 { margin: 7px 0 10px; color: var(--text); font-size: 23px; }
+.weekly-card-copy p { font-size: 13px; line-height: 1.55; }
+.weekly-card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+.weekly-card-tags span { padding: 5px 7px; border: 1px solid var(--line-soft); color: var(--faint); background: #181614; font-size: 10px; text-transform: uppercase; }
+.weekly-connector { position: absolute; z-index: 2; top: 50%; right: -17px; width: 17px; border-top: 1px solid #8c642e; }
+.weekly-note { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--line-soft); color: var(--accent-2); background: rgba(197, 141, 69, .06); }
+.weekly-note p { font-size: 13px; }
+.weekly-note strong { color: var(--text); }
+
+@media (max-width: 1050px) {
+  .weekly-hero { grid-template-columns: 1fr; }
+  .weekly-queue-card { max-width: 380px; }
+  .weekly-rotation { grid-template-columns: 1fr; }
+  .weekly-connector { display: none; }
 }
 
 .content-shell {

@@ -1,5 +1,6 @@
 import { HomePage } from "./pages/HomePage";
 import { QueuePage } from "./pages/QueuePage";
+import { WeeklyPage } from "./pages/WeeklyPage";
 import { CustomPage } from "./pages/CustomPage";
 import { MatchHistoryPage } from "./pages/MatchHistoryPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
@@ -234,6 +235,7 @@ export function App() {
       <Shell socialUnreadCount={friends.reduce((total, friend) => total + (friend.unread ?? 0), 0)}>
         {page === "home" && <HomePage />}
         {page === "ranked" && <QueuePage />}
+        {page === "weekly" && <WeeklyPage />}
         {page === "custom" && <CustomPage />}
         {page === "match-history" && <MatchHistoryPage />}
         {page === "leaderboard" && <LeaderboardPage />}

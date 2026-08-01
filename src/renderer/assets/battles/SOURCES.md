@@ -14,5 +14,8 @@ assets are capped at 1,600 pixels and encoded as compressed JPEGs.
 - `profile-page.jpg` — [Battle of Cresson](https://commons.wikimedia.org/wiki/File:Battle_of_Cresson.jpg), Jean Colombe, circa 1474.
 - `settings.jpg` — [Battle of La Roche-Derrien](https://commons.wikimedia.org/wiki/File:Battle_of_La_Roche-Derrien.jpg), from Froissart's *Chronicles*, 15th century.
 
+- `weekly.jpg` — [King Sigismund holding council in his tent on the battlefield](https://commons.wikimedia.org/wiki/File:The_King_of_Hungary_holding_council_in_his_tent_on_the_battlefield_-_Froissart%27s_Chronicles_%28Volume_IV%2C_part_2%29_%281470-1475%29%2C_f.84_-_BL_Harley_MS_4380.jpg), from Froissart's *Chronicles*, Bruges, circa 1470–1475; British Library Harley MS 4380, f.84, released under CC0.
+- `weekly-background.jpg` — [Battle of Nicopolis](https://commons.wikimedia.org/wiki/File:Nicopol_final_battle_1398.jpg), from Froissart's *Chronicles*, Bruges, 15th century; Bibliothèque nationale de France MS Fr. 2646, fol. 220, public domain.
+
 The Wikimedia Commons pages identify the underlying works and their faithful
 reproductions as public domain.
