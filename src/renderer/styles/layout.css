@@ -264,6 +264,23 @@
   background: #28241f;
 }
 
+.nav-notification-badge {
+  min-width: 21px;
+  height: 21px;
+  display: inline-grid;
+  place-items: center;
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid #ffe39a;
+  border-radius: 999px;
+  color: #17110a;
+  background: #f2c94c;
+  box-shadow: 0 0 10px #f2c94c52;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .nav-search-loader {
   width: 34px;
   height: 24px;

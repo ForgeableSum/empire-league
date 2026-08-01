@@ -17,7 +17,7 @@ const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
   { page: "settings", label: "Settings", icon: <Settings size={18} /> }
 ];
 
-export function Shell({ children }: { children: ReactNode }) {
+export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode; socialUnreadCount?: number }) {
   const { page, setPage, state, signOut, selectedProfileId, openPlayerProfile, returnFromPlayerProfile } = useAppStore();
   const viewingLinkedProfile = page === "profile" && selectedProfileId !== null && selectedProfileId !== state.currentUser.id;
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
@@ -61,6 +61,11 @@ export function Shell({ children }: { children: ReactNode }) {
             >
               {item.icon}
               <span>{item.label}</span>
+              {item.page === "social" && socialUnreadCount > 0 && (
+                <span className="nav-notification-badge" aria-label={`${socialUnreadCount} unread ${socialUnreadCount === 1 ? "message" : "messages"}`}>
+                  {socialUnreadCount > 99 ? "99+" : socialUnreadCount}
+                </span>
+              )}
               {item.page === "ranked" && state.queueStatus === "searching" && (
                 <span className="medieval-loader nav-search-loader" role="status" aria-label="Searching for a match">
                   <span aria-hidden="true" />

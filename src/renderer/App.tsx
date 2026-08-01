@@ -26,10 +26,10 @@ export function App() {
   const [mouseTestActive, setMouseTestActive] = useState(false);
   const [startupScreenVisible, setStartupScreenVisible] = useState(!isPreviewMode);
   const [friends, setFriends] = useState<SocialFriend[]>(isPreviewMode ? previewFriends : []);
-  const friendsRef = useRef<SocialFriend[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>(isPreviewMode ? previewFriendRequests : []);
   const [outgoingRequestIds, setOutgoingRequestIds] = useState<string[]>([]);
   const [chats, setChats] = useState<OpenChat[]>([]);
+  const chatsRef = useRef<OpenChat[]>([]);
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
   useEffect(() => {
     if (permanentLoadingScreen) return;
@@ -40,8 +40,8 @@ export function App() {
   const { page, state, authStatus, authError, signInWithSteam } = useAppStore();
 
   useEffect(() => {
-    friendsRef.current = friends;
-  }, [friends]);
+    chatsRef.current = chats;
+  }, [chats]);
 
   useEffect(() => {
     const clearAttention = () => void window.electronApi?.clearUnreadMessageAlert();
@@ -130,25 +130,22 @@ export function App() {
           text: message.text,
           time: new Date(message.sentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
         };
-        const sender = friendsRef.current.find((friend) => friend.id === message.senderId);
-        const appFocused = document.hasFocus();
+        const openChat = chatsRef.current.find((chat) => chat.friend.id === message.senderId && !chat.minimized);
         setChats((current) => {
           const open = current.some((chat) => chat.friend.id === message.senderId);
-          if (!open && sender) return [...current.slice(-2), { friend: sender, minimized: false, messages: [receivedMessage] }];
           if (!open) return current;
           return current.map((chat) => chat.friend.id === message.senderId ? {
             ...chat,
-            minimized: false,
             messages: [...chat.messages, receivedMessage]
           } : chat);
         });
-        if (appFocused) {
+        if (openChat) {
           void socialService.markMessagesRead(message.senderId);
         } else {
           setFriends((items) => items.map((friend) => friend.id === message.senderId
             ? { ...friend, unread: (friend.unread ?? 0) + 1 }
             : friend));
-          void window.electronApi?.alertUnreadMessage();
+          if (!document.hasFocus()) void window.electronApi?.alertUnreadMessage();
         }
       }
     });
@@ -234,7 +231,7 @@ export function App() {
   return (
     <>
       <LobbyInputForwarding locked={["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error} />
-      <Shell>
+      <Shell socialUnreadCount={friends.reduce((total, friend) => total + (friend.unread ?? 0), 0)}>
         {page === "home" && <HomePage />}
         {page === "ranked" && <QueuePage />}
         {page === "custom" && <CustomPage />}
