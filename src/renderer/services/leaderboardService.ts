@@ -19,6 +19,7 @@ export const leaderboardService = {
   async list(page = 1, division = "all", mode: LeaderboardMode = "solo"): Promise<LeaderboardPageResult> {
     if (isPreviewMode) {
       const ranked = [...leaderboardPlayers]
+        .filter((player) => mode === "solo" || player.teamRating > 0)
         .sort((left, right) => (mode === "team" ? right.teamRating - left.teamRating : right.rating - left.rating))
         .map((player, index) => {
           const rating = mode === "team" ? player.teamRating : player.rating;
@@ -35,7 +36,9 @@ export const leaderboardService = {
           };
         });
       const filtered = division === "all" ? ranked : ranked.filter((player) => player.division === division);
-      return { players: filtered, page, pageSize: 100, total: filtered.length, division, mode };
+      const pageSize = 100;
+      const start = (page - 1) * pageSize;
+      return { players: filtered.slice(start, start + pageSize), page, pageSize, total: filtered.length, division, mode };
     }
     const params = new URLSearchParams({ page: String(page), division, mode });
     return matchmakerTransport.request<LeaderboardPageResult>(`/leaderboard?${params}`);
