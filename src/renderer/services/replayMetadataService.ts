@@ -1,10 +1,10 @@
 import type { ReplayMatchMetadata, ReplayPlayerMetadata } from "../../shared/contracts/matches";
 
 export class ReplayNotFinishedError extends Error {
-  constructor(teamGame = false) {
-    super(teamGame
+  constructor(teamGame = false, message?: string) {
+    super(message ?? (teamGame
       ? "The team replay does not contain final PostGame results yet."
-      : "The replay does not contain a PostGame or Resign operation yet.");
+      : "The replay does not contain a PostGame or Resign operation yet."));
     this.name = "ReplayNotFinishedError";
   }
 }
@@ -91,7 +91,14 @@ export async function parseReplayMetadata(
   const loser = (!isTeamGame && resignedPlayer) || losingPlayers.find((player) => player.profile_id > 0);
   const reporter = players.find((player) => player.playerNumber === summary.header.replay.rec_player);
   if (![2, 4, 8].includes(players.length) || !winner || !loser || !reporter) {
-    throw new Error("The replay does not contain identifiable winning and losing teams.");
+    // The replay watcher inspects every write. AoE2 can flush a terminal
+    // operation before the summary's teams and recorded-player metadata are
+    // complete, so this state is not proof that the finished replay is invalid.
+    // Keep watching and parse again after the next write/stability notification.
+    throw new ReplayNotFinishedError(
+      isTeamGame,
+      "The replay summary does not contain complete player and team results yet."
+    );
   }
   return {
     fileSizeBytes: bytes.byteLength,
