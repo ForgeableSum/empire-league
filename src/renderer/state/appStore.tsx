@@ -227,6 +227,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const message = error instanceof Error ? error.message : "Replay parsing failed.";
           setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
           try {
+            // A non-retryable parse failure makes the result contested, but the
+            // match has still ended. Start the same menu recovery used after a
+            // successfully parsed replay before reporting the contested result.
+            await window.electronApi?.confirmReplayEnded();
             await services.matchmaking.reportMatchResult({ matchId: match.id, error: message });
             log("Replay could not be parsed; result reported as contested");
             return;

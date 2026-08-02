@@ -428,6 +428,9 @@ async function startReplayEndDetection(
   let observedGrowth = false;
   let activeCreatedDuringWatch = false;
   let lastCandidateKey: string | undefined;
+  let observedInGameScreen = false;
+  let consecutiveMainMenuReads = 0;
+  let recoveredFromMainMenu = false;
 
   const initialFiles = await findReplayFiles(configuredFolder);
   if (configuredFolder?.trim() && initialFiles.length === 0) {
@@ -444,6 +447,24 @@ async function startReplayEndDetection(
   const poll = async (): Promise<void> => {
     if (generation !== replayDetectionGeneration || window.isDestroyed()) return;
     try {
+      // Replay writes are the source of truth for the result, but they can lag behind
+      // a player who exits the post-game screen quickly. Keep a separate visual
+      // fallback armed only after AoE2 has shown an unrecognized (in-game) screen so
+      // the pre-game main menu cannot bring Empire League forward accidentally.
+      const game = detectAoe2NativeProcess();
+      if (game.pid && game.windowReady && !recoveredFromMainMenu) {
+        const screen = readAoe2HostSetupState(game.pid);
+        if (screen.state === "unknown") observedInGameScreen = true;
+        consecutiveMainMenuReads = observedInGameScreen && screen.state === "main-menu"
+          ? consecutiveMainMenuReads + 1
+          : 0;
+        if (consecutiveMainMenuReads >= 2) {
+          recoveredFromMainMenu = true;
+          focusMainWindowAfterReplay(window);
+          console.info("[AoE2 replay] RECOVER|Reason=MainMenuFallback");
+        }
+      }
+
       const files = await findReplayFiles(configuredFolder);
       if (!active) {
         // Detection starts shortly after Start Game. Accept a recently-created file,
