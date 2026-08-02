@@ -6,7 +6,7 @@ import { basename, dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
-import { empireLeagueMapsModName } from "../aoe2MapInstaller.js";
+import { empireLeagueMapsModName, ensureEmpireLeagueMapsEnabled } from "../aoe2MapInstaller.js";
 import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings } from "../../shared/contracts/customLobby.js";
 import {
@@ -2198,6 +2198,8 @@ export function registerGameHandlers(): void {
         launchRequestedAt = 0;
         return { launched: false, status: "not_detected", message: "Steam could not be launched." };
       }
+
+      await ensureEmpireLeagueMapsEnabled();
 
       const appWindow = BrowserWindow.fromWebContents(event.sender);
       // Arm both layers before Steam is allowed to create the game window. The

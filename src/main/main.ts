@@ -27,7 +27,8 @@ app.whenReady().then(async () => {
     const maps = await installBundledAoe2Maps();
     console.info(
       `[AoE2 maps] Installed=${maps.installedProfiles.join(",") || "none"} `
-      + `Current=${maps.skippedProfiles.join(",") || "none"}`
+      + `Current=${maps.skippedProfiles.join(",") || "none"} `
+      + `Reenabled=${maps.enabledProfiles.join(",") || "none"}`
     );
   } catch (error) {
     console.error("[AoE2 maps] Installation failed", error);
