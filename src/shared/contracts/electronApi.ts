@@ -53,6 +53,7 @@ export interface ElectronGameApi {
   stopReplayEndDetection(): Promise<void>;
   confirmReplayEnded(): Promise<void>;
   testReturnToMenuRecovery(): Promise<{ started: boolean; message?: string }>;
+  onReplayStarted(listener: (filePath: string) => void): () => void;
   onReplayEnded(listener: (filePath: string) => void): () => void;
   onAoe2ProcessExited(listener: () => void): () => void;
   onReplayDetectionFailed(listener: (message: string) => void): () => void;

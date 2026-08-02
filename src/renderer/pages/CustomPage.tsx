@@ -342,7 +342,12 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
       notify("Post-game return detection could not be started.", "danger", { detail: messageFor(error) });
     });
 
-    const timer = window.setTimeout(() => {
+    let revealed = false;
+    const reveal = () => {
+      if (revealed) return;
+      revealed = true;
+      window.clearTimeout(timer);
+      stopReplayStartedListener();
       void (async () => {
         try {
           await stopYouTubeShorts();
@@ -353,9 +358,14 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
           await window.electronApi!.setLobbyInputLock(false);
         }
       })();
-    }, lobbySetupTiming.revealAfterStartMs);
+    };
+    const stopReplayStartedListener = window.electronApi.onReplayStarted(reveal);
+    const timer = window.setTimeout(reveal, lobbySetupTiming.revealAfterStartMs);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      stopReplayStartedListener();
+    };
   }, [room.id, room.status]);
 
   useEffect(() => {

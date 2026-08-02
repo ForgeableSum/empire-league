@@ -528,6 +528,7 @@ async function startReplayEndDetection(
   let active: ReplaySnapshot | undefined;
   let lastGrowthAt = startedAt;
   let observedGrowth = false;
+  let replayStartedEmitted = false;
   let activeCreatedDuringWatch = false;
   let lastCandidateKey: string | undefined;
   let observedInGameScreen = false;
@@ -547,6 +548,13 @@ async function startReplayEndDetection(
       return { started: false, message: "The configured replay folder could not be found." };
     }
   }
+
+  const emitReplayStarted = (replay: ReplaySnapshot): void => {
+    if (replayStartedEmitted || window.webContents.isDestroyed()) return;
+    replayStartedEmitted = true;
+    window.webContents.send("game:replay-started", replay.path);
+    console.info(`[AoE2 replay] STARTED|File=${replay.path}`);
+  };
 
   const poll = async (): Promise<void> => {
     if (generation !== replayDetectionGeneration || window.isDestroyed()) return;
@@ -586,6 +594,7 @@ async function startReplayEndDetection(
         if (active) {
           activeCreatedDuringWatch = !initialFiles.some((file) => file.path === active?.path);
           lastGrowthAt = Date.now();
+          if (activeCreatedDuringWatch) emitReplayStarted(active);
         }
       } else {
         const newest = files
@@ -601,6 +610,7 @@ async function startReplayEndDetection(
           observedGrowth = true;
           lastGrowthAt = Date.now();
           active = current;
+          emitReplayStarted(current);
           if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
         } else if (current && (observedGrowth || activeCreatedDuringWatch)) {
           const now = Date.now();

@@ -160,6 +160,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const matchedSessionRef = useRef<MatchSession | null>(null);
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const replayResultInFlightRef = useRef(false);
+  const gameRevealInFlightRef = useRef<Promise<void> | null>(null);
   const familySharingNoticeShownRef = useRef(false);
   const uiModWarningIdRef = useRef<string | null>(null);
 
@@ -1445,26 +1446,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function revealAoe2AfterGameStart(): Promise<void> {
     if (!window.electronApi) return;
-    await delayForLobbyInput(lobbySetupTiming.revealAfterStartMs);
-    const detection = await window.electronApi.startReplayEndDetection();
-    if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
-    await stopYouTubeShorts();
-    await window.electronApi.focusAoe2();
-    const completedState = stateRef.current;
-    if (completedState.activeMatch && completedState.roomSetupStartedAt) {
-      recordLobbySetupDuration(
-        completedState.activeMatch,
-        Date.now() - new Date(completedState.roomSetupStartedAt).getTime()
-      );
-    }
-    setState((previous) => ({
-      ...previous,
-      queueStatus: "in_game",
-      roomSetupMilestone: null,
-      transitionInputLocked: false,
-      activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
-    }));
-    log("Showing AoE2 after game start");
+    if (gameRevealInFlightRef.current) return gameRevealInFlightRef.current;
+    gameRevealInFlightRef.current = (async () => {
+      let replayStarted: (() => void) | undefined;
+      const replayStart = new Promise<void>((resolve) => {
+        replayStarted = window.electronApi!.onReplayStarted(() => resolve());
+      });
+      const detection = await window.electronApi!.startReplayEndDetection();
+      if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
+      await Promise.race([
+        delayForLobbyInput(lobbySetupTiming.revealAfterStartMs),
+        replayStart
+      ]);
+      replayStarted?.();
+      await stopYouTubeShorts();
+      await window.electronApi!.focusAoe2();
+      const completedState = stateRef.current;
+      if (completedState.activeMatch && completedState.roomSetupStartedAt) {
+        recordLobbySetupDuration(
+          completedState.activeMatch,
+          Date.now() - new Date(completedState.roomSetupStartedAt).getTime()
+        );
+      }
+      setState((previous) => ({
+        ...previous,
+        queueStatus: "in_game",
+        roomSetupMilestone: null,
+        transitionInputLocked: false,
+        activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
+      }));
+      log("Showing AoE2 after game start");
+    })().finally(() => {
+      gameRevealInFlightRef.current = null;
+    });
+    return gameRevealInFlightRef.current;
   }
 
   function updateSettings(patch: Partial<UserSettings>): void {
