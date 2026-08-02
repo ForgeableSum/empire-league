@@ -56,13 +56,6 @@ export function SettingsPage() {
       </SettingsGroup>
 
       <SettingsGroup title="Matchmaking">
-        <label>
-          Preferred server region
-          <input
-            value={settings.serverRegion}
-            onChange={(event) => updateSettings({ serverRegion: event.target.value })}
-          />
-        </label>
         <Toggle
           label="Match-found notifications"
           helpText="Shows a Windows notification and flashes the taskbar icon when a match is found. The in-app match screen appears either way."

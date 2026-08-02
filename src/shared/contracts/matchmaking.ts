@@ -168,7 +168,6 @@ export interface LobbySession {
   hostProfileId: number;
   guestProfileId: number;
   map: MapDefinition;
-  serverRegion: string;
   settings: LobbySettings;
   verification: LobbyVerification;
 }

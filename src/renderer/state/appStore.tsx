@@ -69,7 +69,6 @@ const roomSetupTimeoutMs = 65_000;
 const restartAoe2AfterLobbyAutomationFailure = import.meta.env.VITE_DISABLE_AOE2_LOBBY_AUTO_RESTART !== "true";
 const defaultSettings: UserSettings = {
   launchAoe2OnStartup: false,
-  serverRegion: "US East",
   matchNotifications: true,
   autoRejectFamilySharing: false,
   maximumLowerOpponentRatingGap: 0
@@ -1189,7 +1188,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           hostProfileId: match.player.aoeProfileId,
           guestProfileId: match.opponent.aoeProfileId,
           map: match.selectedMap,
-          serverRegion: state.settings.serverRegion,
           playerCount: match.queue.format === "team"
             ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
             : 2
@@ -1212,7 +1210,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         hostProfileId: match.player.aoeProfileId,
         guestProfileId: match.opponent.aoeProfileId,
         map: match.selectedMap,
-        serverRegion: state.settings.serverRegion,
         playerCount: match.queue.format === "team"
           ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
           : 2
@@ -1547,7 +1544,6 @@ function loadSettings(): UserSettings {
       launchAoe2OnStartup: typeof saved.launchAoe2OnStartup === "boolean"
         ? saved.launchAoe2OnStartup
         : defaultSettings.launchAoe2OnStartup,
-      serverRegion: typeof saved.serverRegion === "string" ? saved.serverRegion : defaultSettings.serverRegion,
       matchNotifications: typeof saved.matchNotifications === "boolean"
         ? saved.matchNotifications
         : defaultSettings.matchNotifications,

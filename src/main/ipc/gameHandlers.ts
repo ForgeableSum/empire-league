@@ -2951,7 +2951,6 @@ export function registerGameHandlers(): void {
         hostProfileId: request.hostProfileId,
         guestProfileId: request.guestProfileId,
         map: request.map,
-        serverRegion: request.serverRegion,
         settings: {
           playerCount: request.playerCount,
           gameMode: "Random Map",

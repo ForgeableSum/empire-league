@@ -58,7 +58,6 @@ export class MockGameIntegrationService implements GameIntegrationService {
         hostProfileId: config.hostProfileId,
         guestProfileId: config.guestProfileId,
         map: config.map,
-        serverRegion: config.serverRegion,
         settings: {
           playerCount: config.playerCount,
           gameMode: "Random Map",

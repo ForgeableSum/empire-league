@@ -14,7 +14,6 @@ export function ActiveMatch() {
       )}
       <div className="metrics-grid compact">
         <div><span>Map</span><strong>{match.selectedMap?.name}</strong></div>
-        <div><span>Server</span><strong>{match.lobby?.serverRegion}</strong></div>
         <div><span>Lobby</span><strong>{match.lobby?.platformLobbyId}</strong></div>
         <div><span>Status</span><strong>{state.queueStatus.replaceAll("_", " ")}</strong></div>
       </div>

@@ -41,7 +41,6 @@ export interface NotificationItem {
 
 export interface UserSettings {
   launchAoe2OnStartup: boolean;
-  serverRegion: string;
   matchNotifications: boolean;
   autoRejectFamilySharing: boolean;
   maximumLowerOpponentRatingGap: number;
