@@ -19,6 +19,15 @@ export interface LocalCustomContentCatalog {
   scannedAt: string;
 }
 
+export interface EnabledUiModsResult {
+  mods: string[];
+  profileId?: string;
+}
+
+export interface DisableUiModsResult {
+  disabled: string[];
+}
+
 export interface CustomLobbyPlayer {
   id: string;
   displayName: string;

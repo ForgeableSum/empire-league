@@ -37,6 +37,7 @@ export interface NotificationItem {
   detail?: string;
   durationMs: number | null;
   dismissible?: boolean;
+  action?: { label: string; run: () => void | Promise<void> };
 }
 
 export interface UserSettings {

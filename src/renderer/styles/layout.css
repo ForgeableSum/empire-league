@@ -3524,8 +3524,19 @@
   pointer-events: auto;
 }
 
+.toast.has-action {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "icon copy close"
+    ". action .";
+}
+
 .toast.info .toast-icon {
   color: var(--accent-2);
+}
+
+.toast.has-action .toast-icon {
+  grid-area: icon;
 }
 
 .toast.success .toast-icon {
@@ -3619,6 +3630,36 @@
 .toast button:hover {
   border-color: var(--line);
   color: var(--text);
+}
+
+.toast.has-action .toast-copy {
+  grid-area: copy;
+}
+
+.toast.has-action button.toast-action {
+  grid-area: action;
+  justify-self: start;
+  width: auto;
+  min-width: 112px;
+  padding: 0 12px;
+  border-color: var(--line);
+  color: var(--text);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.toast.has-action > button:not(.toast-action) {
+  grid-area: close;
+}
+
+.toast.has-action button.toast-action:hover {
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+
+.toast.has-action button.toast-action:disabled {
+  cursor: wait;
+  opacity: .65;
 }
 
 .toast-progress {

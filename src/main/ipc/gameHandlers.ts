@@ -1,11 +1,12 @@
 import { app, BrowserWindow, clipboard, ipcMain, screen, shell } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { access, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
+import { empireLeagueMapsModName } from "../aoe2MapInstaller.js";
 import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings } from "../../shared/contracts/customLobby.js";
 import {
@@ -306,6 +307,107 @@ async function scanLocalCustomContent() {
     scannedRoots: roots,
     scannedAt: new Date().toISOString()
   };
+}
+
+async function detectEnabledUiMods(): Promise<{ mods: string[]; profileId?: string }> {
+  const profilesRoot = join(homedir(), "Games", "Age of Empires 2 DE");
+  let profiles: Array<{ name: string; activityMs: number }>;
+  try {
+    const entries = (await readdir(profilesRoot, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && /^\d{17}$/.test(entry.name));
+    profiles = await Promise.all(entries.map(async (entry) => ({
+      name: entry.name,
+      activityMs: (await stat(join(profilesRoot, entry.name, "mods", "mod-status.json")).catch(() => null))?.mtimeMs ?? 0
+    })));
+  } catch {
+    return { mods: [] };
+  }
+
+  const profile = profiles.sort((left, right) => right.activityMs - left.activityMs)[0];
+  if (!profile) return { mods: [] };
+
+  let statuses: Array<{ Path?: string; Enabled?: boolean; Title?: string }> = [];
+  try {
+    const parsed = JSON.parse(
+      await readFile(join(profilesRoot, profile.name, "mods", "mod-status.json"), "utf8")
+    ) as { Mods?: Array<{ Path?: string; Enabled?: boolean; Title?: string }> };
+    statuses = parsed.Mods ?? [];
+  } catch {
+    return { mods: [], profileId: profile.name };
+  }
+
+  const containsAutomationSensitiveUi = async (root: string, depth = 0): Promise<boolean> => {
+    if (depth > 8) return false;
+    let entries;
+    try {
+      entries = await readdir(root, { withFileTypes: true });
+    } catch {
+      return false;
+    }
+    for (const entry of entries) {
+      const absolutePath = join(root, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.toLowerCase() === "widgetui") return true;
+        if (await containsAutomationSensitiveUi(absolutePath, depth + 1)) return true;
+      } else {
+        const normalized = absolutePath.replace(/\\/g, "/").toLowerCase();
+        if (
+          normalized.includes("/widgetui/")
+          || normalized.includes("/resources/_common/wpfg/")
+          || normalized.includes("/resources/_common/drs/interface/")
+        ) return true;
+      }
+    }
+    return false;
+  };
+
+  const detected = new Set<string>();
+  for (const mod of statuses) {
+    if (mod.Enabled === false || !mod.Path) continue;
+    const pathParts = String(mod.Path).replace(/\\/g, "/").split("/").filter(Boolean);
+    const folder = pathParts.at(-1);
+    if (!folder) continue;
+    const displayName = String(mod.Title || folder.replace(/^\d+_/, "")).trim();
+    if (displayName.toLowerCase() === empireLeagueMapsModName.toLowerCase()) continue;
+    const indicatedCategory = pathParts.find((part) => ["local", "subscribed"].includes(part.toLowerCase()))?.toLowerCase();
+    const categories = indicatedCategory === "local" || indicatedCategory === "subscribed"
+      ? [indicatedCategory]
+      : ["local", "subscribed"];
+    const hasSensitiveUi = (await Promise.all(categories.map((category) =>
+      containsAutomationSensitiveUi(join(profilesRoot, profile.name, "mods", category, folder))
+    ))).some(Boolean);
+    if (hasSensitiveUi) {
+      detected.add(displayName);
+    }
+  }
+
+  return { mods: [...detected].sort((left, right) => left.localeCompare(right)), profileId: profile.name };
+}
+
+async function disableEnabledUiMods(): Promise<{ disabled: string[] }> {
+  const detected = await detectEnabledUiMods();
+  if (!detected.profileId || !detected.mods.length) return { disabled: [] };
+
+  const statusPath = join(homedir(), "Games", "Age of Empires 2 DE", detected.profileId, "mods", "mod-status.json");
+  const parsed = JSON.parse(await readFile(statusPath, "utf8")) as {
+    Mods?: Array<{ Path?: string; Enabled?: boolean; Title?: string }>;
+  };
+  const detectedNames = new Set(detected.mods.map((name) => name.toLowerCase()));
+  const disabled: string[] = [];
+  for (const mod of parsed.Mods ?? []) {
+    const folder = String(mod.Path ?? "").replace(/\\/g, "/").split("/").filter(Boolean).at(-1) ?? "";
+    const displayName = String(mod.Title || folder.replace(/^\d+_/, "")).trim();
+    if (!detectedNames.has(displayName.toLowerCase()) || mod.Enabled === false) continue;
+    mod.Enabled = false;
+    disabled.push(displayName);
+  }
+  if (!disabled.length) return { disabled: [] };
+
+  const temporaryPath = `${statusPath}.empire-league-tmp`;
+  await copyFile(statusPath, `${statusPath}.empire-league-backup`);
+  await writeFile(temporaryPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+  await rename(temporaryPath, statusPath);
+  return { disabled };
 }
 
 const replayPollIntervalMs = 1500;
@@ -1982,6 +2084,8 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 
 export function registerGameHandlers(): void {
   ipcMain.handle("game:scan-local-custom-content", scanLocalCustomContent);
+  ipcMain.handle("game:detect-enabled-ui-mods", detectEnabledUiMods);
+  ipcMain.handle("game:disable-enabled-ui-mods", disableEnabledUiMods);
   ipcMain.handle("game:set-lobby-input-lock", async (event, locked: boolean) => {
     const requested = locked === true;
     const applied = setWindowsInputBlocked(requested);

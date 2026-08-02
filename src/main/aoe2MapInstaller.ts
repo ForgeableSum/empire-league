@@ -3,7 +3,7 @@ import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promi
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-const localModName = "Empire League Maps";
+export const empireLeagueMapsModName = "Empire League Maps";
 const bundledFiles = [
   { source: "KotD6 Arabia EL.rms", target: ["resources", "_common", "random-map-scripts", "KotD6 Arabia EL.rms"] },
   { source: "KotD6 Arabia EL.png", target: ["resources", "_common", "random-map-scripts", "KotD6 Arabia EL.png"] },
@@ -48,7 +48,7 @@ export async function installBundledAoe2Maps(): Promise<Aoe2MapInstallResult> {
   const result: Aoe2MapInstallResult = { installedProfiles: [], skippedProfiles: [] };
 
   for (const profileId of profileIds) {
-    const modRoot = join(profilesRoot, profileId, "mods", "local", localModName);
+    const modRoot = join(profilesRoot, profileId, "mods", "local", empireLeagueMapsModName);
     const mapDirectory = join(modRoot, "resources", "_common", "random-map-scripts");
     await Promise.all(legacyMapFiles.map((fileName) => rm(
       join(mapDirectory, fileName),
@@ -62,7 +62,7 @@ export async function installBundledAoe2Maps(): Promise<Aoe2MapInstallResult> {
     await writeFile(join(modRoot, "info.json"), JSON.stringify({
       Author: "Empire League",
       Description: "Maps installed and maintained by Empire League.",
-      Title: localModName
+      Title: empireLeagueMapsModName
     }));
     if (current.every(Boolean)) {
       result.skippedProfiles.push(profileId);

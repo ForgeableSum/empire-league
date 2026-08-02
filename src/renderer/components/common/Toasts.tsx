@@ -25,6 +25,7 @@ export function Toasts() {
 function Toast({ item, dismiss }: { item: NotificationItem; dismiss: () => void }) {
   const [remainingMs, setRemainingMs] = useState(item.durationMs ?? 0);
   const [paused, setPaused] = useState(false);
+  const [actionPending, setActionPending] = useState(false);
   const startedAtRef = useRef(Date.now());
   const Icon = toneIcons[item.tone];
 
@@ -46,12 +47,25 @@ function Toast({ item, dismiss }: { item: NotificationItem; dismiss: () => void 
   } as CSSProperties;
 
   return (
-    <div className={`toast ${item.tone}`} onMouseEnter={pauseTimer} onMouseLeave={() => setPaused(false)}>
+    <div className={`toast ${item.tone}${item.action ? " has-action" : ""}`} onMouseEnter={pauseTimer} onMouseLeave={() => setPaused(false)}>
       <Icon className={`toast-icon${item.tone === "loading" ? " spin" : ""}`} size={20} aria-hidden="true" />
       <div className="toast-copy">
         <strong>{item.message}</strong>
         {item.detail && <span>{item.detail}</span>}
       </div>
+      {item.action && (
+        <button
+          className="toast-action"
+          type="button"
+          disabled={actionPending}
+          onClick={() => {
+            setActionPending(true);
+            void Promise.resolve(item.action?.run()).finally(() => setActionPending(false));
+          }}
+        >
+          {actionPending ? "Disabling…" : item.action.label}
+        </button>
+      )}
       {item.tone !== "loading" && item.dismissible !== false && (
         <button type="button" onClick={dismiss} aria-label="Dismiss notification">
           <X size={16} />

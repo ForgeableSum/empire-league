@@ -13,7 +13,7 @@ import type {
   OpenLobbyResult
 } from "./gameIntegration.js";
 import type { Aoe2CivilizationSelection } from "../aoe2UiManifest.js";
-import type { LocalCustomContentCatalog } from "./customLobby.js";
+import type { DisableUiModsResult, EnabledUiModsResult, LocalCustomContentCatalog } from "./customLobby.js";
 
 export interface SteamFamilyProbeResult {
   status: "owned" | "family_shared" | "unknown";
@@ -39,6 +39,8 @@ export interface LoginItemSettings {
 
 export interface ElectronGameApi {
   scanLocalCustomContent(): Promise<LocalCustomContentCatalog>;
+  detectEnabledUiMods(): Promise<EnabledUiModsResult>;
+  disableEnabledUiMods(): Promise<DisableUiModsResult>;
   detectAoe2Installation(): Promise<GameInstallationStatus>;
   detectAoe2Process(): Promise<GameProcessStatus>;
   runSteamFamilyProbe(expectedSteamId?: string): Promise<SteamFamilyProbeResult>;

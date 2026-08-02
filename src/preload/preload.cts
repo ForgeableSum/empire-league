@@ -3,6 +3,8 @@ import type { ElectronGameApi } from "../shared/contracts/electronApi.js";
 
 const electronApi: ElectronGameApi = {
   scanLocalCustomContent: () => ipcRenderer.invoke("game:scan-local-custom-content"),
+  detectEnabledUiMods: () => ipcRenderer.invoke("game:detect-enabled-ui-mods"),
+  disableEnabledUiMods: () => ipcRenderer.invoke("game:disable-enabled-ui-mods"),
   detectAoe2Installation: () => ipcRenderer.invoke("game:detect-installation"),
   detectAoe2Process: () => ipcRenderer.invoke("game:detect-process"),
   runSteamFamilyProbe: (expectedSteamId) => ipcRenderer.invoke("game:probe-steam-family", expectedSteamId),
