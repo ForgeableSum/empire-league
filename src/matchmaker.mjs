@@ -46,6 +46,9 @@ const minimumQueueTimeMs = 15_000;
 const declinedPairCooldownMs = 30 * 1000;
 const matchSetupTimeoutMs = Number(process.env.MATCH_SETUP_TIMEOUT_MS ?? 120_000);
 const matchResultTimeoutMs = Number(process.env.MATCH_RESULT_TIMEOUT_MS ?? 6 * 60 * 60 * 1000);
+const matchReportCorroborationTimeoutMs = Number(
+  process.env.MATCH_REPORT_CORROBORATION_TIMEOUT_MS ?? 60 * 60 * 1000
+);
 const ticketDisconnectGraceMs = Number(process.env.TICKET_DISCONNECT_GRACE_MS ?? 20_000);
 const soloRatingRangeSchedule = [
   { afterMs: 0, spread: 50 },
@@ -261,8 +264,10 @@ function emit(ticket, event) {
 function clearMatchTimers(match) {
   clearTimeout(match.expirationTimer);
   clearTimeout(match.lifecycleTimer);
+  clearTimeout(match.corroborationTimer);
   match.expirationTimer = undefined;
   match.lifecycleTimer = undefined;
+  match.corroborationTimer = undefined;
 }
 
 function clearTicketDisconnectTimer(ticket) {
@@ -300,6 +305,14 @@ function deleteMatch(match) {
     clearTicketDisconnectTimer(ticket);
     if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
     ticket.matchId = null;
+  }
+}
+
+function releaseMatchTickets(match) {
+  for (const ticket of matchTickets(match)) {
+    clearTicketSearchTimers(ticket);
+    clearTicketDisconnectTimer(ticket);
+    if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
   }
 }
 
@@ -576,6 +589,41 @@ async function resolveContestedResult(match, detail, implicatedTicketIds, report
     });
   }
   deleteMatch(match);
+}
+
+async function resolveVerifiedResult(match, replay) {
+  if (!matches.has(match.id) || match.resultResolved || match.resolvingResult) return false;
+  match.resolvingResult = true;
+  try {
+    const ratings = await recordVerifiedMatchResult(match, replay);
+    match.resultResolved = true;
+    for (const participant of matchTickets(match)) {
+      emit(participant, {
+        type: "result_verified",
+        matchId: match.id,
+        result: resultForTicket(match, participant, replay, ratings)
+      });
+    }
+    deleteMatch(match);
+    console.log(`[matchmaker] ${match.id}: verified result; winner=${replay.winnerProfileId}`);
+    return true;
+  } finally {
+    match.resolvingResult = false;
+  }
+}
+
+function scheduleFirstReportResolution(match, ticketId, replay) {
+  clearTimeout(match.lifecycleTimer);
+  match.lifecycleTimer = undefined;
+  clearTimeout(match.corroborationTimer);
+  match.firstResultReport = { ticketId, replay, receivedAt: new Date().toISOString() };
+  match.corroborationTimer = setTimeout(() => {
+    match.corroborationTimer = undefined;
+    void resolveVerifiedResult(match, replay).catch((error) => {
+      console.error(`[matchmaker] ${match.id}: failed to resolve first replay report:`, error);
+    });
+  }, matchReportCorroborationTimeoutMs);
+  match.corroborationTimer.unref?.();
 }
 
 function sharedMapPool(firstQueue, secondQueue) {
@@ -1608,6 +1656,7 @@ async function handleRequest(request, response) {
         "The match result was not reported before the match expired."
       );
       match.startedAt = new Date().toISOString();
+      releaseMatchTickets(match);
       for (const guestTicket of matchGuests(match)) {
         emit(guestTicket, { type: "game_started", matchId: match.id });
       }
@@ -1618,7 +1667,9 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && resultMatch) {
       const match = matches.get(decodeURIComponent(resultMatch[1]));
       const body = await readJson(request);
-      const actingTicket = tickets.get(body.ticketId);
+      const actingTicket = match
+        ? matchTickets(match).find((ticket) => ticket.id === body.ticketId)
+        : null;
       if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id
         || !matchTickets(match).some((item) => item.id === body.ticketId)) {
         return send(response, 404, { error: "match or ticket not found" });
@@ -1671,6 +1722,9 @@ async function handleRequest(request, response) {
         return send(response, 202, { accepted: false, resolved: false });
       }
       match.resultReports.set(body.ticketId, body.replay);
+      if (!match.firstResultReport) {
+        scheduleFirstReportResolution(match, body.ticketId, body.replay);
+      }
       const reportsByTeam = new Map();
       for (const [ticketId, replay] of match.resultReports) {
         const team = match.assignments.get(ticketId).team;
@@ -1694,20 +1748,7 @@ async function handleRequest(request, response) {
       }
 
       const verifiedReplay = teamOneReport.replay;
-      const ratings = await recordVerifiedMatchResult(match, verifiedReplay);
-      match.resultResolved = true;
-      for (const participant of matchTickets(match)) {
-        emit(participant, {
-          type: "result_verified",
-          matchId: match.id,
-          result: resultForTicket(match, participant, verifiedReplay, ratings)
-        });
-      }
-      deleteMatch(match);
-      console.log(
-        `[matchmaker] ${match.id}: verified from one replay per team;`
-        + ` winner=${verifiedReplay.winnerProfileId}`
-      );
+      await resolveVerifiedResult(match, verifiedReplay);
       return send(response, 200, { accepted: true, resolved: true, contested: false });
     }
 
