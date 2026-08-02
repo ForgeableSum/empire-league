@@ -77,6 +77,7 @@ export interface MatchSummary {
   durationMinutes: number;
   timestamp: string;
   verified: boolean;
+  verificationStatus?: "pending" | "verified" | "contested" | "no_contest" | "rejected";
   queueType: string;
 }
 

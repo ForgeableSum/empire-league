@@ -174,6 +174,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => window.cancelAnimationFrame(firstFrame);
   }, [page]);
 
+  useEffect(() => {
+    if (isPreviewMode || page !== "match-history" || authStatus !== "authenticated") return;
+    let cancelled = false;
+    void matchHistoryService.getMine().then((recentMatches) => {
+      if (!cancelled) setState((previous) => ({ ...previous, recentMatches }));
+    }).catch((error) => {
+      if (!cancelled) log(`Match history refresh failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+    });
+    return () => { cancelled = true; };
+  }, [authStatus, page]);
+
   const services = useMemo(
     () => ({
       matchmaking: import.meta.env.DEV && !isPreviewMode

@@ -45,7 +45,12 @@ async function insertDurableMatch(connection, match, status, completedAt = null,
       (id, queue_id, host_player_id, guest_player_id, selected_map_id, selected_map_name,
        host_civilization, guest_civilization, map_catalog_version, map_group_id, status,
        created_at, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       status = VALUES(status),
+       completed_at = VALUES(completed_at),
+       host_civilization = COALESCE(VALUES(host_civilization), host_civilization),
+       guest_civilization = COALESCE(VALUES(guest_civilization), guest_civilization)`,
     [
       match.id,
       match.host.queueId,
@@ -68,7 +73,11 @@ async function insertDurableMatch(connection, match, status, completedAt = null,
       await connection.execute(
         `INSERT INTO match_participants
           (match_id, player_id, lobby_slot, team_number, civilization)
-         VALUES (?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           lobby_slot = VALUES(lobby_slot),
+           team_number = VALUES(team_number),
+           civilization = COALESCE(VALUES(civilization), civilization)`,
         [
           match.id,
           ticket.player.id,
@@ -78,6 +87,48 @@ async function insertDurableMatch(connection, match, status, completedAt = null,
         ]
       );
     }
+  }
+}
+
+export async function recordPendingMatch(match) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    await insertDurableMatch(connection, match, "in_game");
+    await connection.execute(
+      `INSERT INTO match_results (match_id, winner_player_id, result, verification_status, verified_at)
+       VALUES (?, NULL, NULL, 'pending', NULL)
+       ON DUPLICATE KEY UPDATE verification_status = 'pending'`,
+      [match.id]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function recordNoContestMatch(match) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const completedAt = new Date();
+    await insertDurableMatch(connection, match, "completed", completedAt);
+    await connection.execute(
+      `INSERT INTO match_results (match_id, winner_player_id, result, verification_status, verified_at)
+       VALUES (?, NULL, 'no_contest', 'no_contest', ?)
+       ON DUPLICATE KEY UPDATE
+         winner_player_id = NULL, result = 'no_contest', verification_status = 'no_contest', verified_at = VALUES(verified_at)`,
+      [match.id, completedAt]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
 }
 
@@ -142,7 +193,10 @@ export async function recordVerifiedMatchResult(match, replay) {
     await connection.execute(
       `INSERT INTO match_results
         (match_id, winner_player_id, result, verification_status, verified_at)
-      VALUES (?, ?, ?, 'verified', ?)`,
+      VALUES (?, ?, ?, 'verified', ?)
+      ON DUPLICATE KEY UPDATE
+        winner_player_id = VALUES(winner_player_id), result = VALUES(result),
+        verification_status = 'verified', verified_at = VALUES(verified_at)`,
       [match.id, winners[0].id, result, completedAt]
     );
     const ratings = {};
@@ -182,7 +236,15 @@ export async function recordMatchResultConflict(match, { reason, implicatedTicke
   const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
-    await insertDurableMatch(connection, match, "cancelled");
+    const completedAt = new Date();
+    await insertDurableMatch(connection, match, "completed", completedAt);
+    await connection.execute(
+      `INSERT INTO match_results (match_id, winner_player_id, result, verification_status, verified_at)
+       VALUES (?, NULL, 'no_contest', 'contested', ?)
+       ON DUPLICATE KEY UPDATE
+         winner_player_id = NULL, result = 'no_contest', verification_status = 'contested', verified_at = VALUES(verified_at)`,
+      [match.id, completedAt]
+    );
     for (const ticketId of implicatedTicketIds) {
       const ticket = ticketId === match.host.id ? match.host : ticketId === match.guest.id ? match.guest : null;
       if (!ticket) continue;
@@ -223,19 +285,20 @@ export async function getPlayerMatchHistory(playerId) {
        CASE WHEN m.host_player_id = ? THEN m.host_civilization ELSE m.guest_civilization END AS civilization,
        CASE WHEN m.host_player_id = ? THEN m.guest_civilization ELSE m.host_civilization END AS opponent_civilization,
        CASE
+         WHEN mr.verification_status <> 'verified' THEN 'no_contest'
          WHEN mr.result = 'no_contest' THEN 'no_contest'
          WHEN mr.winner_player_id = ? THEN 'win'
          ELSE 'loss'
        END AS outcome,
        COALESCE(rh.rating_change, 0) AS rating_change,
        TIMESTAMPDIFF(MINUTE, m.created_at, m.completed_at) AS duration_minutes,
-       m.completed_at, mr.verification_status
+       COALESCE(m.completed_at, m.created_at) AS history_at, mr.verification_status
      FROM matches m
      JOIN players opponent ON opponent.id = CASE WHEN m.host_player_id = ? THEN m.guest_player_id ELSE m.host_player_id END
      JOIN match_results mr ON mr.match_id = m.id
      LEFT JOIN rating_history rh ON rh.match_id = m.id AND rh.player_id = ?
-     WHERE (m.host_player_id = ? OR m.guest_player_id = ?) AND m.status = 'completed'
-     ORDER BY m.completed_at DESC
+     WHERE (m.host_player_id = ? OR m.guest_player_id = ?) AND m.status IN ('in_game', 'completed')
+     ORDER BY history_at DESC
      LIMIT 100`,
     [playerId, playerId, playerId, playerId, playerId, playerId, playerId]
   );
@@ -250,8 +313,9 @@ export async function getPlayerMatchHistory(playerId) {
     opponentCivilization: row.opponent_civilization ?? "",
     ratingChange: Number(row.rating_change),
     durationMinutes: Number(row.duration_minutes ?? 0),
-    timestamp: new Date(row.completed_at).toISOString(),
+    timestamp: new Date(row.history_at).toISOString(),
     verified: row.verification_status === "verified",
+    verificationStatus: row.verification_status,
     queueType: row.queue_type
   }));
 }

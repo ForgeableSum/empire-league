@@ -17,6 +17,8 @@ import {
   removeFriend,
   getPlayerMatchHistory,
   linkPlayerAoeProfile,
+  recordPendingMatch,
+  recordNoContestMatch,
   recordMatchResultConflict,
   recordVerifiedMatchResult
 } from "./database.mjs";
@@ -414,8 +416,15 @@ function hasDeclinedPairCooldown(firstPlayerId, secondPlayerId, now = Date.now()
   return false;
 }
 
-function expireActiveMatch(match, message, code = "MATCH_EXPIRED") {
+async function expireActiveMatch(match, message, code = "MATCH_EXPIRED") {
   if (!matches.has(match.id)) return;
+  if (match.startedAt) {
+    try {
+      await recordNoContestMatch(match);
+    } catch (error) {
+      console.error(`[matchmaker] ${match.id}: failed to persist no-contest result:`, error);
+    }
+  }
   emitToMatch(match, { type: "error", code, message });
   deleteMatch(match);
   console.warn(`[matchmaker] ${match.id}: ${message}`);
@@ -423,14 +432,14 @@ function expireActiveMatch(match, message, code = "MATCH_EXPIRED") {
 
 function scheduleMatchLifecycleTimeout(match, timeoutMs, message) {
   clearTimeout(match.lifecycleTimer);
-  match.lifecycleTimer = setTimeout(() => expireActiveMatch(match, message), timeoutMs);
+  match.lifecycleTimer = setTimeout(() => void expireActiveMatch(match, message), timeoutMs);
   match.lifecycleTimer.unref?.();
 }
 
 function refreshMatchSetupTimeout(match) {
   clearTimeout(match.lifecycleTimer);
   match.lifecycleTimer = setTimeout(() => {
-    expireActiveMatch(
+    void expireActiveMatch(
       match,
       "The lobby setup timed out before the game started.",
       "MATCH_SETUP_FAILED"
@@ -1650,12 +1659,13 @@ async function handleRequest(request, response) {
       if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
         return send(response, 403, { error: "only the host may report game start" });
       }
+      match.startedAt = new Date().toISOString();
+      await recordPendingMatch(match);
       scheduleMatchLifecycleTimeout(
         match,
         matchResultTimeoutMs,
         "The match result was not reported before the match expired."
       );
-      match.startedAt = new Date().toISOString();
       releaseMatchTickets(match);
       for (const guestTicket of matchGuests(match)) {
         emit(guestTicket, { type: "game_started", matchId: match.id });

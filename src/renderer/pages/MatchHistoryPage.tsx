@@ -61,7 +61,7 @@ export function MatchHistoryPage() {
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
               <span>{match.durationMinutes}m</span>
               <span>{new Date(match.timestamp).toLocaleDateString()}</span>
-              <span>{match.verified ? "Verified" : "Pending"}</span>
+              <span>{historyStatusLabel(match.verificationStatus, match.verified)}</span>
             </div>
           ))}
           {matches.length === 0 && (
@@ -73,4 +73,11 @@ export function MatchHistoryPage() {
       </div>
     </section>
   );
+}
+
+function historyStatusLabel(status: import("../../shared/contracts/matches").MatchSummary["verificationStatus"], verified: boolean): string {
+  if (verified || status === "verified") return "Verified";
+  if (status === "contested" || status === "rejected") return "Contested";
+  if (status === "no_contest") return "No contest";
+  return "Pending";
 }
