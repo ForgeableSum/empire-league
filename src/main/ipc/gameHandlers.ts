@@ -431,6 +431,8 @@ async function startReplayEndDetection(
   let observedInGameScreen = false;
   let consecutiveMainMenuReads = 0;
   let recoveredFromMainMenu = false;
+  let observedGameProcess = false;
+  let recoveredFromProcessExit = false;
 
   const initialFiles = await findReplayFiles(configuredFolder);
   if (configuredFolder?.trim() && initialFiles.length === 0) {
@@ -452,6 +454,12 @@ async function startReplayEndDetection(
       // fallback armed only after AoE2 has shown an unrecognized (in-game) screen so
       // the pre-game main menu cannot bring Empire League forward accidentally.
       const game = detectAoe2NativeProcess();
+      if (game.running) observedGameProcess = true;
+      if (observedGameProcess && !game.running && !recoveredFromProcessExit) {
+        recoveredFromProcessExit = true;
+        focusMainWindowAfterReplay(window);
+        console.info("[AoE2 replay] RECOVER|Reason=ProcessExited");
+      }
       if (game.pid && game.windowReady && !recoveredFromMainMenu) {
         const screen = readAoe2HostSetupState(game.pid);
         if (screen.state === "unknown") observedInGameScreen = true;

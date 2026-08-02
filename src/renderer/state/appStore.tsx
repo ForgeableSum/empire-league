@@ -1360,6 +1360,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
       ticketRef.current = null;
     }
+    queueJoinInFlightRef.current = false;
+    replayResultInFlightRef.current = false;
     matchedSessionRef.current = null;
     setState((previous) => ({
       ...previous,
