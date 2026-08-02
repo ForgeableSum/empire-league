@@ -2016,8 +2016,18 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:detect-process", async () => {
     const status = await detectAoe2Process();
+    if (ownedAoe2Pid && (!status.running || status.pid !== ownedAoe2Pid)) {
+      console.info(
+        `[AoE2 process] OWNERSHIP_CLEARED|PreviousPid=${ownedAoe2Pid}`
+        + `|CurrentPid=${status.pid ?? "none"}|Running=${status.running}`
+      );
+      ownedAoe2Pid = undefined;
+    }
     if (launchRequested && status.running && status.pid && !ownedAoe2Pid) {
       ownedAoe2Pid = status.pid;
+      launchRequested = false;
+      launchRequestedAt = 0;
+      console.info(`[AoE2 process] OWNERSHIP_ACQUIRED|Pid=${status.pid}`);
     }
     return {
       ...status,
