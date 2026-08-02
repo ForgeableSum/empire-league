@@ -52,6 +52,7 @@ export interface ElectronGameApi {
   confirmReplayEnded(): Promise<void>;
   testReturnToMenuRecovery(): Promise<{ started: boolean; message?: string }>;
   onReplayEnded(listener: (filePath: string) => void): () => void;
+  onAoe2ProcessExited(listener: () => void): () => void;
   onReplayDetectionFailed(listener: (message: string) => void): () => void;
   readReplayFile(filePath: string): Promise<Uint8Array>;
   showAoe2FullscreenAfterDelay(): Promise<GameFocusResult>;

@@ -289,6 +289,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [services]);
 
+  useEffect(() => {
+    if (!window.electronApi) return;
+    return window.electronApi.onAoe2ProcessExited(() => {
+      if (stateRef.current.queueStatus !== "in_game" || !stateRef.current.activeMatch) return;
+      log("AoE2 exited before local result verification completed");
+      void returnToMatchmaking().then(() => {
+        notify("AoE2 was closed. The match result is still pending.", "warning", {
+          detail: "The result may still be resolved from your opponent's replay.",
+          durationMs: 8000
+        });
+      });
+    });
+  }, [services]);
+
   async function signInWithSteam(): Promise<void> {
     setAuthStatus("authenticating");
     setAuthError(null);

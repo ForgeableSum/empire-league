@@ -458,6 +458,7 @@ async function startReplayEndDetection(
       if (observedGameProcess && !game.running && !recoveredFromProcessExit) {
         recoveredFromProcessExit = true;
         focusMainWindowAfterReplay(window);
+        if (!window.webContents.isDestroyed()) window.webContents.send("game:process-exited");
         console.info("[AoE2 replay] RECOVER|Reason=ProcessExited");
       }
       if (game.pid && game.windowReady && !recoveredFromMainMenu) {

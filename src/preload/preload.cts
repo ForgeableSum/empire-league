@@ -24,6 +24,11 @@ const electronApi: ElectronGameApi = {
     ipcRenderer.on("game:replay-ended", handler);
     return () => ipcRenderer.removeListener("game:replay-ended", handler);
   },
+  onAoe2ProcessExited: (listener) => {
+    const handler = () => listener();
+    ipcRenderer.on("game:process-exited", handler);
+    return () => ipcRenderer.removeListener("game:process-exited", handler);
+  },
   onReplayDetectionFailed: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, message: string) => listener(message);
     ipcRenderer.on("game:replay-detection-failed", handler);
