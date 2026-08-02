@@ -32,6 +32,11 @@ export interface SteamFamilyProbeResult {
   message: string;
 }
 
+export interface LoginItemSettings {
+  supported: boolean;
+  openAtLogin: boolean;
+}
+
 export interface ElectronGameApi {
   scanLocalCustomContent(): Promise<LocalCustomContentCatalog>;
   detectAoe2Installation(): Promise<GameInstallationStatus>;
@@ -76,6 +81,8 @@ export interface ElectronGameApi {
   stopMatchFoundAlert(): Promise<void>;
   alertUnreadMessage(): Promise<void>;
   clearUnreadMessageAlert(): Promise<void>;
+  getLoginItemSettings(): Promise<LoginItemSettings>;
+  setLoginItemOpenAtLogin(openAtLogin: boolean): Promise<LoginItemSettings>;
   minimizeToTaskbar(): Promise<void>;
   quitApp(): Promise<void>;
   restartApp(): Promise<void>;

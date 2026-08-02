@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { CircleHelp } from "lucide-react";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { useAppStore } from "../state/appStore";
@@ -6,10 +6,48 @@ import { useAppStore } from "../state/appStore";
 export function SettingsPage() {
   const { state, updateSettings, signOut } = useAppStore();
   const settings = state.settings;
+  const [loginItem, setLoginItem] = useState({ supported: false, openAtLogin: false });
+  const [loginItemLoading, setLoginItemLoading] = useState(true);
+
+  useEffect(() => {
+    const electronApi = window.electronApi;
+    if (!electronApi) {
+      setLoginItemLoading(false);
+      return;
+    }
+    let active = true;
+    void electronApi.getLoginItemSettings()
+      .then((value) => {
+        if (active) setLoginItem(value);
+      })
+      .finally(() => {
+        if (active) setLoginItemLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  async function updateLoginItem(openAtLogin: boolean): Promise<void> {
+    if (!window.electronApi || loginItemLoading) return;
+    setLoginItemLoading(true);
+    try {
+      setLoginItem(await window.electronApi.setLoginItemOpenAtLogin(openAtLogin));
+    } finally {
+      setLoginItemLoading(false);
+    }
+  }
 
   return (
     <section className="settings-grid">
       <SettingsGroup title="Game">
+        <Toggle
+          label="Launch Empire League when I sign in"
+          helpText={loginItem.supported
+            ? "You can also manage this in Windows Startup Apps settings."
+            : "Available in installed Windows builds."}
+          checked={loginItem.openAtLogin}
+          disabled={loginItemLoading || !loginItem.supported}
+          onChange={(openAtLogin) => void updateLoginItem(openAtLogin)}
+        />
         <Toggle
           label="Launch AoE2 when Empire League starts"
           checked={settings.launchAoe2OnStartup}
@@ -80,11 +118,13 @@ function Toggle({
   label,
   helpText,
   checked,
+  disabled = false,
   onChange
 }: {
   label: string;
   helpText?: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (checked: boolean) => void;
 }) {
   const inputId = useId();
@@ -94,7 +134,7 @@ function Toggle({
         <label htmlFor={inputId}>{label}</label>
         {helpText && <HelpTooltip text={helpText} />}
       </span>
-      <input id={inputId} type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <input id={inputId} type="checkbox" checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
     </div>
   );
 }

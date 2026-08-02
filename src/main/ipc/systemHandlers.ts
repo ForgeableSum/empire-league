@@ -49,6 +49,13 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:clear-unread-message-alert", async (event) => {
     BrowserWindow.fromWebContents(event.sender)?.flashFrame(false);
   });
+  ipcMain.handle("system:get-login-item-settings", async () => getLoginItemSettings());
+  ipcMain.handle("system:set-login-item-open-at-login", async (_event, openAtLogin: boolean) => {
+    if (typeof openAtLogin !== "boolean") throw new TypeError("Startup preference must be a boolean.");
+    if (!supportsLoginItems()) return getLoginItemSettings();
+    app.setLoginItemSettings({ openAtLogin });
+    return getLoginItemSettings();
+  });
   ipcMain.handle("system:restart", async () => {
     app.relaunch();
     app.quit();
@@ -73,6 +80,18 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("auth:clear-token", async () => {
     await unlink(authTokenPath()).catch(() => undefined);
   });
+}
+
+function supportsLoginItems(): boolean {
+  return app.isPackaged && process.platform === "win32";
+}
+
+function getLoginItemSettings(): { supported: boolean; openAtLogin: boolean } {
+  const supported = supportsLoginItems();
+  return {
+    supported,
+    openAtLogin: supported && app.getLoginItemSettings().openAtLogin
+  };
 }
 
 function authTokenPath(): string {
