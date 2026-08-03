@@ -223,34 +223,38 @@ export function createMainWindow(): BrowserWindow {
 export function showMainWindowAsGameCover(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   logWindowLifecycle(window, "CALL showMainWindowAsGameCover");
-  if (coveredMainWindow !== window || !coveredMainWindowState) {
+  const alreadyActive = coveredMainWindow === window && coveredMainWindowState !== null;
+  if (!alreadyActive) {
     coveredMainWindow = window;
     coveredMainWindowState = {
       focusable: window.isFocusable(),
       opacity: window.getOpacity()
     };
-  }
-  mainCoverManuallyVisible = true;
-  window.setIgnoreMouseEvents(false);
-  window.setOpacity(reducedOpacityEnabled ? 0.8 : 1);
-  window.setFullScreen(true);
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  window.showInactive();
-  if (mouseCoordinateOverlayEnabled) {
-    showMouseTestOverlay();
-  } else {
-    window.webContents.send("overlay:mouse-test-active", false);
-  }
-  globalShortcut.unregister(toggleCoverAccelerator);
-  globalShortcut.register(toggleCoverAccelerator, () => {
-    if (!coveredMainWindow || coveredMainWindow.isDestroyed()) return;
-    mainCoverManuallyVisible = !mainCoverManuallyVisible;
-    if (mainCoverManuallyVisible) {
-      if (taskbarMinimizedWindow !== coveredMainWindow) coveredMainWindow.showInactive();
+    mainCoverManuallyVisible = true;
+    window.setIgnoreMouseEvents(false);
+    window.setOpacity(reducedOpacityEnabled ? 0.8 : 1);
+    window.setFullScreen(true);
+    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    window.showInactive();
+    if (mouseCoordinateOverlayEnabled) {
+      showMouseTestOverlay();
     } else {
-      coveredMainWindow.hide();
+      window.webContents.send("overlay:mouse-test-active", false);
     }
-  });
+    globalShortcut.unregister(toggleCoverAccelerator);
+    globalShortcut.register(toggleCoverAccelerator, () => {
+      if (!coveredMainWindow || coveredMainWindow.isDestroyed()) return;
+      mainCoverManuallyVisible = !mainCoverManuallyVisible;
+      if (mainCoverManuallyVisible) {
+        if (taskbarMinimizedWindow !== coveredMainWindow) coveredMainWindow.showInactive();
+      } else {
+        coveredMainWindow.hide();
+      }
+    });
+    return;
+  }
+  window.setIgnoreMouseEvents(false);
+  if (mainCoverManuallyVisible && !window.isVisible() && taskbarMinimizedWindow !== window) window.showInactive();
 }
 
 export function restoreMainWindowFromGameCover(): void {

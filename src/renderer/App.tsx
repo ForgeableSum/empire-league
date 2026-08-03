@@ -284,14 +284,18 @@ function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; m
     }
     if (manageNativeLock) void window.electronApi?.setLobbyInputLock(true);
     const removePointerListener = window.electronApi?.onLobbyGuardPointer(setPointer);
-    document.documentElement.classList.add("game-transition-input-forwarded");
     (document.activeElement as HTMLElement | null)?.blur?.();
     return () => {
       if (manageNativeLock) void window.electronApi?.setLobbyInputLock(false);
       removePointerListener?.();
-      document.documentElement.classList.remove("game-transition-input-forwarded");
     };
   }, [active, manageNativeLock]);
+
+  useEffect(() => {
+    const forwarding = active && pointer !== null;
+    document.documentElement.classList.toggle("game-transition-input-forwarded", forwarding);
+    return () => document.documentElement.classList.remove("game-transition-input-forwarded");
+  }, [active, pointer]);
 
   if (!active || !pointer) return null;
   return (
