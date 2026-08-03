@@ -203,15 +203,26 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const [draft, setDraft] = useState("");
   const automationSteps = useRef(new Set<string>());
   const replayResultInFlight = useRef(false);
+  const gameStartRevealRef = useRef<Promise<void> | null>(null);
   const me = room.players.find((player) => player.id === currentPlayerId)!;
   const isHost = room.hostId === currentPlayerId;
   const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => room.players.find((player) => player.slot === index + 1)), [room]);
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
 
+  useEffect(() => () => setLobbyAutomationActive(false), [room.id, setLobbyAutomationActive]);
+
   useEffect(() => {
-    setLobbyAutomationActive(room.status === "launching");
-    return () => setLobbyAutomationActive(false);
+    if (room.status === "launching") {
+      setLobbyAutomationActive(true);
+      return;
+    }
+    if (room.status === "started") {
+      setLobbyAutomationActive(true);
+      void armGameStartReveal().finally(() => setLobbyAutomationActive(false));
+      return;
+    }
+    setLobbyAutomationActive(false);
   }, [room.status, setLobbyAutomationActive]);
 
   useEffect(() => () => {
@@ -320,6 +331,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     }
 
     const allAoeReady = room.players.every((player) => player.aoeReady);
+    if (allAoeReady) void armGameStartReveal();
     const startKey = `${room.id}:aoe-start`;
     if (isHost && allAoeReady && !automationSteps.current.has(startKey)) {
       automationSteps.current.add(startKey);
@@ -341,54 +353,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
 
   useEffect(() => {
     if (room.status !== "started" || !window.electronApi) return;
-    const revealKey = `${room.id}:reveal-game`;
-    if (automationSteps.current.has(revealKey)) return;
-    automationSteps.current.add(revealKey);
-
-    void window.electronApi.startReplayEndDetection().then((detection) => {
-      if (!detection.started) {
-        notify("Post-game return detection could not be started.", "danger", {
-          detail: detection.message || "Replay detection could not be started."
-        });
-      }
-    }).catch((error) => {
-      notify("Post-game return detection could not be started.", "danger", { detail: messageFor(error) });
-    });
-
-    let revealed = false;
-    const reveal = () => {
-      if (revealed) return;
-      revealed = true;
-      window.clearTimeout(timer);
-      stopLoadingScreenListener();
-      stopReplayStartedListener();
-      void (async () => {
-        try {
-          await stopYouTubeShorts();
-          await window.electronApi!.focusAoe2();
-        } catch (error) {
-          notify("Post-game return detection could not be started.", "danger", { detail: messageFor(error) });
-        } finally {
-          await window.electronApi!.setLobbyInputLock(false);
-        }
-      })();
-    };
-    const stopLoadingScreenListener = window.electronApi.onLoadingScreen(reveal);
-    const stopReplayStartedListener = window.electronApi.onReplayStarted(reveal);
-    const timer = window.setTimeout(reveal, lobbySetupTiming.revealAfterStartMs);
-    void window.electronApi.startLoadingScreenWatch().then((watch) => {
-      if (!watch.started) {
-        notify("Loading-screen detection could not be started.", "warning", { detail: watch.message });
-      }
-    }).catch((error) => {
-      notify("Loading-screen detection could not be started.", "warning", { detail: messageFor(error) });
-    });
-
-    return () => {
-      window.clearTimeout(timer);
-      stopLoadingScreenListener();
-      stopReplayStartedListener();
-    };
+    void armGameStartReveal();
   }, [room.id, room.status]);
 
   useEffect(() => {
@@ -423,6 +388,47 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
       if ((await window.electronApi!.detectAoe2Process()).windowReady) return;
     }
     throw new Error("AoE2 did not become ready in time.");
+  }
+
+  function armGameStartReveal(): Promise<void> {
+    const api = window.electronApi;
+    if (!api) return Promise.resolve();
+    if (gameStartRevealRef.current) return gameStartRevealRef.current;
+    gameStartRevealRef.current = new Promise<void>((resolve) => {
+      let revealed = false;
+      const reveal = () => {
+        if (revealed) return;
+        revealed = true;
+        window.clearTimeout(timer);
+        stopLoadingScreenListener();
+        stopReplayStartedListener();
+        void (async () => {
+          try {
+            await stopYouTubeShorts();
+            await api.focusAoe2();
+          } catch (error) {
+            notify("AoE2 could not be revealed after game start.", "danger", { detail: messageFor(error) });
+          } finally {
+            await api.setLobbyInputLock(false);
+            resolve();
+          }
+        })();
+      };
+      const stopLoadingScreenListener = api.onLoadingScreen(reveal);
+      const stopReplayStartedListener = api.onReplayStarted(reveal);
+      const timer = window.setTimeout(reveal, lobbySetupTiming.revealAfterStartMs);
+      void api.startLoadingScreenWatch().then((watch) => {
+        if (!watch.started) notify("Loading-screen detection could not be started.", "warning", { detail: watch.message });
+      }).catch((error) => notify("Loading-screen detection could not be started.", "warning", { detail: messageFor(error) }));
+      void api.startReplayEndDetection().then((detection) => {
+        if (!detection.started) {
+          notify("Post-game return detection could not be started.", "danger", {
+            detail: detection.message || "Replay detection could not be started."
+          });
+        }
+      }).catch((error) => notify("Post-game return detection could not be started.", "danger", { detail: messageFor(error) }));
+    });
+    return gameStartRevealRef.current;
   }
 
   async function applyMapPlayerSettings(player: CustomLobbyRoom["players"][number]) {
