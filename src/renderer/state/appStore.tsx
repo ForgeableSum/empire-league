@@ -33,6 +33,8 @@ interface AppContextValue {
   state: AppState;
   lobbyAutomationActive: boolean;
   setLobbyAutomationActive: (active: boolean) => void;
+  weeklyQueueActive: boolean;
+  setWeeklyQueueActive: (active: boolean) => void;
   page: AppPage;
   setPage: (page: AppPage) => void;
   selectedProfileId: string | null;
@@ -116,6 +118,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [lobbyAutomationActive, setLobbyAutomationActive] = useState(false);
+  const [weeklyQueueActive, setWeeklyQueueActive] = useState(false);
   const [page, setPage] = useState<AppPage>(() => isAppPage(previewPage) ? previewPage : "home");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileReturnPage, setProfileReturnPage] = useState<AppPage>("leaderboard");
@@ -1538,6 +1541,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     state,
     lobbyAutomationActive,
     setLobbyAutomationActive,
+    weeklyQueueActive,
+    setWeeklyQueueActive,
     page,
     setPage,
     selectedProfileId,

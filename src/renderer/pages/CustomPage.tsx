@@ -541,7 +541,7 @@ function customRoomStatusLabel(status: CustomLobbyRoom["status"]): string {
   return "In Game";
 }
 
-function AnimatedEllipsis() {
+export function AnimatedEllipsis() {
   return <span className="animated-ellipsis" aria-hidden="true"><i /><i /><i /></span>;
 }
 
