@@ -17,7 +17,6 @@ let coveredMainWindow: BrowserWindow | null = null;
 let taskbarMinimizedWindow: BrowserWindow | null = null;
 let taskbarMinimizeCompletedWindow: BrowserWindow | null = null;
 let coveredMainWindowState: {
-  alwaysOnTop: boolean;
   focusable: boolean;
   opacity: number;
 } | null = null;
@@ -110,7 +109,7 @@ export function createMainWindow(): BrowserWindow {
     frame: false,
     fullscreen: true,
     kiosk: false,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     resizable: false,
     minimizable: true,
     maximizable: false,
@@ -167,7 +166,6 @@ export function createMainWindow(): BrowserWindow {
     if (mainWindow.isDestroyed()) return;
     logWindowLifecycle(mainWindow, "CALL ready-to-show");
     mainWindow.setFullScreen(true);
-    mainWindow.setAlwaysOnTop(true, "screen-saver");
     fitFullScreenToDisplay();
     mainWindow.show();
     mainWindow.focus();
@@ -228,7 +226,6 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   if (coveredMainWindow !== window || !coveredMainWindowState) {
     coveredMainWindow = window;
     coveredMainWindowState = {
-      alwaysOnTop: window.isAlwaysOnTop(),
       focusable: window.isFocusable(),
       opacity: window.getOpacity()
     };
@@ -237,7 +234,6 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   window.setIgnoreMouseEvents(false);
   window.setOpacity(reducedOpacityEnabled ? 0.8 : 1);
   window.setFullScreen(true);
-  window.setAlwaysOnTop(true, "screen-saver");
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   window.showInactive();
   if (mouseCoordinateOverlayEnabled) {
@@ -268,7 +264,6 @@ export function restoreMainWindowFromGameCover(): void {
   logWindowLifecycle(window, "CALL restoreMainWindowFromGameCover");
   window.setIgnoreMouseEvents(false);
   window.setOpacity(reducedOpacityEnabled ? 0.8 : 1);
-  window.setAlwaysOnTop(state.alwaysOnTop);
   window.setVisibleOnAllWorkspaces(false);
   window.setFocusable(state.focusable);
   if (taskbarMinimizedWindow === window) {
@@ -292,7 +287,6 @@ export function focusMainWindow(window: BrowserWindow): void {
   taskbarMinimizeCompletedWindow = null;
   if (window.isMinimized()) window.restore();
   window.setFullScreen(true);
-  window.setAlwaysOnTop(true, "screen-saver");
   window.show();
   window.focus();
 }
@@ -381,7 +375,6 @@ export function setMainWindowGameCoverOverAoe(active: boolean): void {
   if (!window || window.isDestroyed()) return;
   if (active) {
     if (taskbarMinimizedWindow === window) return;
-    window.setAlwaysOnTop(true, "screen-saver");
     if (mainCoverManuallyVisible) window.showInactive();
   }
 }
@@ -391,7 +384,6 @@ export function setMainWindowGameCoverClickThrough(clickThrough: boolean): void 
   if (!window || window.isDestroyed()) return;
   if (clickThrough) {
     if (taskbarMinimizedWindow === window) return;
-    window.setAlwaysOnTop(true, "screen-saver");
     if (mainCoverManuallyVisible) window.showInactive();
   }
   window.setIgnoreMouseEvents(clickThrough);

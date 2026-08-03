@@ -65,21 +65,31 @@ export function registerSystemHandlers(): void {
     if (url.protocol !== "https:" || url.hostname !== "steamcommunity.com") throw new Error("Invalid Steam login URL.");
     await shell.openExternal(url.toString());
   });
-  ipcMain.handle("auth:load-token", async () => {
+  ipcMain.handle("auth:load-token", async (event) => {
     try {
       const encrypted = await readFile(authTokenPath());
-      return safeStorage.decryptString(encrypted);
+      const token = safeStorage.decryptString(encrypted);
+      setAuthenticatedWindowState(event.sender, true);
+      return token;
     } catch {
       return null;
     }
   });
-  ipcMain.handle("auth:store-token", async (_event, token: string) => {
+  ipcMain.handle("auth:store-token", async (event, token: string) => {
     if (!safeStorage.isEncryptionAvailable()) throw new Error("Secure token storage is unavailable.");
     await writeFile(authTokenPath(), safeStorage.encryptString(token));
+    setAuthenticatedWindowState(event.sender, true);
   });
-  ipcMain.handle("auth:clear-token", async () => {
+  ipcMain.handle("auth:clear-token", async (event) => {
     await unlink(authTokenPath()).catch(() => undefined);
+    setAuthenticatedWindowState(event.sender, false);
   });
+}
+
+function setAuthenticatedWindowState(sender: Electron.WebContents, authenticated: boolean): void {
+  const window = BrowserWindow.fromWebContents(sender);
+  if (!window || window.isDestroyed()) return;
+  window.setAlwaysOnTop(authenticated, authenticated ? "screen-saver" : "normal");
 }
 
 function supportsLoginItems(): boolean {
