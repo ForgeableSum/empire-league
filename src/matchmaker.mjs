@@ -74,6 +74,95 @@ const socialMessages = new Map();
 const socialUnread = new Map();
 const maxSocialMessagesPerConversation = 100;
 const customLobbies = new Map();
+const weeklyQueue = new Map();
+const weeklyPlayersRequired = Math.min(8, Math.max(2, Number(process.env.WEEKLY_QUEUE_PLAYERS ?? 8) || 8));
+const weeklyRotationAnchor = Date.parse("2026-08-03T00:00:00Z");
+const weekMs = 7 * 24 * 60 * 60 * 1000;
+const weeklyModes = [
+  {
+    id: "ffa-nomad", name: "FFA Nomad", description: "No town center. No teammates. Find your footing and outlast every rival.",
+    details: ["8 players", "Free for all", "Nomad start"],
+    map: { id: "land-nomad", name: "Land Nomad EL", gameName: "Land Nomad EL", kind: "map" }
+  },
+  {
+    id: "cba", name: "CBA", description: "The classic Castle Blood Automatic scenario.",
+    details: ["8 players", "Scenario", "Fast action"],
+    map: { id: "cba-requiem", name: "CBA Requiem", gameName: "CBA_=REQUIEM=_V292", kind: "scenario" }
+  },
+  {
+    id: "ffa-arena", name: "FFA Arena", description: "Eight kingdoms begin behind stone walls. Boom, then choose when to strike.",
+    details: ["8 players", "Free for all", "Arena"],
+    map: { id: "arena", name: "Arena", gameName: "Arena", kind: "map" }
+  }
+];
+
+function currentWeeklyMode(now = Date.now()) {
+  const week = Math.floor((now - weeklyRotationAnchor) / weekMs);
+  const index = ((week % weeklyModes.length) + weeklyModes.length) % weeklyModes.length;
+  const startsAt = weeklyRotationAnchor + week * weekMs;
+  return {
+    ...weeklyModes[index],
+    rotationId: `${weeklyModes[index].id}:${new Date(startsAt).toISOString().slice(0, 10)}`,
+    startsAt: new Date(startsAt).toISOString(),
+    endsAt: new Date(startsAt + weekMs).toISOString(),
+    playerCount: weeklyPlayersRequired
+  };
+}
+
+function weeklyQueueStatus(playerId) {
+  const room = playerCustomLobby(playerId);
+  const position = [...weeklyQueue.keys()].indexOf(playerId);
+  const rotation = [0, 1, 2].map((offset) => currentWeeklyMode(Date.now() + offset * weekMs));
+  return {
+    mode: rotation[0],
+    rotation,
+    queued: position >= 0,
+    position: position >= 0 ? position + 1 : undefined,
+    playersQueued: weeklyQueue.size,
+    room: room?.source === "weekly" ? room : undefined
+  };
+}
+
+function assembleWeeklyRooms() {
+  while (weeklyQueue.size >= weeklyPlayersRequired) {
+    const entries = [...weeklyQueue.entries()].slice(0, weeklyPlayersRequired);
+    const mode = currentWeeklyMode();
+    for (const [playerId] of entries) weeklyQueue.delete(playerId);
+    const players = entries.map(([id, entry], index) => ({
+      id,
+      displayName: entry.player.displayName,
+      ...(entry.player.avatarUrl ? { avatarUrl: entry.player.avatarUrl } : {}),
+      slot: index + 1,
+      team: 0,
+      civilization: entry.civilization,
+      ready: false,
+      host: index === 0
+    }));
+    const room = {
+      id: randomUUID(),
+      name: `Weekly Queue: ${mode.name}`,
+      hostId: players[0].id,
+      map: mode.map,
+      players,
+      messages: [],
+      gameSettings: {
+        lockTeams: false, teamTogether: false, teamPositions: false, sharedExploration: false,
+        lockSpeed: true, allowHandicap: false, allowCheats: false, turboMode: false,
+        fullTechTree: false, empireWarsMode: false, suddenDeathMode: false,
+        regicideMode: false, antiquityMode: false, recordGame: true
+      },
+      maxPlayers: weeklyPlayersRequired,
+      status: "open",
+      createdAt: new Date().toISOString(),
+      source: "weekly",
+      locked: true,
+      weeklyModeId: mode.rotationId
+    };
+    addLobbySystemMessage(room, `${mode.name} queue filled. Choose a civilization, ready up, and the host can begin.`);
+    customLobbies.set(room.id, room);
+  }
+  broadcastCustomRooms();
+}
 
 function demoPlayer(id, displayName, slot, team, civilization, ready = true) {
   return { id, displayName, slot, team, civilization, ready, host: slot === 1 };
@@ -128,6 +217,7 @@ function playerCustomLobby(playerId) {
 }
 
 function cleanupCustomLobbyDisconnect(playerId) {
+  weeklyQueue.delete(playerId);
   const room = playerCustomLobby(playerId);
   if (!room || room.status === "started") return;
   if (room.hostId === playerId) {
@@ -1013,6 +1103,37 @@ async function handleRequest(request, response) {
       return send(response, 200, { rooms: publicCustomRooms() });
     }
 
+    if (request.method === "GET" && url.pathname === "/weekly-queue") {
+      return send(response, 200, weeklyQueueStatus(authenticatedPlayer.id));
+    }
+
+    if (request.method === "POST" && url.pathname === "/weekly-queue") {
+      if (playerCustomLobby(authenticatedPlayer.id)) {
+        return send(response, 409, { error: "Leave your current lobby before joining the weekly queue." });
+      }
+      if ([...tickets.values()].some((ticket) => ticket.player.id === authenticatedPlayer.id)) {
+        return send(response, 409, { error: "Leave your active matchmaking queue before joining the weekly queue." });
+      }
+      const body = await readJson(request);
+      const civilization = String(body.civilization ?? "Random").trim().slice(0, 40) || "Random";
+      const mode = currentWeeklyMode();
+      const existing = weeklyQueue.get(authenticatedPlayer.id);
+      if (existing && existing.rotationId !== mode.rotationId) weeklyQueue.delete(authenticatedPlayer.id);
+      weeklyQueue.set(authenticatedPlayer.id, {
+        player: authenticatedPlayer,
+        civilization,
+        rotationId: mode.rotationId,
+        joinedAt: existing?.joinedAt ?? new Date().toISOString()
+      });
+      assembleWeeklyRooms();
+      return send(response, 200, weeklyQueueStatus(authenticatedPlayer.id));
+    }
+
+    if (request.method === "DELETE" && url.pathname === "/weekly-queue") {
+      weeklyQueue.delete(authenticatedPlayer.id);
+      return send(response, 200, weeklyQueueStatus(authenticatedPlayer.id));
+    }
+
     if (request.method === "POST" && url.pathname === "/custom-lobbies") {
       if (playerCustomLobby(authenticatedPlayer.id)) return send(response, 409, { error: "Leave your current custom lobby first." });
       const body = await readJson(request);
@@ -1100,7 +1221,7 @@ async function handleRequest(request, response) {
       if (!room || !player) return send(response, 403, { error: "You are not in that lobby." });
       if (room.status !== "open") return send(response, 409, { error: "The lobby has already started." });
       const body = await readJson(request);
-      if (Number.isInteger(body.team) && body.team >= 0 && body.team <= 4) player.team = body.team;
+      if (!room.locked && Number.isInteger(body.team) && body.team >= 0 && body.team <= 4) player.team = body.team;
       if (typeof body.civilization === "string" && body.civilization.length <= 40) player.civilization = body.civilization;
       if (typeof body.ready === "boolean") player.ready = body.ready;
       broadcastCustomRooms();
@@ -1113,6 +1234,7 @@ async function handleRequest(request, response) {
     if (request.method === "PATCH" && updateCustomSettings) {
       const room = customLobbies.get(decodeURIComponent(updateCustomSettings[1]));
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can change game settings." });
+      if (room.locked) return send(response, 403, { error: "Weekly game settings are locked." });
       if (room.status !== "open") return send(response, 409, { error: "The lobby has already started." });
       const body = await readJson(request);
       for (const key of Object.keys(room.gameSettings)) {
@@ -1140,6 +1262,7 @@ async function handleRequest(request, response) {
     if (request.method === "DELETE" && kickCustomPlayer) {
       const room = customLobbies.get(decodeURIComponent(kickCustomPlayer[1]));
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can remove players." });
+      if (room.locked) return send(response, 403, { error: "Weekly queue players cannot be removed by the host." });
       const playerId = decodeURIComponent(kickCustomPlayer[2]);
       if (playerId === room.hostId) return send(response, 400, { error: "The host cannot remove themselves." });
       const removed = room.players.find((player) => player.id === playerId);
@@ -1419,7 +1542,8 @@ async function handleRequest(request, response) {
           deleteDisconnectedTicket(ticket, "The other player restarted or left the match.");
         }
       }
-      const alreadyActive = [...tickets.values()].some((ticket) => ticket.player.id === authenticatedPlayer.id);
+      const alreadyActive = weeklyQueue.has(authenticatedPlayer.id)
+        || [...tickets.values()].some((ticket) => ticket.player.id === authenticatedPlayer.id);
       if (alreadyActive || playersJoiningQueue.has(authenticatedPlayer.id)) {
         return send(response, 409, { error: "player already has an active queue or match" });
       }

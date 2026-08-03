@@ -168,7 +168,7 @@ export function CustomPage() {
         </div>
         <div className="custom-room-list">
           <div className="custom-room-list-header"><span>Room</span><span>Content</span><span>Players</span><span>Status</span><span /></div>
-          {rooms.map((room) => (
+          {rooms.filter((room) => room.source !== "weekly").map((room) => (
             <article className="custom-room-row" key={room.id}>
               <div><strong>{room.name}</strong><small>{room.demo ? "Demo room · " : ""}Hosted by {room.players.find((player) => player.host)?.displayName ?? "Unknown"}</small></div>
               <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
@@ -193,7 +193,7 @@ function ContentSelect({ label, items, value, onChange }: { label: string; items
   return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${item.name}${item.enabled ? "" : ` (Disabled: ${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
 }
 
-function NetworkLobby({ room, currentPlayerId, notify }: {
+export function NetworkLobby({ room, currentPlayerId, notify }: {
   room: CustomLobbyRoom;
   currentPlayerId: string;
   notify: ReturnType<typeof useAppStore>["notify"];
@@ -249,7 +249,7 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
         try {
           const opened = await window.electronApi!.openAoe2Lobby(room.platformLobbyId!);
           if (!opened.opened) throw new Error("AoE2 did not open the custom lobby.");
-          if (content?.kind !== "scenario") await applyMapPlayerSettings(me);
+          if (content?.kind !== "scenario" || room.source === "weekly") await applyMapPlayerSettings(me);
           await customLobbyService.reportJoined(room.id);
         } catch (error) {
           notify("Could not join the AoE2 lobby.", "danger", { detail: messageFor(error), durationMs: null });
@@ -294,7 +294,7 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
       automationSteps.current.add(hostReadyKey);
       void (async () => {
         try {
-          if (content?.kind !== "scenario") await applyMapPlayerSettings(me);
+          if (content?.kind !== "scenario" || room.source === "weekly") await applyMapPlayerSettings(me);
           const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready", "custom");
           if (!ready.sent) throw new Error(ready.message || "AoE2 could not ready the host.");
           await customLobbyService.reportAoeReady(room.id);
@@ -431,22 +431,22 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
     <section className="custom-lobby">
       <div className="custom-lobby-heading">
         <div><span className="eyebrow">Live custom lobby</span><h2>{room.name}</h2><p>{room.players.length}/{room.maxPlayers} players · {room.map?.name ?? "Standard map"} · {room.dataMod?.name ?? "No data mod"}</p></div>
-        <button className="secondary" type="button" onClick={() => act(customLobbyService.leave(room.id))}><X size={16} /> Leave lobby</button>
+        {room.source !== "weekly" && <button className="secondary" type="button" onClick={() => act(customLobbyService.leave(room.id))}><X size={16} /> Leave lobby</button>}
       </div>
       <div className="custom-lobby-layout">
         <article className="panel lobby-roster">
-          {room.map?.kind === "scenario" && <p className="scenario-settings-note">This scenario defines its own player slots, civilizations, teams, and map.</p>}
+          {room.map?.kind === "scenario" && room.source !== "weekly" && <p className="scenario-settings-note">This scenario defines its own player slots, civilizations, teams, and map.</p>}
           <div className="lobby-roster-header"><strong>Players</strong><span>Team</span><span>Civilization</span><span>Status</span></div>
           {slots.map((player, index) => (
             <div className={player ? "lobby-player-row occupied" : "lobby-player-row"} key={index}>
-              <div className="lobby-player-name"><span className="lobby-slot-number">{index + 1}</span>{player ? <><Shield size={17} /><strong>{player.displayName}</strong>{player.host && <Crown size={15} />} {isHost && !player.host && <button className="lobby-kick" aria-label={`Remove ${player.displayName}`} onClick={() => act(customLobbyService.kick(room.id, player.id))}><X size={13} /></button>}</> : <span>Open slot</span>}</div>
-              {player && room.map?.kind === "scenario" ? <><span>Scenario</span><span>Scenario-defined</span>{player.id === currentPlayerId
+              <div className="lobby-player-name"><span className="lobby-slot-number">{index + 1}</span>{player ? <><Shield size={17} /><strong>{player.displayName}</strong>{player.host && <Crown size={15} />} {isHost && !player.host && !room.locked && <button className="lobby-kick" aria-label={`Remove ${player.displayName}`} onClick={() => act(customLobbyService.kick(room.id, player.id))}><X size={13} /></button>}</> : <span>Open slot</span>}</div>
+              {player && room.map?.kind === "scenario" && room.source !== "weekly" ? <><span>Scenario</span><span>Scenario-defined</span>{player.id === currentPlayerId
                 ? <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
                 : <span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span>}</> : player && (player.id === currentPlayerId ? <>
-                <ThemedSelect className="lobby-inline-select" label="Team" value={String(player.team)} onChange={(team) => act(customLobbyService.updatePlayer(room.id, { team: Number(team) }))} options={[{ value: "0", label: "No team" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />
+                {room.source === "weekly" ? <span>Free for all</span> : <ThemedSelect className="lobby-inline-select" label="Team" value={String(player.team)} onChange={(team) => act(customLobbyService.updatePlayer(room.id, { team: Number(team) }))} options={[{ value: "0", label: "No team" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />}
                 <ThemedSelect className="lobby-inline-select" label="Civilization" value={player.civilization} onChange={(civilization) => act(customLobbyService.updatePlayer(room.id, { civilization }))} options={["Random", ...civilizations].map((civilization) => ({ value: civilization, label: civilization }))} />
                 <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
-              </> : <><span>{player.team ? `Team ${player.team}` : "No team"}</span><span>{player.civilization}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>)}
+              </> : <><span>{room.source === "weekly" ? "Free for all" : player.team ? `Team ${player.team}` : "No team"}</span><span>{player.civilization}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>)}
             </div>
           ))}
         </article>
@@ -458,7 +458,7 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
       </div>
       <LobbyGameSettings
         settings={room.gameSettings ?? defaultCustomLobbyGameSettings}
-        editable={isHost && room.status === "open"}
+        editable={isHost && room.status === "open" && !room.locked}
         onChange={(key, checked) => act(customLobbyService.updateSettings(room.id, { [key]: checked }))}
       />
       <div className={`custom-lobby-actions${room.status !== "open" ? " launching" : ""}`}>

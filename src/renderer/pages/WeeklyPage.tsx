@@ -1,98 +1,116 @@
 import { CalendarDays, Check, Clock3, Shield, Sparkles, Swords, Users } from "lucide-react";
-import { useMemo, useState } from "react";
-
-type WeeklyMode = {
-  name: string;
-  shortName: string;
-  description: string;
-  details: string[];
-};
-
-const weeklyModes: WeeklyMode[] = [
-  {
-    name: "FFA Nomad",
-    shortName: "Nomad",
-    description: "No town center. No teammates. Find your footing, claim the wilds, and outlast every rival.",
-    details: ["8 players", "Free for all", "Nomad start"]
-  },
-  {
-    name: "CBA",
-    shortName: "CBA",
-    description: "The classic Castle Blood Automatic scenario. Break enemy gates and earn stronger units with every raze.",
-    details: ["4v4", "Scenario", "Fast action"]
-  },
-  {
-    name: "FFA Arena",
-    shortName: "Arena",
-    description: "Eight kingdoms begin behind stone walls. Boom in peace, then decide exactly when to strike.",
-    details: ["8 players", "Free for all", "Arena"]
-  }
-];
-
-const rotationAnchor = new Date("2026-07-27T00:00:00");
-const weekMs = 7 * 24 * 60 * 60 * 1000;
-
-function rotationIndex(date: Date): number {
-  const elapsedWeeks = Math.floor((date.getTime() - rotationAnchor.getTime()) / weekMs);
-  return ((elapsedWeeks % weeklyModes.length) + weeklyModes.length) % weeklyModes.length;
-}
+import { useEffect, useState } from "react";
+import { civilizations } from "../../shared/civilizations";
+import type { CustomLobbyRoom } from "../../shared/contracts/customLobby";
+import { ThemedSelect } from "../components/common/ThemedSelect";
+import { customLobbyService } from "../services/customLobbyService";
+import { weeklyQueueService, type WeeklyQueueStatus } from "../services/weeklyQueueService";
+import { useAppStore } from "../state/appStore";
+import { NetworkLobby } from "./CustomPage";
 
 export function WeeklyPage() {
-  const [queued, setQueued] = useState(false);
-  const rotation = useMemo(() => {
-    const index = rotationIndex(new Date());
-    return [0, 1, 2].map((offset) => weeklyModes[(index + offset) % weeklyModes.length]);
-  }, []);
-  const current = rotation[0];
+  const { state, ensureAoe2Ready, notify } = useAppStore();
+  const [status, setStatus] = useState<WeeklyQueueStatus | null>(null);
+  const [room, setRoom] = useState<CustomLobbyRoom>();
+  const [civilization, setCivilization] = useState("Random");
+  const [pending, setPending] = useState(false);
 
+  useEffect(() => {
+    void weeklyQueueService.status().then((next) => {
+      setStatus(next);
+      setRoom(next.room);
+    }).catch((error) => notify("Weekly queue could not be loaded.", "danger", { detail: messageFor(error) }));
+    return customLobbyService.onEvent((event) => {
+      const active = event.rooms.find((candidate) => candidate.source === "weekly"
+        && candidate.players.some((player) => player.id === state.currentUser.id));
+      if (active) {
+        setRoom(active);
+        setStatus((current) => current ? { ...current, queued: false, room: active } : current);
+      } else {
+        setRoom(undefined);
+      }
+    });
+  }, [state.currentUser.id]);
+
+  useEffect(() => {
+    if (!status?.queued || room) return;
+    const timer = window.setInterval(() => {
+      void weeklyQueueService.status().then((next) => {
+        setStatus(next);
+        if (next.room) setRoom(next.room);
+      }).catch(() => undefined);
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [status?.queued, room]);
+
+  async function toggleQueue() {
+    if (!status || pending) return;
+    setPending(true);
+    try {
+      if (status.queued) {
+        setStatus(await weeklyQueueService.leave());
+      } else {
+        if (!(await ensureAoe2Ready("custom"))) return;
+        const next = await weeklyQueueService.join(civilization);
+        setStatus(next);
+        setRoom(next.room);
+      }
+    } catch (error) {
+      notify("Weekly queue could not be updated.", "danger", { detail: messageFor(error) });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (room) return <NetworkLobby room={room} currentPlayerId={state.currentUser.id} notify={notify} />;
+
+  const mode = status?.mode;
   return (
     <section className="weekly-page">
       <div className="weekly-hero">
         <div className="weekly-hero-copy">
-          <span className="weekly-kicker"><Sparkles size={14} /> This week’s game</span>
-          <h2>{current.name}</h2>
-          <p>{current.description}</p>
+          <span className="weekly-kicker"><Sparkles size={14} /> This week&apos;s game</span>
+          <h2>{mode?.name ?? "Loading weekly game..."}</h2>
+          <p>{mode?.description ?? "Fetching this week's rules from the server."}</p>
           <div className="weekly-mode-details">
-            {current.details.map((detail, index) => (
-              <span key={detail}>{index === 0 ? <Users size={15} /> : index === 1 ? <Swords size={15} /> : <Shield size={15} />}{detail}</span>
-            ))}
+            {(mode?.details ?? []).map((detail, index) => <span key={detail}>{index === 0 ? <Users size={15} /> : index === 1 ? <Swords size={15} /> : <Shield size={15} />}{detail}</span>)}
           </div>
         </div>
         <div className="weekly-queue-card">
           <span>Just for fun</span>
           <strong>Unranked · Weekly rules</strong>
-          <button className={queued ? "weekly-join queued" : "weekly-join"} type="button" onClick={() => setQueued((value) => !value)}>
-            {queued ? <Check size={18} /> : <Swords size={18} />}
-            {queued ? "Leave queue" : "Join weekly queue"}
+          <ThemedSelect label="Civilization" value={civilization} onChange={setCivilization} disabled={status?.queued || pending} options={["Random", ...civilizations].map((value) => ({ value, label: value }))} />
+          <button className={status?.queued ? "weekly-join queued" : "weekly-join"} disabled={!status || pending} type="button" onClick={() => void toggleQueue()}>
+            {status?.queued ? <Check size={18} /> : <Swords size={18} />}
+            {pending ? "Updating..." : status?.queued ? "Leave queue" : "Join weekly queue"}
           </button>
-          <small>{queued ? "Searching for fellow challengers…" : "Ratings are not affected"}</small>
+          <small>{status?.queued ? `Queue position ${status.position ?? "—"} · ${status.playersQueued}/${mode?.playerCount ?? 8} assembled` : "Ratings are not affected"}</small>
         </div>
       </div>
 
       <div className="weekly-heading">
-        <div>
-          <span className="eyebrow">Three-week rotation</span>
-          <h2>On the horizon</h2>
-        </div>
+        <div><span className="eyebrow">Three-week rotation</span><h2>On the horizon</h2></div>
         <span className="weekly-reset"><Clock3 size={15} /> Changes every Monday</span>
       </div>
-
       <div className="weekly-rotation" aria-label="Weekly game rotation">
-        {rotation.map((mode, index) => (
-          <article className={index === 0 ? "weekly-rotation-card current" : "weekly-rotation-card"} key={mode.name}>
+        {(status?.rotation ?? []).map((rotationMode, index) => (
+          <article className={index === 0 ? "weekly-rotation-card current" : "weekly-rotation-card"} key={rotationMode.rotationId}>
             <div className="weekly-week-marker"><span>{index === 0 ? "Now" : `0${index + 1}`}</span></div>
             <div className="weekly-card-copy">
               <span className="weekly-timing">{index === 0 ? "Playing this week" : index === 1 ? "Next week" : "In 2 weeks"}</span>
-              <h3>{mode.name}</h3>
-              <p>{mode.description}</p>
-              <div className="weekly-card-tags">{mode.details.map((detail) => <span key={detail}>{detail}</span>)}</div>
+              <h3>{rotationMode.name}</h3>
+              <p>{rotationMode.description}</p>
+              <div className="weekly-card-tags">{rotationMode.details.map((detail) => <span key={detail}>{detail}</span>)}</div>
             </div>
-            {index < rotation.length - 1 && <div className="weekly-connector" aria-hidden="true" />}
+            {index < 2 && <div className="weekly-connector" aria-hidden="true" />}
           </article>
         ))}
       </div>
-
-      <div className="weekly-note"><CalendarDays size={18} /><p><strong>Same time, different battlefield.</strong> The weekly queue rotates automatically through Nomad, CBA, and Arena. No Elo, no pressure. Just a change of pace.</p></div>
+      <div className="weekly-note"><CalendarDays size={18} /><p><strong>Same time, different battlefield.</strong> When the queue fills, everyone moves into a locked lobby. Choose a civilization, ready up, and Empire League handles the existing AoE2 lobby automation.</p></div>
     </section>
   );
+}
+
+function messageFor(error: unknown) {
+  return error instanceof Error ? error.message : "An unexpected error occurred.";
 }

@@ -100,4 +100,7 @@ export interface CustomLobbyRoom {
   automationError?: string;
   createdAt: string;
   demo?: boolean;
+  source?: "custom" | "weekly";
+  locked?: boolean;
+  weeklyModeId?: string;
 }
