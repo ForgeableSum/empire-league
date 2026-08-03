@@ -242,7 +242,7 @@ export function NetworkLobby({ room, currentPlayerId, notify }: {
       return;
     }
 
-    const guestJoinKey = `${room.id}:guest-join`;
+    const guestJoinKey = `${room.id}:guest-join:${room.platformLobbyId ?? "pending"}`;
     if (!isHost && room.platformLobbyId && !me.aoeJoined && !automationSteps.current.has(guestJoinKey)) {
       automationSteps.current.add(guestJoinKey);
       void (async () => {
@@ -260,7 +260,7 @@ export function NetworkLobby({ room, currentPlayerId, notify }: {
     }
 
     const hostPlayer = room.players.find((player) => player.host);
-    const guestReadyKey = `${room.id}:guest-ready`;
+    const guestReadyKey = `${room.id}:guest-ready:${room.platformLobbyId ?? "pending"}`;
     if (!isHost && me.aoeJoined && hostPlayer?.aoeReady && !me.aoeReady && !automationSteps.current.has(guestReadyKey)) {
       automationSteps.current.add(guestReadyKey);
       void (async () => {
@@ -289,7 +289,7 @@ export function NetworkLobby({ room, currentPlayerId, notify }: {
     }
 
     const guestsJoined = room.players.filter((player) => !player.host).every((player) => player.aoeJoined);
-    const hostReadyKey = `${room.id}:host-ready`;
+    const hostReadyKey = `${room.id}:host-ready:${room.platformLobbyId ?? "pending"}`;
     if (isHost && room.platformLobbyId && guestsJoined && !me.aoeReady && !automationSteps.current.has(hostReadyKey)) {
       automationSteps.current.add(hostReadyKey);
       void (async () => {
@@ -427,26 +427,48 @@ export function NetworkLobby({ room, currentPlayerId, notify }: {
     setDraft("");
   }
 
+  if (room.source === "weekly") {
+    const phase = room.automationError
+      ? room.automationError
+      : room.status === "started"
+      ? "Starting game"
+      : room.platformLobbyId
+        ? "Joining and synchronizing the AoE2 lobby"
+        : isHost
+          ? "Creating the AoE2 lobby"
+          : "Waiting for the host to create the AoE2 lobby";
+    return (
+      <section className="custom-lobby weekly-automated-lobby">
+        <article className="panel empty-state">
+          <span className="eyebrow">Weekly queue matched</span>
+          <h2>{room.name}</h2>
+          <p>{phase}<AnimatedEllipsis /></p>
+          <small>{room.players.length} player{room.players.length === 1 ? "" : "s"} continuing · {me.civilization}</small>
+        </article>
+      </section>
+    );
+  }
+
   return (
     <section className="custom-lobby">
       <div className="custom-lobby-heading">
         <div><span className="eyebrow">Live custom lobby</span><h2>{room.name}</h2><p>{room.players.length}/{room.maxPlayers} players · {room.map?.name ?? "Standard map"} · {room.dataMod?.name ?? "No data mod"}</p></div>
-        {room.source !== "weekly" && <button className="secondary" type="button" onClick={() => act(customLobbyService.leave(room.id))}><X size={16} /> Leave lobby</button>}
+        <button className="secondary" type="button" onClick={() => act(customLobbyService.leave(room.id))}><X size={16} /> Leave lobby</button>
       </div>
       <div className="custom-lobby-layout">
         <article className="panel lobby-roster">
-          {room.map?.kind === "scenario" && room.source !== "weekly" && <p className="scenario-settings-note">This scenario defines its own player slots, civilizations, teams, and map.</p>}
+          {room.map?.kind === "scenario" && <p className="scenario-settings-note">This scenario defines its own player slots, civilizations, teams, and map.</p>}
           <div className="lobby-roster-header"><strong>Players</strong><span>Team</span><span>Civilization</span><span>Status</span></div>
           {slots.map((player, index) => (
             <div className={player ? "lobby-player-row occupied" : "lobby-player-row"} key={index}>
               <div className="lobby-player-name"><span className="lobby-slot-number">{index + 1}</span>{player ? <><Shield size={17} /><strong>{player.displayName}</strong>{player.host && <Crown size={15} />} {isHost && !player.host && !room.locked && <button className="lobby-kick" aria-label={`Remove ${player.displayName}`} onClick={() => act(customLobbyService.kick(room.id, player.id))}><X size={13} /></button>}</> : <span>Open slot</span>}</div>
-              {player && room.map?.kind === "scenario" && room.source !== "weekly" ? <><span>Scenario</span><span>Scenario-defined</span>{player.id === currentPlayerId
+              {player && room.map?.kind === "scenario" ? <><span>Scenario</span><span>Scenario-defined</span>{player.id === currentPlayerId
                 ? <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
                 : <span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span>}</> : player && (player.id === currentPlayerId ? <>
-                {room.source === "weekly" ? <span>Free for all</span> : <ThemedSelect className="lobby-inline-select" label="Team" value={String(player.team)} onChange={(team) => act(customLobbyService.updatePlayer(room.id, { team: Number(team) }))} options={[{ value: "0", label: "No team" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />}
+                <ThemedSelect className="lobby-inline-select" label="Team" value={String(player.team)} onChange={(team) => act(customLobbyService.updatePlayer(room.id, { team: Number(team) }))} options={[{ value: "0", label: "No team" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />
                 <ThemedSelect className="lobby-inline-select" label="Civilization" value={player.civilization} onChange={(civilization) => act(customLobbyService.updatePlayer(room.id, { civilization }))} options={["Random", ...civilizations].map((civilization) => ({ value: civilization, label: civilization }))} />
                 <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
-              </> : <><span>{room.source === "weekly" ? "Free for all" : player.team ? `Team ${player.team}` : "No team"}</span><span>{player.civilization}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>)}
+              </> : <><span>{player.team ? `Team ${player.team}` : "No team"}</span><span>{player.civilization}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>)}
             </div>
           ))}
         </article>

@@ -135,7 +135,7 @@ function assembleWeeklyRooms() {
       slot: index + 1,
       team: 0,
       civilization: entry.civilization,
-      ready: false,
+      ready: true,
       host: index === 0
     }));
     const room = {
@@ -152,13 +152,13 @@ function assembleWeeklyRooms() {
         regicideMode: false, antiquityMode: false, recordGame: true
       },
       maxPlayers: weeklyPlayersRequired,
-      status: "open",
+      status: "launching",
       createdAt: new Date().toISOString(),
       source: "weekly",
       locked: true,
       weeklyModeId: mode.rotationId
     };
-    addLobbySystemMessage(room, `${mode.name} queue filled. Choose a civilization, ready up, and the host can begin.`);
+    addLobbySystemMessage(room, `${mode.name} queue filled. Empire League is creating the AoE2 lobby.`);
     customLobbies.set(room.id, room);
   }
   broadcastCustomRooms();
@@ -220,6 +220,30 @@ function cleanupCustomLobbyDisconnect(playerId) {
   weeklyQueue.delete(playerId);
   const room = playerCustomLobby(playerId);
   if (!room || room.status === "started") return;
+  if (room.source === "weekly") {
+    const disconnected = room.players.find((player) => player.id === playerId);
+    room.players = room.players.filter((player) => player.id !== playerId);
+    if (!room.players.length) {
+      customLobbies.delete(room.id);
+      broadcastCustomRooms({ id: room.id, reason: "Every player left the weekly game." });
+      return;
+    }
+    if (room.hostId === playerId) {
+      room.hostId = room.players[0].id;
+      for (const player of room.players) player.host = player.id === room.hostId;
+      room.platformLobbyId = undefined;
+      room.automationError = undefined;
+      for (const player of room.players) {
+        player.aoeJoined = false;
+        player.aoeReady = false;
+      }
+      addLobbySystemMessage(room, `${room.players[0].displayName} is continuing as host.`);
+    } else if (disconnected) {
+      addLobbySystemMessage(room, `${disconnected.displayName} left; the FFA will continue.`);
+    }
+    broadcastCustomRooms();
+    return;
+  }
   if (room.hostId === playerId) {
     customLobbies.delete(room.id);
     broadcastCustomRooms({ id: room.id, reason: "The host disconnected before the game began." });
