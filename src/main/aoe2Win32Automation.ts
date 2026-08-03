@@ -36,7 +36,6 @@ const GetWindowThreadProcessId = user32?.func("uint32_t __stdcall GetWindowThrea
 const IsWindow = user32?.func("bool __stdcall IsWindow(HWND hwnd)");
 const IsWindowVisible = user32?.func("bool __stdcall IsWindowVisible(HWND hwnd)");
 const IsWindowEnabled = user32?.func("bool __stdcall IsWindowEnabled(HWND hwnd)");
-const IsIconic = user32?.func("bool __stdcall IsIconic(HWND hwnd)");
 const GetClientRect = user32?.func("bool __stdcall GetClientRect(HWND hwnd, _Out_ EL_RECT *rect)");
 const GetWindowRect = user32?.func("bool __stdcall GetWindowRect(HWND hwnd, _Out_ EL_RECT *rect)");
 const ClientToScreen = user32?.func("bool __stdcall ClientToScreen(HWND hwnd, _Inout_ EL_POINT *point)");
@@ -44,7 +43,6 @@ const ShowWindow = user32?.func("bool __stdcall ShowWindow(HWND hwnd, int32_t co
 const SetWindowPos = user32?.func("bool __stdcall SetWindowPos(HWND hwnd, HWND insertAfter, int32_t x, int32_t y, int32_t width, int32_t height, uint32_t flags)");
 const SetForegroundWindow = user32?.func("bool __stdcall SetForegroundWindow(HWND hwnd)");
 const GetForegroundWindow = user32?.func("HWND __stdcall GetForegroundWindow()");
-const AttachThreadInput = user32?.func("bool __stdcall AttachThreadInput(uint32_t idAttach, uint32_t idAttachTo, bool attach)");
 const WindowFromPoint = user32?.func("HWND __stdcall WindowFromPoint(EL_POINT point)");
 const GetAncestor = user32?.func("HWND __stdcall GetAncestor(HWND hwnd, uint32_t flags)");
 const GetCursorPos = user32?.func("bool __stdcall GetCursorPos(_Out_ EL_POINT *point)");
@@ -63,7 +61,6 @@ const SendMessageTimeoutW = user32?.func(
 );
 const GetPixel = gdi32?.func("uint32_t __stdcall GetPixel(HANDLE dc, int32_t x, int32_t y)");
 const Sleep = kernel32?.func("void __stdcall Sleep(uint32_t milliseconds)");
-const GetCurrentThreadId = kernel32?.func("uint32_t __stdcall GetCurrentThreadId()");
 const GetLastError = kernel32?.func("uint32_t __stdcall GetLastError()");
 const SetLastError = kernel32?.func("void __stdcall SetLastError(uint32_t errorCode)");
 const VkKeyScanW = user32?.func("int16_t __stdcall VkKeyScanW(char16_t character)");
@@ -151,45 +148,7 @@ export function detectAoe2NativeProcess(): NativeProcessStatus {
 export function focusAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
-  if (!window) return false;
-
-  // SetForegroundWindow is intentionally allowed to fail when another process
-  // owns the foreground input queue (for example VS Code while developing).
-  // Temporarily joining those queues lets this user-initiated transition move
-  // AoE2 to the top instead of merely hiding Electron and exposing that app.
-  const currentThreadId = GetCurrentThreadId!() as number;
-  const ignoredTargetProcessId: [number | null] = [null];
-  const targetThreadId = GetWindowThreadProcessId!(window, ignoredTargetProcessId) as number;
-  const foregroundWindow = GetForegroundWindow!() as NativeHandle;
-  const ignoredForegroundProcessId: [number | null] = [null];
-  const foregroundThreadId = foregroundWindow
-    ? GetWindowThreadProcessId!(foregroundWindow, ignoredForegroundProcessId) as number
-    : 0;
-  const attachedThreadIds = new Set<number>();
-
-  try {
-    for (const threadId of [foregroundThreadId, targetThreadId]) {
-      if (threadId && threadId !== currentThreadId && !attachedThreadIds.has(threadId)) {
-        if (AttachThreadInput!(currentThreadId, threadId, true)) attachedThreadIds.add(threadId);
-      }
-    }
-
-    // SW_RESTORE changes a maximized/fullscreen AoE2 window back to windowed
-    // mode, so only use it when Windows confirms the game is minimized.
-    if (IsIconic!(window)) ShowWindow!(window, 9);
-
-    const deadline = Date.now() + 750;
-    do {
-      SetForegroundWindow!(window);
-      if (sameHandle(GetForegroundWindow!(), window)) return true;
-      Sleep!(25);
-    } while (Date.now() < deadline);
-    return false;
-  } finally {
-    for (const threadId of attachedThreadIds) {
-      AttachThreadInput!(currentThreadId, threadId, false);
-    }
-  }
+  return Boolean(window) && Boolean(SetForegroundWindow!(window));
 }
 
 export function isAoe2NativeWindowForeground(processId: number): boolean {
