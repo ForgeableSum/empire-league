@@ -31,6 +31,8 @@ function isAppPage(value: string | null): value is AppPage {
 
 interface AppContextValue {
   state: AppState;
+  lobbyAutomationActive: boolean;
+  setLobbyAutomationActive: (active: boolean) => void;
   page: AppPage;
   setPage: (page: AppPage) => void;
   selectedProfileId: string | null;
@@ -113,6 +115,7 @@ export const queueDefinitions: QueueDefinition[] = [
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [lobbyAutomationActive, setLobbyAutomationActive] = useState(false);
   const [page, setPage] = useState<AppPage>(() => isAppPage(previewPage) ? previewPage : "home");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileReturnPage, setProfileReturnPage] = useState<AppPage>("leaderboard");
@@ -1533,6 +1536,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value: AppContextValue = {
     state,
+    lobbyAutomationActive,
+    setLobbyAutomationActive,
     page,
     setPage,
     selectedProfileId,

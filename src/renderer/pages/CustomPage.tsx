@@ -199,6 +199,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   notify: ReturnType<typeof useAppStore>["notify"];
   weeklyView?: ReactNode;
 }) {
+  const { setLobbyAutomationActive } = useAppStore();
   const [draft, setDraft] = useState("");
   const automationSteps = useRef(new Set<string>());
   const replayResultInFlight = useRef(false);
@@ -207,6 +208,11 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => room.players.find((player) => player.slot === index + 1)), [room]);
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
+
+  useEffect(() => {
+    setLobbyAutomationActive(room.status === "launching");
+    return () => setLobbyAutomationActive(false);
+  }, [room.status, setLobbyAutomationActive]);
 
   useEffect(() => () => {
     void window.electronApi?.setLobbyInputLock(false);

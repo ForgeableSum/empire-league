@@ -38,7 +38,7 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const { page, state, authStatus, authError, signInWithSteam } = useAppStore();
+  const { page, state, lobbyAutomationActive, authStatus, authError, signInWithSteam } = useAppStore();
 
   useEffect(() => {
     chatsRef.current = chats;
@@ -231,7 +231,7 @@ export function App() {
 
   return (
     <>
-      <LobbyInputForwarding locked={["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error} />
+      <LobbyInputForwarding locked={lobbyAutomationActive || (["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error)} />
       <Shell socialUnreadCount={friends.reduce((total, friend) => total + (friend.unread ?? 0), 0)}>
         {page === "home" && <HomePage />}
         {page === "ranked" && <QueuePage />}
