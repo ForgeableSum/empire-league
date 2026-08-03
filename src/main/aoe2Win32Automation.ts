@@ -36,6 +36,8 @@ const GetWindowThreadProcessId = user32?.func("uint32_t __stdcall GetWindowThrea
 const IsWindow = user32?.func("bool __stdcall IsWindow(HWND hwnd)");
 const IsWindowVisible = user32?.func("bool __stdcall IsWindowVisible(HWND hwnd)");
 const IsWindowEnabled = user32?.func("bool __stdcall IsWindowEnabled(HWND hwnd)");
+const IsIconic = user32?.func("bool __stdcall IsIconic(HWND hwnd)");
+const GetWindowTextLengthW = user32?.func("int32_t __stdcall GetWindowTextLengthW(HWND hwnd)");
 const GetClientRect = user32?.func("bool __stdcall GetClientRect(HWND hwnd, _Out_ EL_RECT *rect)");
 const GetWindowRect = user32?.func("bool __stdcall GetWindowRect(HWND hwnd, _Out_ EL_RECT *rect)");
 const ClientToScreen = user32?.func("bool __stdcall ClientToScreen(HWND hwnd, _Inout_ EL_POINT *point)");
@@ -148,7 +150,32 @@ export function detectAoe2NativeProcess(): NativeProcessStatus {
 export function focusAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
-  return Boolean(window) && Boolean(SetForegroundWindow!(window));
+  if (!window) return false;
+
+  // Electron still owns the user-initiated foreground permission at this
+  // point. Hand that directly to AoE2 before hiding or minimizing anything;
+  // allowing Windows to activate an intermediate app can make the game leave
+  // its fullscreen presentation and recreate a smaller window.
+  if (!SetForegroundWindow!(window)) return false;
+
+  // Remove other user-facing applications from the handoff without touching
+  // either AoE2 or Empire League. AoE2 is already foreground, so minimizing
+  // these background windows cannot become an intermediate activation step.
+  EnumWindows!((candidate: NativeHandle) => {
+    if (!candidate || !IsWindowVisible!(candidate) || IsIconic!(candidate)) return true;
+
+    const ownerProcessId: [number | null] = [null];
+    GetWindowThreadProcessId!(candidate, ownerProcessId);
+    if (ownerProcessId[0] === processId || ownerProcessId[0] === process.pid) return true;
+
+    // Untitled system windows (the desktop, taskbar, and similar shell
+    // surfaces) are not application windows and must remain untouched.
+    if ((GetWindowTextLengthW!(candidate) as number) <= 0) return true;
+    ShowWindow!(candidate, 7); // SW_SHOWMINNOACTIVE
+    return true;
+  }, 0);
+
+  return true;
 }
 
 export function isAoe2NativeWindowForeground(processId: number): boolean {

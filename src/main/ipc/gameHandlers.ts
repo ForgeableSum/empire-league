@@ -2264,9 +2264,15 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:focus", async () => {
     if (cursorAutomationEnabled && process.platform === "win32") {
-      hideMainWindowGameCover();
+      // Stop the startup z-order guard before revealing the game. Otherwise
+      // its 25 ms callback can race this handoff and push AoE2 behind another
+      // window while AoE2 is completing its fullscreen transition.
+      // The cursor-automation branch does not restore or resize the game.
+      restoreAoe2Window();
       const game = detectAoe2NativeProcess();
-      return { focused: Boolean(game.pid) && focusAoe2NativeWindow(game.pid as number) };
+      const focused = Boolean(game.pid) && focusAoe2NativeWindow(game.pid as number);
+      if (focused) hideMainWindowGameCover();
+      return { focused };
     }
     restoreAoe2Window(true, true);
     return { focused: true };
