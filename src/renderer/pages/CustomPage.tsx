@@ -420,6 +420,10 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   }
 
   async function applyMapPlayerSettings(player: CustomLobbyRoom["players"][number]) {
+    // Fresh AoE2 lobbies already initialize every slot to Random. Opening the
+    // picker just to re-select Random can leave the picker open and prevent the
+    // guest from reporting that it joined, which stalls the host indefinitely.
+    if (room.source === "weekly" && player.civilization === "Random") return;
     const civilization = await window.electronApi!.selectAoe2Civilization(player.civilization as Aoe2CivilizationSelection, player.slot, "custom");
     if (!civilization.sent) throw new Error(civilization.message);
     if (player.team === 1 || player.team === 2) {
