@@ -84,7 +84,7 @@ export function WeeklyPage() {
             {status?.queued ? <Check size={18} /> : <Swords size={18} />}
             {pending ? "Updating..." : status?.queued ? "Leave queue" : "Join weekly queue"}
           </button>
-          <small>{status?.queued ? `Queue position ${status.position ?? "—"} · ${status.playersQueued}/${mode?.playerCount ?? 8} assembled` : "Ratings are not affected"}</small>
+          <small>{status?.queued ? `Queue position ${status.position ?? "—"}` : "Ratings are not affected"}</small>
         </div>
       </div>
 
