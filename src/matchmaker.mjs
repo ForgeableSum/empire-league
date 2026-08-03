@@ -95,6 +95,10 @@ const weeklyModes = [
     map: { id: "arena", name: "Arena", gameName: "Arena", kind: "map" }
   }
 ];
+const weeklyRatingRangeSchedule = teamRatingRangeSchedule.map((step) => ({
+  afterMs: step.afterMs,
+  spread: step.spread * 2
+}));
 
 function currentWeeklyMode(now = Date.now()) {
   const week = Math.floor((now - weeklyRotationAnchor) / weekMs);
@@ -110,11 +114,15 @@ function currentWeeklyMode(now = Date.now()) {
 }
 
 function weeklyQueueStatus(playerId) {
+  const currentMode = currentWeeklyMode();
+  for (const [queuedPlayerId, entry] of weeklyQueue) {
+    if (entry.rotationId !== currentMode.rotationId) removeWeeklyQueuePlayer(queuedPlayerId);
+  }
   const room = playerCustomLobby(playerId);
   const position = [...weeklyQueue.keys()].indexOf(playerId);
   const rotation = [0, 1, 2].map((offset) => currentWeeklyMode(Date.now() + offset * weekMs));
   return {
-    mode: rotation[0],
+    mode: currentMode,
     rotation,
     queued: position >= 0,
     position: position >= 0 ? position + 1 : undefined,
@@ -123,11 +131,68 @@ function weeklyQueueStatus(playerId) {
   };
 }
 
+function weeklyEntryRating(entry) {
+  const rating = Number(entry.player.rating);
+  return Number.isFinite(rating) ? rating : 1000;
+}
+
+function weeklyRatingSpread(entry, now = Date.now()) {
+  const elapsed = Math.max(0, now - new Date(entry.joinedAt).getTime());
+  return [...weeklyRatingRangeSchedule].reverse().find((step) => elapsed >= step.afterMs)?.spread
+    ?? weeklyRatingRangeSchedule[0].spread;
+}
+
+function weeklyEntriesAreCompatible(left, right, now = Date.now()) {
+  if (left.rotationId !== right.rotationId) return false;
+  const difference = Math.abs(weeklyEntryRating(left) - weeklyEntryRating(right));
+  return difference <= weeklyRatingSpread(left, now)
+    && difference <= weeklyRatingSpread(right, now);
+}
+
+function removeWeeklyQueuePlayer(playerId) {
+  const entry = weeklyQueue.get(playerId);
+  for (const timer of entry?.ratingRangeTimers ?? []) clearTimeout(timer);
+  weeklyQueue.delete(playerId);
+}
+
+function scheduleWeeklyRatingExpansion(playerId, entry) {
+  entry.ratingRangeTimers = weeklyRatingRangeSchedule.slice(1).map((step) => {
+    const timer = setTimeout(() => {
+      if (weeklyQueue.get(playerId) !== entry) return;
+      assembleWeeklyRooms();
+    }, step.afterMs);
+    timer.unref?.();
+    return timer;
+  });
+}
+
+function nextWeeklyGroup(now = Date.now()) {
+  const queued = [...weeklyQueue.entries()].sort((left, right) =>
+    new Date(left[1].joinedAt).getTime() - new Date(right[1].joinedAt).getTime()
+    || left[0].localeCompare(right[0]));
+  for (const anchor of queued) {
+    const candidates = queued
+      .filter(([playerId]) => playerId !== anchor[0])
+      .sort((left, right) =>
+        Math.abs(weeklyEntryRating(left[1]) - weeklyEntryRating(anchor[1]))
+        - Math.abs(weeklyEntryRating(right[1]) - weeklyEntryRating(anchor[1]))
+        || new Date(left[1].joinedAt).getTime() - new Date(right[1].joinedAt).getTime());
+    const group = [anchor];
+    for (const candidate of candidates) {
+      if (!group.every(([, member]) => weeklyEntriesAreCompatible(member, candidate[1], now))) continue;
+      group.push(candidate);
+      if (group.length === weeklyPlayersRequired) return group;
+    }
+  }
+  return null;
+}
+
 function assembleWeeklyRooms() {
   while (weeklyQueue.size >= weeklyPlayersRequired) {
-    const entries = [...weeklyQueue.entries()].slice(0, weeklyPlayersRequired);
+    const entries = nextWeeklyGroup();
+    if (!entries) break;
     const mode = currentWeeklyMode();
-    for (const [playerId] of entries) weeklyQueue.delete(playerId);
+    for (const [playerId] of entries) removeWeeklyQueuePlayer(playerId);
     const players = entries.map(([id, entry], index) => ({
       id,
       displayName: entry.player.displayName,
@@ -217,7 +282,7 @@ function playerCustomLobby(playerId) {
 }
 
 function cleanupCustomLobbyDisconnect(playerId) {
-  weeklyQueue.delete(playerId);
+  removeWeeklyQueuePlayer(playerId);
   const room = playerCustomLobby(playerId);
   if (!room) return;
   if (room.source === "weekly") {
@@ -1160,19 +1225,28 @@ async function handleRequest(request, response) {
       const civilization = String(body.civilization ?? "Random").trim().slice(0, 40) || "Random";
       const mode = currentWeeklyMode();
       const existing = weeklyQueue.get(authenticatedPlayer.id);
-      if (existing && existing.rotationId !== mode.rotationId) weeklyQueue.delete(authenticatedPlayer.id);
-      weeklyQueue.set(authenticatedPlayer.id, {
+      if (existing && existing.rotationId !== mode.rotationId) removeWeeklyQueuePlayer(authenticatedPlayer.id);
+      if (existing?.rotationId === mode.rotationId) {
+        existing.player = authenticatedPlayer;
+        existing.civilization = civilization;
+        assembleWeeklyRooms();
+        return send(response, 200, weeklyQueueStatus(authenticatedPlayer.id));
+      }
+      const entry = {
         player: authenticatedPlayer,
         civilization,
         rotationId: mode.rotationId,
-        joinedAt: existing?.joinedAt ?? new Date().toISOString()
-      });
+        joinedAt: new Date().toISOString(),
+        ratingRangeTimers: []
+      };
+      weeklyQueue.set(authenticatedPlayer.id, entry);
+      scheduleWeeklyRatingExpansion(authenticatedPlayer.id, entry);
       assembleWeeklyRooms();
       return send(response, 200, weeklyQueueStatus(authenticatedPlayer.id));
     }
 
     if (request.method === "DELETE" && url.pathname === "/weekly-queue") {
-      weeklyQueue.delete(authenticatedPlayer.id);
+      removeWeeklyQueuePlayer(authenticatedPlayer.id);
       return send(response, 200, weeklyQueueStatus(authenticatedPlayer.id));
     }
 
