@@ -27,7 +27,8 @@ export function CustomPage() {
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [pending, setPending] = useState(false);
 
-  const activeRoom = rooms.find((room) => room.players.some((player) => player.id === state.currentUser.id));
+  const customRooms = rooms.filter((room) => room.source !== "weekly");
+  const activeRoom = customRooms.find((room) => room.players.some((player) => player.id === state.currentUser.id));
 
   async function refreshRooms() {
     setLoadingRooms(true);
@@ -61,7 +62,9 @@ export function CustomPage() {
     return customLobbyService.onEvent((event) => {
       setRooms((current) => {
         const closedRoom = event.closedRoomId
-          ? current.find((room) => room.id === event.closedRoomId && room.players.some((player) => player.id === state.currentUser.id))
+          ? current.find((room) => room.source !== "weekly"
+            && room.id === event.closedRoomId
+            && room.players.some((player) => player.id === state.currentUser.id))
           : undefined;
         if (closedRoom && event.closeReason) {
           notify("Custom lobby closed.", "warning", { detail: event.closeReason });
@@ -168,7 +171,7 @@ export function CustomPage() {
         </div>
         <div className="custom-room-list">
           <div className="custom-room-list-header"><span>Room</span><span>Content</span><span>Players</span><span>Status</span><span /></div>
-          {rooms.filter((room) => room.source !== "weekly").map((room) => (
+          {customRooms.map((room) => (
             <article className="custom-room-row" key={room.id}>
               <div><strong>{room.name}</strong><small>{room.demo ? "Demo room · " : ""}Hosted by {room.players.find((player) => player.host)?.displayName ?? "Unknown"}</small></div>
               <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
@@ -177,7 +180,7 @@ export function CustomPage() {
               <button className="secondary" type="button" disabled={room.status !== "open" || room.players.length >= room.maxPlayers || pending || state.gameStatus === "loading"} onClick={() => void joinRoom(room.id)}><LogIn size={16} /> {state.gameStatus === "loading" ? "Launching…" : "Join"}</button>
             </article>
           ))}
-          {!loadingRooms && !rooms.length && <div className="panel empty-state">No custom rooms are open. Create the first one.</div>}
+          {!loadingRooms && !customRooms.length && <div className="panel empty-state">No custom rooms are open. Create the first one.</div>}
         </div>
       </div>
     </section>
