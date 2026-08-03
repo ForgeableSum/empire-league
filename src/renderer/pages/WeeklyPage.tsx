@@ -86,7 +86,7 @@ export function WeeklyPage() {
           <ThemedSelect label="Civilization" value={civilization} onChange={setCivilization} disabled={Boolean(room) || status?.queued || pending} options={["Random", ...civilizations].map((value) => ({ value, label: value }))} />
           <button className={room || status?.queued ? "weekly-join queued" : "weekly-join"} aria-label={status?.queued && !room ? "Leave weekly queue" : undefined} disabled={Boolean(room) || !status || pending} type="button" onClick={() => void toggleQueue()}>
             {room || status?.queued ? <Check size={18} /> : <Swords size={18} />}
-            {room ? <>Setting up game<AnimatedEllipsis /></> : pending ? "Updating..." : status?.queued ? <>Searching for game<AnimatedEllipsis /></> : "Join weekly queue"}
+            {room ? <>Preparing game<AnimatedEllipsis /></> : pending ? "Updating..." : status?.queued ? <>Finding players<AnimatedEllipsis /></> : "Join weekly queue"}
           </button>
           <small>{room ? `${room.players.length}/${room.maxPlayers} players · ${weeklySetupStatus(room, state.currentUser.id)}` : status?.queued ? `Queue position ${status.position ?? "—"} · Click to leave queue` : "Ratings are not affected"}</small>
         </div>
