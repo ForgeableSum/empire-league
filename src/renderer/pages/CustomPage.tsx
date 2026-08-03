@@ -1,5 +1,5 @@
 import { Check, Crown, LogIn, MessageSquare, Plus, RefreshCw, Send, Shield, Users, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { civilizations } from "../../shared/civilizations";
 import type { Aoe2CivilizationSelection } from "../../shared/aoe2UiManifest";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings, type CustomLobbyRoom, type LocalCustomContent, type LocalCustomContentCatalog } from "../../shared/contracts/customLobby";
@@ -193,10 +193,11 @@ function ContentSelect({ label, items, value, onChange }: { label: string; items
   return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${item.name}${item.enabled ? "" : ` (Disabled: ${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
 }
 
-export function NetworkLobby({ room, currentPlayerId, notify }: {
+export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   room: CustomLobbyRoom;
   currentPlayerId: string;
   notify: ReturnType<typeof useAppStore>["notify"];
+  weeklyView?: ReactNode;
 }) {
   const [draft, setDraft] = useState("");
   const automationSteps = useRef(new Set<string>());
@@ -226,6 +227,12 @@ export function NetworkLobby({ room, currentPlayerId, notify }: {
         try {
           if (!content) throw new Error("Choose a map or scenario before starting.");
           await ensureAoe2Running();
+          if (room.source === "weekly") {
+            // Weekly rooms begin as soon as matchmaking fills. Give the queue
+            // response, renderer transition, and AoE2 foreground guard the same
+            // settle window used by ranked host automation before sending input.
+            await new Promise((resolve) => window.setTimeout(resolve, lobbySetupTiming.hostLobbyAutomationSettleMs));
+          }
           // Keep settings inside the original fourth argument so an app whose
           // preload has not hot-reloaded cannot silently discard them.
           const result = await window.electronApi!.runAoe2CreateLobbySequence(content.gameName, room.maxPlayers, content.kind === "scenario" ? "scenario" : "map", {
@@ -428,25 +435,7 @@ export function NetworkLobby({ room, currentPlayerId, notify }: {
   }
 
   if (room.source === "weekly") {
-    const phase = room.automationError
-      ? room.automationError
-      : room.status === "started"
-      ? "Starting game"
-      : room.platformLobbyId
-        ? "Joining and synchronizing the AoE2 lobby"
-        : isHost
-          ? "Creating the AoE2 lobby"
-          : "Waiting for the host to create the AoE2 lobby";
-    return (
-      <section className="custom-lobby weekly-automated-lobby">
-        <article className="panel empty-state">
-          <span className="eyebrow">Weekly queue matched</span>
-          <h2>{room.name}</h2>
-          <p>{phase}<AnimatedEllipsis /></p>
-          <small>{room.players.length} player{room.players.length === 1 ? "" : "s"} continuing · {me.civilization}</small>
-        </article>
-      </section>
-    );
+    return <>{weeklyView}</>;
   }
 
   return (

@@ -62,10 +62,8 @@ export function WeeklyPage() {
     }
   }
 
-  if (room) return <NetworkLobby room={room} currentPlayerId={state.currentUser.id} notify={notify} />;
-
   const mode = status?.mode;
-  return (
+  const view = (
     <section className="weekly-page">
       <div className="weekly-hero">
         <div className="weekly-hero-copy">
@@ -79,12 +77,12 @@ export function WeeklyPage() {
         <div className="weekly-queue-card">
           <span>Just for fun</span>
           <strong>Unranked · Weekly rules</strong>
-          <ThemedSelect label="Civilization" value={civilization} onChange={setCivilization} disabled={status?.queued || pending} options={["Random", ...civilizations].map((value) => ({ value, label: value }))} />
-          <button className={status?.queued ? "weekly-join queued" : "weekly-join"} disabled={!status || pending} type="button" onClick={() => void toggleQueue()}>
-            {status?.queued ? <Check size={18} /> : <Swords size={18} />}
-            {pending ? "Updating..." : status?.queued ? "Leave queue" : "Join weekly queue"}
+          <ThemedSelect label="Civilization" value={civilization} onChange={setCivilization} disabled={Boolean(room) || status?.queued || pending} options={["Random", ...civilizations].map((value) => ({ value, label: value }))} />
+          <button className={room || status?.queued ? "weekly-join queued" : "weekly-join"} disabled={Boolean(room) || !status || pending} type="button" onClick={() => void toggleQueue()}>
+            {room || status?.queued ? <Check size={18} /> : <Swords size={18} />}
+            {room ? "Match found" : pending ? "Updating..." : status?.queued ? "Leave queue" : "Join weekly queue"}
           </button>
-          <small>{status?.queued ? `Queue position ${status.position ?? "—"}` : "Ratings are not affected"}</small>
+          <small>{room ? `${room.players.length}/${room.maxPlayers} players · ${weeklySetupStatus(room, state.currentUser.id)}` : status?.queued ? `Queue position ${status.position ?? "—"}` : "Ratings are not affected"}</small>
         </div>
       </div>
 
@@ -109,6 +107,16 @@ export function WeeklyPage() {
       <div className="weekly-note"><CalendarDays size={18} /><p><strong>Same time, different battlefield.</strong> When the queue fills, everyone moves into a locked lobby. Choose a civilization, ready up, and Empire League handles the existing AoE2 lobby automation.</p></div>
     </section>
   );
+  return room
+    ? <NetworkLobby room={room} currentPlayerId={state.currentUser.id} notify={notify} weeklyView={view} />
+    : view;
+}
+
+function weeklySetupStatus(room: CustomLobbyRoom, currentPlayerId: string): string {
+  if (room.automationError) return room.automationError;
+  if (room.status === "started") return "Starting game…";
+  if (room.platformLobbyId) return "Joining and synchronizing the AoE2 lobby…";
+  return room.hostId === currentPlayerId ? "Creating the AoE2 lobby…" : "Waiting for the host to create the AoE2 lobby…";
 }
 
 function messageFor(error: unknown) {
