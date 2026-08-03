@@ -21,6 +21,12 @@ const electronApi: ElectronGameApi = {
   stopReplayEndDetection: () => ipcRenderer.invoke("game:stop-replay-end-detection"),
   confirmReplayEnded: () => ipcRenderer.invoke("game:confirm-replay-ended"),
   testReturnToMenuRecovery: () => ipcRenderer.invoke("game:test-return-to-menu-recovery"),
+  startLoadingScreenWatch: () => ipcRenderer.invoke("game:start-loading-screen-watch"),
+  onLoadingScreen: (listener) => {
+    const handler = () => listener();
+    ipcRenderer.on("game:loading-screen", handler);
+    return () => ipcRenderer.removeListener("game:loading-screen", handler);
+  },
   onReplayStarted: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, filePath: string) => listener(filePath);
     ipcRenderer.on("game:replay-started", handler);

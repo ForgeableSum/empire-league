@@ -105,7 +105,7 @@ export interface NativeCivilizationPickerStateResult {
 }
 
 export interface NativeHostSetupStateResult {
-  state: "main-menu" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "content-picker" | "unknown";
+  state: "main-menu" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "content-picker" | "loading-screen" | "unknown";
   detail: string;
 }
 
@@ -746,7 +746,15 @@ export function readAoe2HostSetupState(
   const hasMapContentPicker = hasLobbyParchment
     && buttonRed > 170 && buttonGreen > 120 && buttonBlue > 80;
   const hasContentPicker = hasDarkContentPicker || hasMapContentPicker;
-  const state = options.contentPickerExpected && hasContentPicker
+  // The transition out of the lobby begins with a nearly black frame. Loading
+  // artwork may populate one sample shortly afterward, while the other four
+  // remain black. Requiring four dark samples avoids mistaking lobby controls
+  // or ordinary dark panels for the loading screen.
+  const darkSamples = [upperLeft, upperCenter, multiplayerPanel, lowerButton, guestReadyButton]
+    .filter((sample) => Math.max(...sample) <= 30).length;
+  const state = darkSamples >= 4
+    ? "loading-screen"
+    : options.contentPickerExpected && hasContentPicker
     ? "content-picker"
     : hasReadyButton
       ? "lobby-room"

@@ -347,6 +347,7 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
       if (revealed) return;
       revealed = true;
       window.clearTimeout(timer);
+      stopLoadingScreenListener();
       stopReplayStartedListener();
       void (async () => {
         try {
@@ -359,11 +360,20 @@ function NetworkLobby({ room, currentPlayerId, notify }: {
         }
       })();
     };
+    const stopLoadingScreenListener = window.electronApi.onLoadingScreen(reveal);
     const stopReplayStartedListener = window.electronApi.onReplayStarted(reveal);
     const timer = window.setTimeout(reveal, lobbySetupTiming.revealAfterStartMs);
+    void window.electronApi.startLoadingScreenWatch().then((watch) => {
+      if (!watch.started) {
+        notify("Loading-screen detection could not be started.", "warning", { detail: watch.message });
+      }
+    }).catch((error) => {
+      notify("Loading-screen detection could not be started.", "warning", { detail: messageFor(error) });
+    });
 
     return () => {
       window.clearTimeout(timer);
+      stopLoadingScreenListener();
       stopReplayStartedListener();
     };
   }, [room.id, room.status]);

@@ -1449,16 +1449,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (gameRevealInFlightRef.current) return gameRevealInFlightRef.current;
     gameRevealInFlightRef.current = (async () => {
       let replayStarted: (() => void) | undefined;
+      let loadingScreenStarted: (() => void) | undefined;
       const replayStart = new Promise<void>((resolve) => {
         replayStarted = window.electronApi!.onReplayStarted(() => resolve());
       });
+      const loadingScreenStart = new Promise<void>((resolve) => {
+        loadingScreenStarted = window.electronApi!.onLoadingScreen(() => resolve());
+      });
+      const loadingWatch = await window.electronApi!.startLoadingScreenWatch().catch((error) => ({
+        started: false,
+        message: error instanceof Error ? error.message : "Loading-screen detection could not be started."
+      }));
+      if (!loadingWatch.started) log(`Loading-screen detection unavailable: ${loadingWatch.message ?? "unknown error"}`);
       const detection = await window.electronApi!.startReplayEndDetection();
       if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
       await Promise.race([
         delayForLobbyInput(lobbySetupTiming.revealAfterStartMs),
-        replayStart
+        replayStart,
+        loadingScreenStart
       ]);
       replayStarted?.();
+      loadingScreenStarted?.();
       await stopYouTubeShorts();
       await window.electronApi!.focusAoe2();
       const completedState = stateRef.current;

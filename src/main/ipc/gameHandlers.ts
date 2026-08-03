@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain, screen, shell } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain, screen, shell, type WebContents } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, copyFile, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -71,6 +71,7 @@ let inputGuardProcess: ChildProcess | undefined;
 let inputGuardWindow: BrowserWindow | undefined;
 let inputGuardStopTimer: NodeJS.Timeout | undefined;
 const guardedSenders = new WeakSet<object>();
+const loadingScreenWatchers = new WeakSet<WebContents>();
 let offscreenWindowProcess: ChildProcess | undefined;
 let aoe2WindowMonitor: NodeJS.Timeout | undefined;
 let aoe2WindowIsOffscreen = false;
@@ -79,6 +80,33 @@ let replayFocusTimers: NodeJS.Timeout[] = [];
 let returnToMenuPoller: NodeJS.Timeout | undefined;
 let replayDetectionGeneration = 0;
 const builtInGameMapNames = new Set<string>();
+
+function startLoadingScreenWatch(processId: number, sender: WebContents): boolean {
+  if (loadingScreenWatchers.has(sender)) return true;
+  loadingScreenWatchers.add(sender);
+  const deadline = Date.now() + 20_000;
+  let consecutiveLoadingReads = 0;
+  const poll = (): void => {
+    if (sender.isDestroyed() || Date.now() >= deadline) {
+      loadingScreenWatchers.delete(sender);
+      return;
+    }
+    const screenState = readAoe2HostSetupState(processId);
+    consecutiveLoadingReads = screenState.state === "loading-screen"
+      ? consecutiveLoadingReads + 1
+      : 0;
+    if (consecutiveLoadingReads >= 2) {
+      loadingScreenWatchers.delete(sender);
+      sender.send("game:loading-screen");
+      console.info(`[AoE2 automation] LOADING_SCREEN|Detected=True|${screenState.detail}`);
+      return;
+    }
+    const timer = setTimeout(poll, 50);
+    timer.unref();
+  };
+  poll();
+  return true;
+}
 
 function normalizeContentName(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -573,7 +601,7 @@ async function startReplayEndDetection(
       }
       if (game.pid && game.windowReady && !recoveredFromMainMenu) {
         const screen = readAoe2HostSetupState(game.pid);
-        if (screen.state === "unknown") observedInGameScreen = true;
+        if (screen.state === "unknown" || screen.state === "loading-screen") observedInGameScreen = true;
         consecutiveMainMenuReads = observedInGameScreen && screen.state === "main-menu"
           ? consecutiveMainMenuReads + 1
           : 0;
@@ -2244,6 +2272,14 @@ export function registerGameHandlers(): void {
     return { focused: true };
   });
 
+  ipcMain.handle("game:start-loading-screen-watch", async (event) => {
+    const game = detectAoe2NativeProcess();
+    if (!game.pid || !game.windowReady) {
+      return { started: false, message: "The AoE2 game window was not found." };
+    }
+    return { started: startLoadingScreenWatch(game.pid, event.sender) };
+  });
+
   ipcMain.handle("game:start-replay-end-detection", async (event, replayFolder?: string) => {
     stopReturnToMenuWatch();
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -2778,6 +2814,8 @@ export function registerGameHandlers(): void {
                 synchronous: !isCustomAutomation,
                 requireMove: !isCustomAutomation
               });
+
+      if (target === "start" && result.sent) startLoadingScreenWatch(process.pid, event.sender);
 
       if (result.detail !== "SKIPPED_ALREADY_READY") await delay(action.settleMs);
       if (verifiesReady) {
