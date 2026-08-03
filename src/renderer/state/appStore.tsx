@@ -161,6 +161,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const replayResultInFlightRef = useRef(false);
   const gameRevealInFlightRef = useRef<Promise<void> | null>(null);
+  const gameStartSignalInFlightRef = useRef<Promise<boolean> | null>(null);
   const familySharingNoticeShownRef = useRef(false);
   const uiModWarningIdRef = useRef<string | null>(null);
 
@@ -993,6 +994,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             roomSetupMilestone: "Opponent ready. Starting game..."
           }));
           void (async () => {
+            const startConfirmation = waitForAoe2StartSignal();
             try {
               log("Guest reported ready; waiting for the Start button state to settle");
               await delayForLobbyInput(lobbySetupTiming.hostReadyToStartMs);
@@ -1000,15 +1002,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               log("Host readied; clicking Start Game");
               const start = await window.electronApi!.runAoe2LobbyCursorAction("start");
               if (!start.sent) throw new Error(start.message);
-              clearRoomSetupWatchdog();
               setState((previous) => ({
                 ...previous,
-                queueStatus: "ready",
-                gameStatus: "in_match",
-                roomSetupMilestone: "Starting game",
-                transitionInputLocked: true,
-                activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "ready" } : null
+                roomSetupMilestone: "Confirming game start"
               }));
+              await services.matchmaking.reportGameStartAttempted(event.matchId);
+              const confirmed = await startConfirmation;
+              if (!confirmed) {
+                log("Start Game was clicked, but no loading-screen or replay signal was detected");
+                await services.matchmaking.reportGameStartFailed(event.matchId);
+                return;
+              }
+              clearRoomSetupWatchdog();
               await services.matchmaking.reportGameStarted(event.matchId);
               void revealAoe2AfterGameStart();
             } catch (error) {
@@ -1017,6 +1022,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               void handleLobbySetupFailure(queue, message);
             }
           })();
+        }
+        if (event.type === "game_start_attempted") {
+          setState((previous) => ({ ...previous, roomSetupMilestone: "Confirming game start" }));
+          log("Host clicked Start Game; watching AoE2 for the loading transition");
+          void waitForAoe2StartSignal().then(async (confirmed) => {
+            if (confirmed) {
+              await services.matchmaking.reportGameStarted(event.matchId);
+              void revealAoe2AfterGameStart();
+              return;
+            }
+            log("Guest did not detect a loading-screen or replay signal after Start Game");
+            await services.matchmaking.reportGameStartFailed(event.matchId);
+          }).catch((error) => {
+            void handleLobbySetupFailure(
+              queue,
+              error instanceof Error ? error.message : "Game start confirmation failed."
+            );
+          });
         }
         if (event.type === "game_started") {
           clearRoomSetupWatchdog();
@@ -1054,6 +1077,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             });
             log("Queue ticket expired after a server restart; rejoining");
             window.setTimeout(() => void startQueue(queue), 0);
+            return;
+          }
+          if (event.code === "GAME_START_FAILED") {
+            log("Game start failed after the Start Game click; restarting AoE2");
+            void handleLobbySetupFailure(queue, event.message);
             return;
           }
           if (event.code === "MATCH_DISCONNECTED" || event.code === "MATCH_SETUP_FAILED") {
@@ -1444,32 +1472,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((previous) => ({ ...previous, mockConfig: { ...previous.mockConfig, ...patch } }));
   }
 
+  function waitForAoe2StartSignal(timeoutMs = 20_000): Promise<boolean> {
+    if (!window.electronApi) return Promise.resolve(false);
+    if (gameStartSignalInFlightRef.current) return gameStartSignalInFlightRef.current;
+    gameStartSignalInFlightRef.current = new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (confirmed: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        stopLoadingScreenListener();
+        stopReplayStartedListener();
+        resolve(confirmed);
+      };
+      const stopLoadingScreenListener = window.electronApi!.onLoadingScreen(() => finish(true));
+      const stopReplayStartedListener = window.electronApi!.onReplayStarted(() => finish(true));
+      const timeout = window.setTimeout(() => finish(false), timeoutMs);
+      void window.electronApi!.startLoadingScreenWatch().catch(() => undefined);
+      void window.electronApi!.startReplayEndDetection().catch(() => undefined);
+    }).finally(() => {
+      gameStartSignalInFlightRef.current = null;
+    });
+    return gameStartSignalInFlightRef.current;
+  }
+
   async function revealAoe2AfterGameStart(): Promise<void> {
     if (!window.electronApi) return;
     if (gameRevealInFlightRef.current) return gameRevealInFlightRef.current;
     gameRevealInFlightRef.current = (async () => {
-      let replayStarted: (() => void) | undefined;
-      let loadingScreenStarted: (() => void) | undefined;
-      const replayStart = new Promise<void>((resolve) => {
-        replayStarted = window.electronApi!.onReplayStarted(() => resolve());
-      });
-      const loadingScreenStart = new Promise<void>((resolve) => {
-        loadingScreenStarted = window.electronApi!.onLoadingScreen(() => resolve());
-      });
-      const loadingWatch = await window.electronApi!.startLoadingScreenWatch().catch((error) => ({
-        started: false,
-        message: error instanceof Error ? error.message : "Loading-screen detection could not be started."
-      }));
-      if (!loadingWatch.started) log(`Loading-screen detection unavailable: ${loadingWatch.message ?? "unknown error"}`);
-      const detection = await window.electronApi!.startReplayEndDetection();
-      if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
-      await Promise.race([
-        delayForLobbyInput(lobbySetupTiming.revealAfterStartMs),
-        replayStart,
-        loadingScreenStart
-      ]);
-      replayStarted?.();
-      loadingScreenStarted?.();
       await stopYouTubeShorts();
       await window.electronApi!.focusAoe2();
       const completedState = stateRef.current;

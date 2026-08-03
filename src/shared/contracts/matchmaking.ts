@@ -216,6 +216,7 @@ export type QueueEvent =
   | { type: "host_lobby_ready"; matchId: string }
   | { type: "guest_content_accepted"; matchId: string }
   | { type: "guest_lobby_ready"; matchId: string }
+  | { type: "game_start_attempted"; matchId: string }
   | { type: "game_started"; matchId: string }
   | { type: "result_verified"; matchId: string; result: MatchResult }
   | { type: "result_contested"; matchId: string; result: MatchResult }

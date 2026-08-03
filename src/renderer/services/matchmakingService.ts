@@ -25,6 +25,8 @@ export interface MatchmakingService {
   reportHostLobbyReady(matchId: string): Promise<void>;
   reportGuestContentAccepted(matchId: string): Promise<void>;
   reportGuestLobbyReady(matchId: string): Promise<void>;
+  reportGameStartAttempted(matchId: string): Promise<void>;
+  reportGameStartFailed(matchId: string): Promise<void>;
   reportGameStarted(matchId: string): Promise<void>;
   reportMatchResult(report: MatchResultReport): Promise<void>;
 }
@@ -106,6 +108,22 @@ export class LocalMatchmakingService implements MatchmakingService {
   async reportGameStarted(matchId: string): Promise<void> {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
     await matchmakerTransport.request(`/matches/${encodeURIComponent(matchId)}/started`, {
+      method: "POST",
+      body: { ticketId: this.activeTicketId }
+    });
+  }
+
+  async reportGameStartAttempted(matchId: string): Promise<void> {
+    await this.reportGameStartState(matchId, "start-attempted");
+  }
+
+  async reportGameStartFailed(matchId: string): Promise<void> {
+    await this.reportGameStartState(matchId, "start-failed");
+  }
+
+  private async reportGameStartState(matchId: string, state: "start-attempted" | "start-failed"): Promise<void> {
+    if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
+    await matchmakerTransport.request(`/matches/${encodeURIComponent(matchId)}/${state}`, {
       method: "POST",
       body: { ticketId: this.activeTicketId }
     });
@@ -289,6 +307,14 @@ export class MockMatchmakingService implements MatchmakingService {
 
   async reportGuestLobbyReady(_matchId: string): Promise<void> {
     await delay(100);
+  }
+
+  async reportGameStartAttempted(_matchId: string): Promise<void> {
+    await delay(50);
+  }
+
+  async reportGameStartFailed(_matchId: string): Promise<void> {
+    await delay(50);
   }
 
   async reportGameStarted(_matchId: string): Promise<void> {

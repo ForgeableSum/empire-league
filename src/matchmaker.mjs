@@ -1652,12 +1652,56 @@ async function handleRequest(request, response) {
       return send(response, 200, { ready: true });
     }
 
-    const startedMatch = url.pathname.match(/^\/matches\/([^/]+)\/started$/);
-    if (request.method === "POST" && startedMatch) {
-      const match = matches.get(startedMatch[1]);
+    const startAttemptedMatch = url.pathname.match(/^\/matches\/([^/]+)\/start-attempted$/);
+    if (request.method === "POST" && startAttemptedMatch) {
+      const match = matches.get(decodeURIComponent(startAttemptedMatch[1]));
       const body = await readJson(request);
       if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
-        return send(response, 403, { error: "only the host may report game start" });
+        return send(response, 403, { error: "only the host may report a game start attempt" });
+      }
+      refreshMatchSetupTimeout(match);
+      for (const guestTicket of matchGuests(match)) {
+        emit(guestTicket, { type: "game_start_attempted", matchId: match.id });
+      }
+      return send(response, 200, { attempted: true });
+    }
+
+    const startFailedMatch = url.pathname.match(/^\/matches\/([^/]+)\/start-failed$/);
+    if (request.method === "POST" && startFailedMatch) {
+      const match = matches.get(decodeURIComponent(startFailedMatch[1]));
+      const body = await readJson(request);
+      const actingTicket = match
+        ? matchTickets(match).find((ticket) => ticket.id === body.ticketId)
+        : null;
+      if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only a matched player may report a failed game start" });
+      }
+      const failedRole = actingTicket.id === match.host.id ? "host" : "guest";
+      emitToMatch(match, {
+        type: "error",
+        code: "GAME_START_FAILED",
+        message: `Game failed to start: the ${failedRole} client did not detect a loading screen or replay after Start Game was clicked.`
+      });
+      deleteMatch(match);
+      console.warn(`[matchmaker] ${match.id}: ${failedRole} reported no loading or replay signal after Start Game`);
+      return send(response, 200, { failed: true });
+    }
+
+    const startedMatch = url.pathname.match(/^\/matches\/([^/]+)\/started$/);
+    if (request.method === "POST" && startedMatch) {
+      const match = matches.get(decodeURIComponent(startedMatch[1]));
+      const body = await readJson(request);
+      const actingTicket = match
+        ? matchTickets(match).find((ticket) => ticket.id === body.ticketId)
+        : null;
+      if (!match || !actingTicket || actingTicket.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only a matched player may confirm game start" });
+      }
+      match.gameStartConfirmed ??= new Set();
+      match.gameStartConfirmed.add(actingTicket.id);
+      refreshMatchSetupTimeout(match);
+      if (match.gameStartConfirmed.size < matchTickets(match).length) {
+        return send(response, 200, { started: false, confirmations: match.gameStartConfirmed.size });
       }
       match.startedAt = new Date().toISOString();
       await recordPendingMatch(match);
@@ -1667,9 +1711,7 @@ async function handleRequest(request, response) {
         "The match result was not reported before the match expired."
       );
       releaseMatchTickets(match);
-      for (const guestTicket of matchGuests(match)) {
-        emit(guestTicket, { type: "game_started", matchId: match.id });
-      }
+      emitToMatch(match, { type: "game_started", matchId: match.id });
       return send(response, 200, { started: true });
     }
 
