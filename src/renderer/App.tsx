@@ -39,6 +39,7 @@ export function App() {
   }, []);
 
   const { page, state, lobbyAutomationActive, authStatus, authError, signInWithSteam } = useAppStore();
+  const rankedLobbyTransition = ["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error;
 
   useEffect(() => {
     chatsRef.current = chats;
@@ -231,7 +232,7 @@ export function App() {
 
   return (
     <>
-      <LobbyInputForwarding locked={lobbyAutomationActive || (["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error)} />
+      <LobbyInputForwarding active={lobbyAutomationActive || rankedLobbyTransition} manageNativeLock={rankedLobbyTransition && !lobbyAutomationActive} />
       <Shell socialUnreadCount={friends.reduce((total, friend) => total + (friend.unread ?? 0), 0)}>
         {page === "home" && <HomePage />}
         {page === "ranked" && <QueuePage />}
@@ -273,26 +274,26 @@ function initialsFor(name: string): string {
   return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)?.[0]}` : name.slice(0, 2)).toUpperCase();
 }
 
-function LobbyInputForwarding({ locked }: { locked: boolean }) {
+function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; manageNativeLock: boolean }) {
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    if (!locked) {
+    if (!active) {
       setPointer(null);
       return;
     }
-    void window.electronApi?.setLobbyInputLock(true);
+    if (manageNativeLock) void window.electronApi?.setLobbyInputLock(true);
     const removePointerListener = window.electronApi?.onLobbyGuardPointer(setPointer);
     document.documentElement.classList.add("game-transition-input-forwarded");
     (document.activeElement as HTMLElement | null)?.blur?.();
     return () => {
-      void window.electronApi?.setLobbyInputLock(false);
+      if (manageNativeLock) void window.electronApi?.setLobbyInputLock(false);
       removePointerListener?.();
       document.documentElement.classList.remove("game-transition-input-forwarded");
     };
-  }, [locked]);
+  }, [active, manageNativeLock]);
 
-  if (!locked || !pointer) return null;
+  if (!active || !pointer) return null;
   return (
     <span
       className="lobby-guard-pointer"
