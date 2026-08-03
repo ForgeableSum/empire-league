@@ -219,13 +219,20 @@ function playerCustomLobby(playerId) {
 function cleanupCustomLobbyDisconnect(playerId) {
   weeklyQueue.delete(playerId);
   const room = playerCustomLobby(playerId);
-  if (!room || room.status === "started") return;
+  if (!room) return;
   if (room.source === "weekly") {
     const disconnected = room.players.find((player) => player.id === playerId);
     room.players = room.players.filter((player) => player.id !== playerId);
     if (!room.players.length) {
       customLobbies.delete(room.id);
       broadcastCustomRooms({ id: room.id, reason: "Every player left the weekly game." });
+      return;
+    }
+    if (room.status === "started") {
+      if (disconnected) {
+        addLobbySystemMessage(room, `${disconnected.displayName} left; the FFA will continue.`);
+      }
+      broadcastCustomRooms();
       return;
     }
     if (room.hostId === playerId) {
@@ -240,6 +247,17 @@ function cleanupCustomLobbyDisconnect(playerId) {
       addLobbySystemMessage(room, `${room.players[0].displayName} is continuing as host.`);
     } else if (disconnected) {
       addLobbySystemMessage(room, `${disconnected.displayName} left; the FFA will continue.`);
+    }
+    broadcastCustomRooms();
+    return;
+  }
+  if (room.status === "started") {
+    const disconnected = room.players.find((player) => player.id === playerId);
+    room.players = room.players.filter((player) => player.id !== playerId);
+    if (!room.players.length) {
+      customLobbies.delete(room.id);
+    } else if (disconnected) {
+      addLobbySystemMessage(room, `${disconnected.displayName} disconnected after the game started.`);
     }
     broadcastCustomRooms();
     return;
@@ -1379,6 +1397,12 @@ async function handleRequest(request, response) {
       }
       if (room.status !== "started") {
         return send(response, 409, { error: "The custom game has not started." });
+      }
+      room.players = room.players.filter((player) => player.id !== authenticatedPlayer.id);
+      if (room.players.length) {
+        addLobbySystemMessage(room, `${authenticatedPlayer.displayName} finished; the game continues for the remaining players.`);
+        broadcastCustomRooms();
+        return send(response, 200, { finished: true, waitingForPlayers: true });
       }
       customLobbies.delete(roomId);
       broadcastCustomRooms();
