@@ -1,0 +1,24 @@
+[Unit]
+Description=Empire League Matchmaker
+After=network-online.target mariadb.service
+Wants=network-online.target
+Requires=mariadb.service
+
+[Service]
+Type=simple
+User=empire-matchmaker
+Group=empire-matchmaker
+WorkingDirectory=/opt/empire-league-matchmaker/current
+EnvironmentFile=/etc/empire-league-matchmaker.env
+ExecStart=/usr/bin/node src/matchmaker.mjs
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/empire-league-matchmaker
+
+[Install]
+WantedBy=multi-user.target

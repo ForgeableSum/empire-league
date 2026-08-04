@@ -1,0 +1,9 @@
+{
+  "name": "empire-league-matchmaker",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "mysql2": "^3.23.1",
+    "ws": "^8.21.1"
+  }
+}

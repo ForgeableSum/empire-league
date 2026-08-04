@@ -22,7 +22,7 @@ export const database = mysql.createPool({
 export async function checkDatabase() {
   const [[serverRows], [migrationRows]] = await Promise.all([
     database.query("SELECT VERSION() AS version, DATABASE() AS databaseName"),
-    database.query("SELECT version FROM schema_migrations ORDER BY applied_at DESC LIMIT 1")
+    database.query("SELECT version FROM schema_migrations ORDER BY applied_at DESC, version DESC LIMIT 1")
   ]);
   return { ...serverRows[0], schemaVersion: migrationRows[0]?.version ?? null };
 }

@@ -196,9 +196,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const services = useMemo(
     () => ({
-      matchmaking: import.meta.env.DEV && !isPreviewMode
-        ? new LocalMatchmakingService()
-        : new MockMatchmakingService(() => configRef.current),
+      matchmaking: isPreviewMode
+        ? new MockMatchmakingService(() => configRef.current)
+        : new LocalMatchmakingService(),
       game: new MockGameIntegrationService(() => configRef.current),
       results: new MockMatchResultService(() => configRef.current)
     }),

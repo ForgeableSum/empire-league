@@ -1,7 +1,11 @@
 import type { PlayerProfile } from "../../shared/contracts/players";
 import type { QueueEventListener, UnsubscribeFunction } from "../../shared/contracts/matchmaking";
 
-const matchmakerUrl = (import.meta.env.VITE_MATCHMAKER_URL ?? "http://127.0.0.1:4317").replace(/\/$/, "");
+const matchmakerUrl = (
+  import.meta.env.DEV
+    ? (import.meta.env.VITE_MATCHMAKER_URL ?? "http://127.0.0.1:4317")
+    : "http://matchmaker.empireleague.gg"
+).replace(/\/$/, "");
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
