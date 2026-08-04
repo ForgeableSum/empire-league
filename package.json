@@ -24,7 +24,8 @@
     "test:civilizations": "node --test src/civilization-roll.test.mjs",
     "test:replays": "node --test src/replay-rules.test.mjs",
     "test:replay-results": "node --test src/replay-result.test.mjs",
-    "test:ratings": "node --test src/rating-pool.test.mjs"
+    "test:ratings": "node --test src/rating-pool.test.mjs",
+    "test:weekly": "node --test src/weekly-rotation.test.mjs"
   },
   "dependencies": {
     "aoe2rec-js": "^0.1.22",

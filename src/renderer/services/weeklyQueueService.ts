@@ -66,16 +66,16 @@ function previewStatus(queued: boolean): WeeklyQueueStatus {
         map: { id: "land-nomad", name: "Land Nomad EL", gameName: "Land Nomad EL", kind: "map" }
       },
       {
-        id: "cba", rotationId: "preview-cba", name: "CBA", description: "The classic Castle Blood Automatic scenario.",
-        details: ["8 players", "Scenario", "Fast action"], playerCount: 8,
-        startsAt: new Date().toISOString(), endsAt: new Date().toISOString(),
-        map: { id: "cba-requiem", name: "CBA Requiem", gameName: "CBA_=REQUIEM=_V292", kind: "scenario" }
-      },
-      {
         id: "ffa-arena", rotationId: "preview-arena", name: "FFA Arena", description: "Eight kingdoms begin behind stone walls. Boom, then choose when to strike.",
         details: ["8 players", "Free for all", "Arena"], playerCount: 8,
         startsAt: new Date().toISOString(), endsAt: new Date().toISOString(),
         map: { id: "arena", name: "Arena", gameName: "Arena", kind: "map" }
+      },
+      {
+        id: "ffa-black-forest", rotationId: "preview-black-forest", name: "FFA Black Forest", description: "Eight rivals fight through narrow forest paths for control of the map.",
+        details: ["8 players", "Free for all", "Black Forest"], playerCount: 8,
+        startsAt: new Date().toISOString(), endsAt: new Date().toISOString(),
+        map: { id: "black-forest", name: "Black Forest", gameName: "Black Forest", kind: "map" }
       }
     ]
   };

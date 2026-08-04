@@ -31,6 +31,7 @@ import {
   normalizeCivilizationPreference,
   rollCivilizationPreference
 } from "./civilization-roll.mjs";
+import { currentWeeklyMode as weeklyModeAt, weeklyRotation } from "./weekly-rotation.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -68,6 +69,7 @@ const teamRatingRangeSchedule = [
 ];
 let eventSequence = 0;
 let rematchCooldownCleanupTimer;
+let weeklyRotationTimer;
 const socialPresence = new Map();
 const socialFriendIds = new Map();
 const socialMessages = new Map();
@@ -75,42 +77,14 @@ const socialUnread = new Map();
 const maxSocialMessagesPerConversation = 100;
 const customLobbies = new Map();
 const weeklyQueue = new Map();
-const weeklyPlayersRequired = Math.min(8, Math.max(2, Number(process.env.WEEKLY_QUEUE_PLAYERS ?? 2) || 2));
-const weeklyRotationAnchor = Date.parse("2026-08-03T00:00:00Z");
-const weekMs = 7 * 24 * 60 * 60 * 1000;
-const weeklyModes = [
-  {
-    id: "ffa-nomad", name: "FFA Nomad", description: "No town center. No teammates. Find your footing and outlast every rival.",
-    details: ["8 players", "Free for all", "Nomad start"],
-    map: { id: "land-nomad", name: "Land Nomad EL", gameName: "Land Nomad EL", kind: "map" }
-  },
-  {
-    id: "cba", name: "CBA", description: "The classic Castle Blood Automatic scenario.",
-    details: ["8 players", "Scenario", "Fast action"],
-    map: { id: "cba-requiem", name: "CBA Requiem", gameName: "CBA_=REQUIEM=_V292", kind: "scenario" }
-  },
-  {
-    id: "ffa-arena", name: "FFA Arena", description: "Eight kingdoms begin behind stone walls. Boom, then choose when to strike.",
-    details: ["8 players", "Free for all", "Arena"],
-    map: { id: "arena", name: "Arena", gameName: "Arena", kind: "map" }
-  }
-];
+const weeklyPlayersRequired = Math.min(8, Math.max(2, Number(process.env.WEEKLY_QUEUE_PLAYERS ?? 8) || 8));
 const weeklyRatingRangeSchedule = teamRatingRangeSchedule.map((step) => ({
   afterMs: step.afterMs,
   spread: step.spread * 2
 }));
 
 function currentWeeklyMode(now = Date.now()) {
-  const week = Math.floor((now - weeklyRotationAnchor) / weekMs);
-  const index = ((week % weeklyModes.length) + weeklyModes.length) % weeklyModes.length;
-  const startsAt = weeklyRotationAnchor + week * weekMs;
-  return {
-    ...weeklyModes[index],
-    rotationId: `${weeklyModes[index].id}:${new Date(startsAt).toISOString().slice(0, 10)}`,
-    startsAt: new Date(startsAt).toISOString(),
-    endsAt: new Date(startsAt + weekMs).toISOString(),
-    playerCount: weeklyPlayersRequired
-  };
+  return weeklyModeAt(now, weeklyPlayersRequired);
 }
 
 function weeklyQueueStatus(playerId) {
@@ -120,7 +94,7 @@ function weeklyQueueStatus(playerId) {
   }
   const room = playerCustomLobby(playerId);
   const position = [...weeklyQueue.keys()].indexOf(playerId);
-  const rotation = [0, 1, 2].map((offset) => currentWeeklyMode(Date.now() + offset * weekMs));
+  const rotation = weeklyRotation(Date.now(), weeklyPlayersRequired);
   return {
     mode: currentMode,
     rotation,
@@ -166,13 +140,14 @@ function scheduleWeeklyRatingExpansion(playerId, entry) {
   });
 }
 
-function nextWeeklyGroup(now = Date.now()) {
+function nextWeeklyGroup(rotationId, now = Date.now()) {
   const queued = [...weeklyQueue.entries()].sort((left, right) =>
     new Date(left[1].joinedAt).getTime() - new Date(right[1].joinedAt).getTime()
     || left[0].localeCompare(right[0]));
   for (const anchor of queued) {
+    if (anchor[1].rotationId !== rotationId) continue;
     const candidates = queued
-      .filter(([playerId]) => playerId !== anchor[0])
+      .filter(([playerId, entry]) => playerId !== anchor[0] && entry.rotationId === rotationId)
       .sort((left, right) =>
         Math.abs(weeklyEntryRating(left[1]) - weeklyEntryRating(anchor[1]))
         - Math.abs(weeklyEntryRating(right[1]) - weeklyEntryRating(anchor[1]))
@@ -188,10 +163,13 @@ function nextWeeklyGroup(now = Date.now()) {
 }
 
 function assembleWeeklyRooms() {
+  const mode = currentWeeklyMode();
+  for (const [playerId, entry] of weeklyQueue) {
+    if (entry.rotationId !== mode.rotationId) removeWeeklyQueuePlayer(playerId);
+  }
   while (weeklyQueue.size >= weeklyPlayersRequired) {
-    const entries = nextWeeklyGroup();
+    const entries = nextWeeklyGroup(mode.rotationId);
     if (!entries) break;
-    const mode = currentWeeklyMode();
     for (const [playerId] of entries) removeWeeklyQueuePlayer(playerId);
     const players = entries.map(([id, entry], index) => ({
       id,
@@ -2223,6 +2201,16 @@ const socketHeartbeat = setInterval(() => {
 }, 30_000);
 socketHeartbeat.unref();
 
+function scheduleWeeklyRotation() {
+  const delay = Math.max(0, new Date(currentWeeklyMode().endsAt).getTime() - Date.now()) + 25;
+  weeklyRotationTimer = setTimeout(() => {
+    assembleWeeklyRooms();
+    scheduleWeeklyRotation();
+  }, delay);
+  weeklyRotationTimer.unref?.();
+}
+scheduleWeeklyRotation();
+
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
 }
@@ -2237,6 +2225,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     clearInterval(socketHeartbeat);
     clearTimeout(rematchCooldownCleanupTimer);
+    clearTimeout(weeklyRotationTimer);
     for (const socket of webSocketServer.clients) socket.close(1001, "Server shutting down");
     server.close(() => database.end().finally(() => process.exit(0)));
   });

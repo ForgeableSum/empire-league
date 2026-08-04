@@ -14,6 +14,7 @@ export function WeeklyPage() {
   const [room, setRoom] = useState<CustomLobbyRoom>();
   const [civilization, setCivilization] = useState("Random");
   const [pending, setPending] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     void weeklyQueueService.status().then((next) => {
@@ -42,6 +43,23 @@ export function WeeklyPage() {
     }, 2_000);
     return () => window.clearInterval(timer);
   }, [status?.queued, room]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!status?.mode.endsAt) return;
+    const delay = Math.max(0, new Date(status.mode.endsAt).getTime() - Date.now()) + 250;
+    const timer = window.setTimeout(() => {
+      void weeklyQueueService.status().then((next) => {
+        setStatus(next);
+        setRoom(next.room);
+      }).catch(() => undefined);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [status?.mode.rotationId, status?.mode.endsAt]);
 
   useEffect(() => {
     setWeeklyQueueActive(Boolean(status?.queued || room));
@@ -94,7 +112,7 @@ export function WeeklyPage() {
 
       <div className="weekly-heading">
         <div><span className="eyebrow">Three-week rotation</span><h2>On the horizon</h2></div>
-        <span className="weekly-reset"><Clock3 size={15} /> Changes every Monday</span>
+        <span className="weekly-reset"><Clock3 size={15} /> {mode ? `Monday 00:00 UTC · ${formatCountdown(new Date(mode.endsAt).getTime() - now)}` : "Changes every Monday"}</span>
       </div>
       <div className="weekly-rotation" aria-label="Weekly game rotation">
         {(status?.rotation ?? []).map((rotationMode, index) => (
@@ -127,4 +145,13 @@ function weeklySetupStatus(room: CustomLobbyRoom, currentPlayerId: string): stri
 
 function messageFor(error: unknown) {
   return error instanceof Error ? error.message : "An unexpected error occurred.";
+}
+
+function formatCountdown(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1_000));
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
 }
