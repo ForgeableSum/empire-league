@@ -37,6 +37,10 @@ export interface LoginItemSettings {
   openAtLogin: boolean;
 }
 
+export interface PendingAppUpdate {
+  version: string;
+}
+
 export interface ElectronGameApi {
   scanLocalCustomContent(): Promise<LocalCustomContentCatalog>;
   detectEnabledUiMods(): Promise<EnabledUiModsResult>;
@@ -88,6 +92,10 @@ export interface ElectronGameApi {
   alertUnreadMessage(): Promise<void>;
   clearUnreadMessageAlert(): Promise<void>;
   getLoginItemSettings(): Promise<LoginItemSettings>;
+  getAppVersion(): Promise<string>;
+  getPendingUpdate(): Promise<PendingAppUpdate | null>;
+  installPendingUpdate(): Promise<boolean>;
+  onUpdateReady(listener: (update: PendingAppUpdate) => void): () => void;
   setLoginItemOpenAtLogin(openAtLogin: boolean): Promise<LoginItemSettings>;
   minimizeToTaskbar(): Promise<void>;
   quitApp(): Promise<void>;

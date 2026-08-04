@@ -93,6 +93,14 @@ const electronApi: ElectronGameApi = {
   alertUnreadMessage: () => ipcRenderer.invoke("system:alert-unread-message"),
   clearUnreadMessageAlert: () => ipcRenderer.invoke("system:clear-unread-message-alert"),
   getLoginItemSettings: () => ipcRenderer.invoke("system:get-login-item-settings"),
+  getAppVersion: () => ipcRenderer.invoke("system:get-app-version"),
+  getPendingUpdate: () => ipcRenderer.invoke("system:get-pending-update"),
+  installPendingUpdate: () => ipcRenderer.invoke("system:install-pending-update"),
+  onUpdateReady: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, update: Parameters<typeof listener>[0]) => listener(update);
+    ipcRenderer.on("system:update-ready", handler);
+    return () => ipcRenderer.removeListener("system:update-ready", handler);
+  },
   setLoginItemOpenAtLogin: (openAtLogin) => ipcRenderer.invoke("system:set-login-item-open-at-login", openAtLogin),
   minimizeToTaskbar: () => ipcRenderer.invoke("system:minimize-to-taskbar"),
   quitApp: () => ipcRenderer.invoke("system:quit"),

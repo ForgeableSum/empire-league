@@ -5,6 +5,9 @@ import topLevelAwait from "vite-plugin-top-level-await";
 import { resolve } from "node:path";
 
 export default defineConfig({
+  // Packaged Electron pages are loaded with file://, so asset URLs must be
+  // relative to index.html instead of rooted at the filesystem volume.
+  base: "./",
   plugins: [react(), wasm(), topLevelAwait()],
   build: {
     outDir: "dist/renderer",

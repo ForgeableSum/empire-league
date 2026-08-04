@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { installBundledAoe2Maps } from "./aoe2MapInstaller.js";
 import { createMainWindow } from "./window.js";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers.js";
+import { startAutoUpdates } from "./autoUpdate.js";
 
 registerIpcHandlers();
 app.setAppUserModelId("community.empireleague.aoe2");
@@ -34,6 +35,7 @@ app.whenReady().then(async () => {
     console.error("[AoE2 maps] Installation failed", error);
   }
   createMainWindow();
+  startAutoUpdates();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -1,6 +1,6 @@
 {
   "name": "empire-league",
-  "version": "0.1.0",
+  "version": "0.1.10",
   "description": "Electron prototype for an AoE2 DE community 1v1 matchmaking client.",
   "author": "Empire League Prototype",
   "main": "dist/main/main.js",
@@ -17,6 +17,7 @@
     "build": "tsc -p tsconfig.json && npm run build:electron && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "build:landing-preview": "vite build --config vite.preview.config.ts && node scripts/inline-landing-preview.mjs",
+    "release:windows": "npm run build && electron-builder --win nsis --publish never",
     "package": "npm run build && electron-builder --dir",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test:maps": "node --test src/map-catalog.test.mjs",
@@ -27,6 +28,7 @@
   },
   "dependencies": {
     "aoe2rec-js": "^0.1.22",
+    "electron-updater": "^6.6.2",
     "flag-icons": "^7.5.0",
     "koffi": "^3.1.2",
     "lucide-react": "^0.468.0",
@@ -69,6 +71,21 @@
     ],
     "mac": {
       "category": "public.app-category.games"
+    },
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": true
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "http://209.222.25.118/updates/windows"
     }
   }
 }

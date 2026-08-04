@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, CalendarDays, Gamepad2, History, Home, LogOut, Swords, Settings, User, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarDays, Download, Gamepad2, History, Home, LogOut, RotateCcw, Swords, Settings, User, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import appIcon from "../../assets/el_icon_no_plume.png";
 import { presenceService } from "../../services/presenceService";
@@ -23,6 +23,40 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
   const viewingLinkedProfile = page === "profile" && selectedProfileId !== null && selectedProfileId !== state.currentUser.id;
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
   const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [pendingUpdateVersion, setPendingUpdateVersion] = useState<string | null>(null);
+  const [installingUpdate, setInstallingUpdate] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void window.electronApi?.getAppVersion().then((version) => {
+      if (active) setAppVersion(version);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const electronApi = window.electronApi;
+    if (!electronApi) return;
+    let active = true;
+    void electronApi.getPendingUpdate().then((update) => {
+      if (active && update) setPendingUpdateVersion(update.version);
+    });
+    const unsubscribe = electronApi.onUpdateReady((update) => {
+      if (active) setPendingUpdateVersion(update.version);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
+  async function restartForUpdate(): Promise<void> {
+    if (!window.electronApi || installingUpdate) return;
+    setInstallingUpdate(true);
+    const started = await window.electronApi.installPendingUpdate().catch(() => false);
+    if (!started) setInstallingUpdate(false);
+  }
 
   useEffect(() => {
     if (isPreviewMode) return;
@@ -49,6 +83,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
       <div className="window-title">
         <img src={appIcon} alt="" />
         <span>Empire League - AoE2:DE Community Client &amp; Matchmaker</span>
+        {appVersion && <span className="window-title-version">v{appVersion}</span>}
       </div>
       <WindowControls />
       <aside className="sidebar">
@@ -86,7 +121,6 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
             </div>
           )}
           <div><span>Connection</span><strong className={`status-${state.connectionStatus}`}>{state.connectionStatus}</strong></div>
-          <div><span>Version</span><strong>0.1.0</strong></div>
         </div>
         <div className="user-block">
           <div className="avatar">
@@ -122,6 +156,22 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
           </footer>
         </div>
       </main>
+      {pendingUpdateVersion && (
+        <div className="modal-backdrop update-ready-backdrop" role="presentation">
+          <section className="match-modal update-ready-modal" role="alertdialog" aria-modal="true" aria-labelledby="update-ready-title">
+            <div className="update-ready-icon"><Download size={28} aria-hidden="true" /></div>
+            <span className="eyebrow">Update downloaded</span>
+            <h2 id="update-ready-title">Update ready</h2>
+            <p>Empire League v{pendingUpdateVersion} has been downloaded. Restart the application to complete the required update.</p>
+            <div className="modal-actions update-ready-actions">
+              <button className="primary" type="button" disabled={installingUpdate} onClick={() => void restartForUpdate()} autoFocus>
+                <RotateCcw className={installingUpdate ? "spin" : undefined} size={17} aria-hidden="true" />
+                {installingUpdate ? "Restarting…" : "Restart and update"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

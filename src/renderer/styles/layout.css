@@ -189,6 +189,12 @@
   padding: 10px;
 }
 
+.window-title-version {
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
 .user-block {
   padding-left: 15px;
 }
@@ -3631,6 +3637,65 @@
 .toast button:hover {
   border-color: var(--line);
   color: var(--text);
+}
+
+.update-ready-backdrop {
+  z-index: 1100;
+  backdrop-filter: blur(7px);
+  background:
+    radial-gradient(circle at center, rgba(197, 141, 69, 0.18), transparent 46%),
+    rgba(10, 9, 8, 0.82);
+}
+
+.update-ready-modal {
+  width: min(520px, calc(100vw - 40px));
+  justify-items: center;
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  text-align: center;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.68), 0 0 50px rgba(197, 141, 69, 0.15);
+}
+
+.update-ready-modal h2,
+.update-ready-modal p {
+  margin: 0;
+}
+
+.update-ready-modal h2 {
+  color: var(--accent-2);
+  font-size: 30px;
+}
+
+.update-ready-modal p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.update-ready-modal .modal-actions {
+  width: 100%;
+}
+
+.update-ready-actions {
+  grid-template-columns: 1fr;
+}
+
+.update-ready-modal .modal-actions button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.update-ready-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(224, 165, 65, 0.38);
+  border-radius: 50%;
+  color: var(--accent-2);
+  background: rgba(224, 165, 65, 0.12);
+  box-shadow: 0 0 30px rgba(224, 165, 65, 0.12);
 }
 
 .toast.has-action .toast-copy {

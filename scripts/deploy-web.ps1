@@ -49,6 +49,8 @@ install -d -m 0755 "`$staging"
 tar -xzf '$remoteArchive' -C "`$staging"
 test -f "`$staging/index.html"
 test -f "`$staging/app-preview/index.html"
+# Application releases share this web root. Preserve them across website deploys.
+if [ -d "`$webroot/updates" ]; then mv "`$webroot/updates" "`$staging/updates"; fi
 rm -rf "`$previous"
 if [ -d "`$webroot" ]; then mv "`$webroot" "`$previous"; fi
 mv "`$staging" "`$webroot"
