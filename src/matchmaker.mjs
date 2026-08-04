@@ -229,36 +229,6 @@ function assembleWeeklyRooms() {
   broadcastCustomRooms();
 }
 
-function demoPlayer(id, displayName, slot, team, civilization, ready = true) {
-  return { id, displayName, slot, team, civilization, ready, host: slot === 1 };
-}
-
-for (const room of [
-  {
-    id: "demo-cba-requiem", name: "CBA Requiem (all welcome)", hostId: "demo-cedric",
-    map: { id: "demo-cba", name: "CBA Requiem v293: Standard", gameName: "CBA_=REQUIEM=_V292", kind: "scenario" },
-    players: [demoPlayer("demo-cedric", "SirCedric", 1, 1, "Random"), demoPlayer("demo-wololo", "WololoEnjoyer", 2, 2, "Random", false)],
-    maxPlayers: 8, status: "open", createdAt: new Date(Date.now() - 480_000).toISOString(), demo: true
-  },
-  {
-    id: "demo-arabia-2v2", name: "Chill Arabia 2v2", hostId: "demo-mango",
-    map: { id: "demo-arabia", name: "Arabia", gameName: "Arabia", kind: "map" },
-    players: [demoPlayer("demo-mango", "MangonelMike", 1, 1, "Mongols"), demoPlayer("demo-boar", "BoarLamer", 2, 2, "Goths"), demoPlayer("demo-vill", "IdleVillager", 3, 1, "Random", false)],
-    maxPlayers: 4, status: "open", createdAt: new Date(Date.now() - 260_000).toISOString(), demo: true
-  },
-  {
-    id: "demo-nomad", name: "Nomad FFA (beginners)", hostId: "demo-sheep",
-    map: { id: "demo-nomad-map", name: "Land Nomad EL", gameName: "Land Nomad EL", kind: "map" },
-    players: [demoPlayer("demo-sheep", "MissingSheep", 1, 0, "Random"), demoPlayer("demo-castle", "CastleDropper", 2, 0, "Spanish")],
-    maxPlayers: 8, status: "open", createdAt: new Date(Date.now() - 90_000).toISOString(), demo: true
-  }
-]) {
-  customLobbies.set(room.id, {
-    ...room,
-    messages: [{ id: randomUUID(), author: "Lobby", text: `${room.name} created.`, sentAt: room.createdAt, system: true }]
-  });
-}
-
 function publicCustomRooms() {
   return [...customLobbies.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
