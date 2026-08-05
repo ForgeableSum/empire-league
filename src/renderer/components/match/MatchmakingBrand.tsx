@@ -1,4 +1,4 @@
-import empireLeagueArtwork from "../../assets/el4-ranked.png";
+import empireLeagueArtwork from "../../assets/el5-ranked.png";
 
 export function MatchmakingBrand() {
   return (

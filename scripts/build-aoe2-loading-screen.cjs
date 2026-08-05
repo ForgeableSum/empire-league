@@ -3,7 +3,7 @@ const { mkdir, writeFile } = require("node:fs/promises");
 const { dirname, join } = require("node:path");
 
 const projectRoot = dirname(__dirname);
-const artworkPath = join(projectRoot, "assets", "branding", "el4-mod.png");
+const artworkPath = join(projectRoot, "assets", "branding", "el5-mod.png");
 const outputPath = join(projectRoot, "assets", "aoe2-maps", "loading_slash.png");
 
 app.whenReady().then(async () => {
