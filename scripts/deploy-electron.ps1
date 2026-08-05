@@ -6,6 +6,7 @@ param(
     [string]$Server = "209.222.25.118",
     [string]$User = "root",
     [string]$UpdateRoot = "/var/www/empire-league/updates/windows",
+    [string]$PublicUpdateUrl = "https://empireleague.gg/updates/windows",
     [string]$IdentityFile,
     [switch]$SkipBuild
 )
@@ -59,9 +60,9 @@ try {
 set -eu
 install -d -m 0755 '$UpdateRoot'
 find '$remoteStage' -type f ! -name latest.yml -exec mv {} '$UpdateRoot/' \;
-cp '$UpdateRoot/$($installer.Name)' '$UpdateRoot/Empire-League-Preview-Setup.exe.new'
-chmod 0644 '$UpdateRoot/Empire-League-Preview-Setup.exe.new'
-mv '$UpdateRoot/Empire-League-Preview-Setup.exe.new' '$UpdateRoot/Empire-League-Preview-Setup.exe'
+cp '$UpdateRoot/$($installer.Name)' '$UpdateRoot/Empire-League-Setup.exe.new'
+chmod 0644 '$UpdateRoot/Empire-League-Setup.exe.new'
+mv '$UpdateRoot/Empire-League-Setup.exe.new' '$UpdateRoot/Empire-League-Setup.exe'
 mv '$remoteStage/latest.yml' '$UpdateRoot/latest.yml.new'
 chmod 0644 '$UpdateRoot'/*
 mv '$UpdateRoot/latest.yml.new' '$UpdateRoot/latest.yml'
@@ -72,7 +73,7 @@ test -s '$UpdateRoot/latest.yml'
     & ssh @sshArgs "${User}@${Server}" $remoteCommand
     if ($LASTEXITCODE -ne 0) { throw "Remote release activation failed." }
 
-    Write-Host "Published Empire League $Version at http://$Server/updates/windows/latest.yml"
+    Write-Host "Published Empire League $Version at $PublicUpdateUrl/latest.yml"
 }
 finally {
     Pop-Location

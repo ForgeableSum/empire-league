@@ -95,7 +95,7 @@ The script:
 The website's Download buttons point to:
 
 ```text
-updates/windows/Empire-League-Preview-Setup.exe
+updates/windows/Empire-League-Setup.exe
 ```
 
 Verify the deployment:
@@ -139,20 +139,20 @@ The script:
 The stable browser download is:
 
 ```text
-http://209.222.25.118/updates/windows/Empire-League-Preview-Setup.exe
+https://empireleague.gg/updates/windows/Empire-League-Setup.exe
 ```
 
 The Electron updater feed is currently configured in `package.json` as:
 
 ```text
-http://209.222.25.118/updates/windows
+https://empireleague.gg/updates/windows
 ```
 
 Verify the published metadata and installer:
 
 ```powershell
-curl.exe -fsS http://209.222.25.118/updates/windows/latest.yml
-curl.exe -I http://209.222.25.118/updates/windows/Empire-League-Preview-Setup.exe
+curl.exe -fsS https://empireleague.gg/updates/windows/latest.yml
+curl.exe -I https://empireleague.gg/updates/windows/Empire-League-Setup.exe
 ```
 
 Then test the updater from an installed older client:

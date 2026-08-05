@@ -48,27 +48,14 @@ npm.cmd run build
 2. Create the update directory on the web server. Its default path is
    `/var/www/empire-league/updates/windows`.
 3. Configure the web server to serve that directory as static files.
-4. If the website download must remain private, password-protect only the
-   stable browser-download alias. Do **not** protect `latest.yml`, blockmaps, or
-   versioned installers: the updater cannot contain website credentials.
-
 An Apache template is provided at `scripts/apache-empire-league.conf`. Review
-and replace its `ServerName` before installing it. The template expects an
-Apache password file at:
-
-```text
-/etc/apache2/empire-league-download.htpasswd
-```
-
-Create or update that file directly on the server with `htpasswd`; do not place
-the username or generated password in this repository. Enable Apache's headers
-and authentication modules as required, validate with `apachectl configtest`,
-then reload Apache.
+and replace its `ServerName` before installing it. Validate the configuration
+with `apachectl configtest`, then reload Apache.
 
 The stable browser download is:
 
 ```text
-/updates/windows/Empire-League-Preview-Setup.exe
+/updates/windows/Empire-League-Setup.exe
 ```
 
 ### Publish a client release
