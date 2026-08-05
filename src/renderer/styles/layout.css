@@ -693,6 +693,20 @@
   margin-bottom: 14px;
 }
 
+.closed-beta-warning {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border: 1px solid color-mix(in srgb, var(--warning) 65%, var(--line));
+  background: color-mix(in srgb, var(--warning) 9%, #1a1816);
+  color: #d8c9ad;
+}
+
+.closed-beta-warning svg { flex: 0 0 auto; color: var(--warning); }
+.closed-beta-warning strong { color: #efc873; }
+
 .leaderboard-mode {
   display: inline-flex;
   align-self: end;

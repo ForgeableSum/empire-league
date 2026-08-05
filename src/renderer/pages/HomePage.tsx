@@ -4,6 +4,8 @@ import { FormPips } from "../components/common/FormPips";
 import { MapPool } from "../components/common/MapPool";
 import { mapGroups } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
+import { AlertTriangle } from "lucide-react";
+import { isPreviewMode } from "../previewMode";
 
 const openLandMaps = mapGroups.find((group) => group.id === "land-open")?.maps ?? [];
 
@@ -13,6 +15,12 @@ export function HomePage() {
   const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
   return (
     <section className="page-grid">
+      {!isPreviewMode && (
+        <div className="closed-beta-warning" role="note" aria-label="Closed beta data notice">
+          <AlertTriangle size={20} aria-hidden="true" />
+          <p><strong>Empire League is in closed beta.</strong> Elo ratings and match data will be reset when the platform fully launches.</p>
+        </div>
+      )}
       <div className="hero-panel">
         <div>
           <span className="eyebrow">Current Rating</span>
