@@ -2,6 +2,16 @@ import { Download, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../../state/appStore";
 
+function formatConsoleValue(value: unknown): string {
+  if (value instanceof Error) return value.stack ?? value.message;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 export function DiagnosticLogWindow() {
   const { state, appendDiagnosticLog } = useAppStore();
   const [open, setOpen] = useState(false);
@@ -14,6 +24,7 @@ export function DiagnosticLogWindow() {
   }, []);
 
   useEffect(() => {
+    const originalConsoleError = console.error;
     const toggle = (event: KeyboardEvent) => {
       if (event.key !== "F10") return;
       event.preventDefault();
@@ -26,10 +37,15 @@ export function DiagnosticLogWindow() {
       const reason = event.reason instanceof Error ? event.reason.stack ?? event.reason.message : String(event.reason);
       appendDiagnosticLog(`[Unhandled promise] ${reason}`);
     };
+    console.error = (...values: unknown[]) => {
+      originalConsoleError(...values);
+      appendDiagnosticLog(`[Console error] ${values.map(formatConsoleValue).join(" ")}`);
+    };
     window.addEventListener("keydown", toggle);
     window.addEventListener("error", recordError);
     window.addEventListener("unhandledrejection", recordRejection);
     return () => {
+      console.error = originalConsoleError;
       window.removeEventListener("keydown", toggle);
       window.removeEventListener("error", recordError);
       window.removeEventListener("unhandledrejection", recordRejection);
