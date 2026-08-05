@@ -2,6 +2,7 @@ import { useState } from "react";
 import { isRatingPromotion } from "../../../shared/contracts/matchmaking";
 import { useAppStore } from "../../state/appStore";
 import { PromotionModal } from "../common/PromotionModal";
+import { MatchmakingBrand } from "./MatchmakingBrand";
 
 export function ResultScreen() {
   const { state, setPage, returnToMatchmaking } = useAppStore();
@@ -15,25 +16,28 @@ export function ResultScreen() {
 
   return (
     <>
-      <section className="result-screen">
-        <span className="eyebrow">{contested ? "Contested result" : "Verified result"}</span>
-        <h2 className={won ? "win" : "loss"}>
-          {contested ? "Result Contested" : won ? "Victory" : result.outcome === "loss" ? "Defeat" : "No Contest"}
-        </h2>
-        {contested && (
-          <p>The replay result could not be verified. The result was discarded and ratings were not changed.</p>
-        )}
-        <div className="rating-swing">
-          <strong>{result.ratingChange > 0 ? "+" : ""}{result.ratingChange} Rating</strong>
-          <span>{contested ? "No rating change" : `${result.oldRating} → ${result.newRating}`}</span>
-        </div>
-        <div className="button-row">
-          <button className="primary" type="button" onClick={() => void returnToMatchmaking()}>
-            Return to Matchmaking
-          </button>
-          <button className="secondary" type="button" onClick={() => setPage("home")}>Return Home</button>
-        </div>
-      </section>
+      <div className="search-waiting-layout result-layout">
+        <section className="result-screen">
+          <span className="eyebrow">{contested ? "Contested result" : "Verified result"}</span>
+          <h2 className={won ? "win" : "loss"}>
+            {contested ? "Result Contested" : won ? "Victory" : result.outcome === "loss" ? "Defeat" : "No Contest"}
+          </h2>
+          {contested && (
+            <p>The replay result could not be verified. The result was discarded and ratings were not changed.</p>
+          )}
+          <div className="rating-swing">
+            <strong>{result.ratingChange > 0 ? "+" : ""}{result.ratingChange} Rating</strong>
+            <span>{contested ? "No rating change" : `${result.oldRating} → ${result.newRating}`}</span>
+          </div>
+          <div className="button-row">
+            <button className="primary" type="button" onClick={() => void returnToMatchmaking()}>
+              Return to Matchmaking
+            </button>
+            <button className="secondary" type="button" onClick={() => setPage("home")}>Return Home</button>
+          </div>
+        </section>
+        <MatchmakingBrand />
+      </div>
       {promoted && showPromotion && (
         <PromotionModal
           oldRating={result.oldRating}
