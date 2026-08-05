@@ -97,7 +97,7 @@ export function SettingsPage() {
         <label>Steam display name<input value={state.currentUser.displayName} readOnly /></label>
         <label>Steam ID64<input value={state.currentUser.steamId ?? "Unavailable"} readOnly /></label>
         <label>Empire League player ID<input value={state.currentUser.id} readOnly /></label>
-        <button type="button" className="secondary" onClick={() => void signOut()}>Log Out</button>
+        <button type="button" className="secondary settings-logout" onClick={() => void signOut()}>Log Out</button>
       </SettingsGroup>
     </section>
   );

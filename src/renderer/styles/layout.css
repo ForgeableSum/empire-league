@@ -3273,6 +3273,11 @@
   align-content: start;
 }
 
+.settings-logout {
+  width: auto;
+  justify-self: start;
+}
+
 .family-sharing-warning {
   margin: 0;
   padding: 11px 12px;
