@@ -107,7 +107,7 @@ export interface NativeCivilizationPickerStateResult {
 }
 
 export interface NativeHostSetupStateResult {
-  state: "main-menu" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "content-picker" | "loading-screen" | "unknown";
+  state: "main-menu" | "main-menu-news" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "content-picker" | "loading-screen" | "unknown";
   detail: string;
 }
 
@@ -424,6 +424,29 @@ export async function sendAoe2Enter(processId: number): Promise<NativeInputResul
       sent ? "SENT" : "SEND_FAILED",
       "Mode=WindowMessageSync",
       "Key=ENTER",
+      `Window=${String(window)}`,
+      `Down=${down.dispatched}`,
+      `DownMs=${down.elapsedMs}`,
+      `Up=${up.dispatched}`,
+      `UpMs=${up.elapsedMs}`
+    ].join("|")
+  };
+}
+
+export async function sendAoe2Escape(processId: number): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+  const down = sendWindowMessage(window, 0x0100, 0x1b, 0x00010001);
+  await delay(15);
+  const up = sendWindowMessage(window, 0x0101, 0x1b, -1073676287);
+  const sent = down.dispatched && up.dispatched;
+  return {
+    sent,
+    detail: [
+      sent ? "SENT" : "SEND_FAILED",
+      "Mode=WindowMessageSync",
+      "Key=ESCAPE",
       `Window=${String(window)}`,
       `Down=${down.dispatched}`,
       `DownMs=${down.elapsedMs}`,
@@ -779,8 +802,27 @@ export function readAoe2HostSetupState(
   // or ordinary dark panels for the loading screen.
   const darkSamples = [upperLeft, upperCenter, multiplayerPanel, lowerButton, guestReadyButton]
     .filter((sample) => Math.max(...sample) <= 30).length;
+  // The once-per-session News panel darkens the menu while retaining a muted
+  // brown strip at upper-left and a neutral gray header across upper-center.
+  // These bounds were calibrated against build 101.103.48987.0 at 2560x1440.
+  // Keep this separate from generic unknown screens so recovery never sends
+  // Escape unless the News overlay itself is positively identified.
+  const centerChroma = Math.max(...upperCenter) - Math.min(...upperCenter);
+  const hasMainMenuNews = leftRed >= 60 && leftRed <= 150
+    && leftGreen >= 45 && leftGreen <= 120
+    && leftBlue >= 30 && leftBlue <= 100
+    && centerRed >= 50 && centerRed <= 130
+    && centerGreen >= 50 && centerGreen <= 130
+    && centerBlue >= 50 && centerBlue <= 130
+    && centerChroma <= 25
+    && Math.max(...multiplayerPanel) <= 40
+    && Math.max(...guestReadyButton) <= 40
+    && Math.max(...lowerButton) >= 30
+    && Math.max(...lowerButton) <= 80;
   const state = darkSamples >= 4
     ? "loading-screen"
+    : hasMainMenuNews
+      ? "main-menu-news"
     : options.contentPickerExpected && hasContentPicker
     ? "content-picker"
     : hasReadyButton

@@ -53,6 +53,7 @@ import {
   sendAoe2End,
   sendAoe2Down,
   sendAoe2Enter,
+  sendAoe2Escape,
   sendAoe2Home,
   sendAoe2Tab,
   sendAoe2Text
@@ -2543,6 +2544,32 @@ export function registerGameHandlers(): void {
           throw new Error(`${action.label} did not reach ${expectedState}.`);
         }
       };
+
+      // AoE2 can open its News panel automatically on top of the main menu
+      // once per game session. Do not blindly dismiss it: Escape on the plain
+      // main menu can open an unrelated exit prompt. The normal main menu has
+      // a stable rendered signature, so only use Escape when that signature is
+      // absent, then require it to appear before sending the first menu click.
+      let initialState = readAoe2HostSetupState(process.pid as number);
+      emitLog(`STEP_VERIFY|Initial Main Menu|Expected=main-menu|${initialState.detail}`);
+      if (initialState.state === "main-menu-news") {
+        const dismissStartupOverlay = await sendAoe2Escape(process.pid as number);
+        emitLog(`STEP|Dismiss Startup Overlay|Key=ESCAPE|${dismissStartupOverlay.detail}`);
+        if (!dismissStartupOverlay.sent) {
+          throw new Error("The AoE2 startup overlay could not be dismissed.");
+        }
+        const mainMenuDeadline = Date.now() + 5_000;
+        do {
+          await delay(250);
+          initialState = readAoe2HostSetupState(process.pid as number);
+        } while (initialState.state !== "main-menu" && Date.now() < mainMenuDeadline);
+        emitLog(`STEP_VERIFY|Dismiss Startup Overlay|Expected=main-menu|${initialState.detail}`);
+        if (initialState.state !== "main-menu") {
+          throw new Error("AoE2 did not reach the main menu after dismissing its startup overlay.");
+        }
+      } else if (initialState.state !== "main-menu") {
+        throw new Error(`AoE2 was expected at the main menu, but its state was ${initialState.state}.`);
+      }
 
       await actionStep("multiplayer");
       await actionStep("hostGame");
