@@ -37,7 +37,6 @@ const IsWindow = user32?.func("bool __stdcall IsWindow(HWND hwnd)");
 const IsWindowVisible = user32?.func("bool __stdcall IsWindowVisible(HWND hwnd)");
 const IsWindowEnabled = user32?.func("bool __stdcall IsWindowEnabled(HWND hwnd)");
 const IsIconic = user32?.func("bool __stdcall IsIconic(HWND hwnd)");
-const GetWindowTextLengthW = user32?.func("int32_t __stdcall GetWindowTextLengthW(HWND hwnd)");
 const GetClientRect = user32?.func("bool __stdcall GetClientRect(HWND hwnd, _Out_ EL_RECT *rect)");
 const GetWindowRect = user32?.func("bool __stdcall GetWindowRect(HWND hwnd, _Out_ EL_RECT *rect)");
 const ClientToScreen = user32?.func("bool __stdcall ClientToScreen(HWND hwnd, _Inout_ EL_POINT *point)");
@@ -84,6 +83,8 @@ type DesignTransform = {
 
 const aoe2DesignWidth = 3840;
 const aoe2DesignHeight = 2160;
+let desktopClearedForAoe2 = false;
+const windowsMinimizedForAoe2: Array<{ window: NativeHandle; processId: number }> = [];
 
 export interface NativeInputResult {
   sent: boolean;
@@ -152,30 +153,38 @@ export function focusAoe2NativeWindow(processId: number): boolean {
   const window = findLargestProcessWindow(processId);
   if (!window) return false;
 
-  // Electron still owns the user-initiated foreground permission at this
-  // point. Hand that directly to AoE2 before hiding or minimizing anything;
-  // allowing Windows to activate an intermediate app can make the game leave
-  // its fullscreen presentation and recreate a smaller window.
   if (!SetForegroundWindow!(window)) return false;
 
-  // Remove other user-facing applications from the handoff without touching
-  // either AoE2 or Empire League. AoE2 is already foreground, so minimizing
-  // these background windows cannot become an intermediate activation step.
-  EnumWindows!((candidate: NativeHandle) => {
-    if (!candidate || !IsWindowVisible!(candidate) || IsIconic!(candidate)) return true;
-
-    const ownerProcessId: [number | null] = [null];
-    GetWindowThreadProcessId!(candidate, ownerProcessId);
-    if (ownerProcessId[0] === processId || ownerProcessId[0] === process.pid) return true;
-
-    // Untitled system windows (the desktop, taskbar, and similar shell
-    // surfaces) are not application windows and must remain untouched.
-    if ((GetWindowTextLengthW!(candidate) as number) <= 0) return true;
-    ShowWindow!(candidate, 7); // SW_SHOWMINNOACTIVE
-    return true;
-  }, 0);
+  // Clear the desktop once per client session, during the first successful
+  // AoE2 focus handoff. Remember the exact HWND/PID pairs so the windows can
+  // be restored safely when Empire League exits. Without restoration, Chrome
+  // keeps its minimized background instance and routes future launches to it,
+  // which makes Chrome appear to close even after Electron has stopped.
+  if (!desktopClearedForAoe2) {
+    desktopClearedForAoe2 = true;
+    EnumWindows!((candidate: NativeHandle) => {
+      if (!candidate || !IsWindowVisible!(candidate) || IsIconic!(candidate)) return true;
+      const ownerProcessId = processIdForWindow(candidate);
+      if (!ownerProcessId || ownerProcessId === processId || ownerProcessId === process.pid) return true;
+      if (ShowWindow!(candidate, 7)) {
+        windowsMinimizedForAoe2.push({ window: candidate, processId: ownerProcessId });
+      }
+      return true;
+    }, 0);
+  }
 
   return true;
+}
+
+export function restoreWindowsMinimizedForAoe2(): void {
+  if (process.platform !== "win32") return;
+  for (const entry of windowsMinimizedForAoe2.splice(0)) {
+    // HWND values can be reused. Only restore a still-valid window belonging
+    // to the same process that owned it when we minimized it.
+    if (IsWindow!(entry.window) && processIdForWindow(entry.window) === entry.processId) {
+      ShowWindow!(entry.window, 9); // SW_RESTORE
+    }
+  }
 }
 
 export function isAoe2NativeWindowForeground(processId: number): boolean {
