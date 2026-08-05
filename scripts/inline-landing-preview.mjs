@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, unlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const previewDirectory = resolve("landing/app-preview");
@@ -30,3 +30,7 @@ html = html
   .replace(styleMatch[0], () => `<style>${style}</style>`);
 
 await writeFile(indexPath, html, "utf8");
+await Promise.all([
+  unlink(resolve(previewDirectory, "assets", scriptMatch[1])),
+  unlink(resolve(previewDirectory, "assets", styleMatch[1]))
+]);

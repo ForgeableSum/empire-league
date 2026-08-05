@@ -1,0 +1,4 @@
+landing/app-preview/assets/*.svg text eol=lf
+landing/app-preview/assets/*.js text eol=lf
+landing/app-preview/assets/*.css text eol=lf
+landing/app-preview/index.html text eol=lf

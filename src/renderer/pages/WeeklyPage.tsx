@@ -111,7 +111,7 @@ export function WeeklyPage() {
       </div>
 
       <div className="weekly-heading">
-        <div><span className="eyebrow">Three-week rotation</span><h2>On the horizon</h2></div>
+        <div><span className="eyebrow">Three-week rotation</span></div>
         <span className="weekly-reset"><Clock3 size={15} /> {mode ? `Monday 00:00 UTC · ${formatCountdown(new Date(mode.endsAt).getTime() - now)}` : "Changes every Monday"}</span>
       </div>
       <div className="weekly-rotation" aria-label="Weekly game rotation">
