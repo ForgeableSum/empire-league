@@ -26,6 +26,24 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [pendingUpdateVersion, setPendingUpdateVersion] = useState<string | null>(null);
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [gameCountdownActive, setGameCountdownActive] = useState(false);
+
+  useEffect(() => {
+    const update = () => {
+      const startedAt = state.roomSetupStartedAt;
+      if (!startedAt || state.error) {
+        setGameCountdownActive(false);
+        return;
+      }
+
+      const estimateMs = state.roomSetupEstimateMs ?? 60_000;
+      setGameCountdownActive(Date.now() < new Date(startedAt).getTime() + estimateMs);
+    };
+
+    update();
+    const timer = window.setInterval(update, 250);
+    return () => window.clearInterval(timer);
+  }, [state.error, state.roomSetupEstimateMs, state.roomSetupStartedAt]);
 
   useEffect(() => {
     let active = true;
@@ -102,8 +120,12 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
                   {socialUnreadCount > 99 ? "99+" : socialUnreadCount}
                 </span>
               )}
-              {item.page === "ranked" && state.queueStatus === "searching" && (
-                <span className="medieval-loader nav-search-loader" role="status" aria-label="Searching for a match">
+              {item.page === "ranked" && (state.queueStatus === "searching" || gameCountdownActive) && (
+                <span
+                  className="medieval-loader nav-search-loader"
+                  role="status"
+                  aria-label={state.queueStatus === "searching" ? "Searching for a match" : "Preparing game"}
+                >
                   <span aria-hidden="true" />
                   <span aria-hidden="true" />
                   <span aria-hidden="true" />
