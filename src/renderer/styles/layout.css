@@ -2489,6 +2489,10 @@
   align-items: stretch;
 }
 
+.queue-stats-hidden {
+  display: none;
+}
+
 .search-waiting-layout .search-state {
   min-width: 0;
 }

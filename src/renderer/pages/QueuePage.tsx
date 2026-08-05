@@ -10,7 +10,7 @@ import { ResultScreen } from "../components/match/ResultScreen";
 import { MatchmakingBrand } from "../components/match/MatchmakingBrand";
 import { GroupedMapPool } from "../components/common/GroupedMapPool";
 import { mapGroups } from "../mocks/mockPlayers";
-import { previewSection } from "../previewMode";
+import { isPreviewMode, previewSection } from "../previewMode";
 import { useAppStore } from "../state/appStore";
 
 const favoriteMapsKey = "empire-league-favorite-maps";
@@ -325,7 +325,7 @@ export function QueuePage() {
             ) : (
               <>
                 <h2>{selectedQueueHeading}</h2>
-                <div className="queue-stats">
+                <div className={`queue-stats${isPreviewMode ? "" : " queue-stats-hidden"}`}>
                   <span><Search size={18} /><strong>{selectedQueue.playersSearching}</strong> searching</span>
                   <span><Clock size={18} /><strong>~{selectedQueue.estimatedWaitSeconds}s</strong> wait</span>
                 </div>
