@@ -83,8 +83,16 @@ type DesignTransform = {
 
 const aoe2DesignWidth = 3840;
 const aoe2DesignHeight = 2160;
-let desktopClearedForAoe2 = false;
 const windowsMinimizedForAoe2: Array<{ window: NativeHandle; processId: number }> = [];
+const shellProcessNames = new Set([
+  "dwm.exe",
+  "explorer.exe",
+  "searchapp.exe",
+  "searchhost.exe",
+  "shellexperiencehost.exe",
+  "sihost.exe",
+  "startmenuexperiencehost.exe"
+]);
 
 export interface NativeInputResult {
   sent: boolean;
@@ -152,28 +160,25 @@ export function focusAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return false;
+  return Boolean(SetForegroundWindow!(window));
+}
 
-  if (!SetForegroundWindow!(window)) return false;
-
-  // Clear the desktop once per client session, during the first successful
-  // AoE2 focus handoff. Remember the exact HWND/PID pairs so the windows can
-  // be restored safely when Empire League exits. Without restoration, Chrome
-  // keeps its minimized background instance and routes future launches to it,
-  // which makes Chrome appear to close even after Electron has stopped.
-  if (!desktopClearedForAoe2) {
-    desktopClearedForAoe2 = true;
-    EnumWindows!((candidate: NativeHandle) => {
-      if (!candidate || !IsWindowVisible!(candidate) || IsIconic!(candidate)) return true;
-      const ownerProcessId = processIdForWindow(candidate);
-      if (!ownerProcessId || ownerProcessId === processId || ownerProcessId === process.pid) return true;
-      if (ShowWindow!(candidate, 7)) {
-        windowsMinimizedForAoe2.push({ window: candidate, processId: ownerProcessId });
-      }
-      return true;
-    }, 0);
-  }
-
-  return true;
+// This is deliberately separate from generic focus. Only the confirmed
+// gameplay-start IPC is allowed to clear other application windows.
+export function minimizeOtherWindowsForGameplay(processId: number): void {
+  ensureWindowsBindings();
+  const processNames = processNamesById();
+  EnumWindows!((candidate: NativeHandle) => {
+    if (!candidate || !IsWindowVisible!(candidate) || IsIconic!(candidate)) return true;
+    const ownerProcessId = processIdForWindow(candidate);
+    if (!ownerProcessId || ownerProcessId === processId || ownerProcessId === process.pid) return true;
+    const processName = processNames.get(ownerProcessId);
+    if (!processName || shellProcessNames.has(processName)) return true;
+    if (ShowWindow!(candidate, 7)) {
+      windowsMinimizedForAoe2.push({ window: candidate, processId: ownerProcessId });
+    }
+    return true;
+  }, 0);
 }
 
 export function restoreWindowsMinimizedForAoe2(): void {
@@ -977,6 +982,27 @@ function processIdForWindow(window: NativeHandle): number {
   const output: [number | null] = [null];
   GetWindowThreadProcessId!(window, output);
   return output[0] ?? 0;
+}
+
+function processNamesById(): Map<number, string> {
+  const names = new Map<number, string>();
+  const snapshot = CreateToolhelp32Snapshot!(0x00000002, 0) as NativeHandle;
+  if (!snapshot || snapshot === BigInt("0xffffffffffffffff")) return names;
+  const entry = { dwSize: koffi.sizeof(PROCESSENTRY32W) } as {
+    dwSize: number;
+    th32ProcessID: number;
+    szExeFile: string;
+  };
+  try {
+    let hasEntry = Boolean(Process32FirstW!(snapshot, entry));
+    while (hasEntry) {
+      names.set(entry.th32ProcessID, entry.szExeFile.toLowerCase());
+      hasEntry = Boolean(Process32NextW!(snapshot, entry));
+    }
+  } finally {
+    CloseHandle!(snapshot);
+  }
+  return names;
 }
 
 function sameHandle(first: NativeHandle, second: NativeHandle): boolean {

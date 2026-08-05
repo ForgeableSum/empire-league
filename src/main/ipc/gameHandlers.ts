@@ -42,6 +42,7 @@ import {
   clearAoe2TextField,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
+  minimizeOtherWindowsForGameplay,
   setWindowsInputBlocked,
   isAoe2NativeWindowForeground,
   keepAoe2NativeWindowBehind,
@@ -2122,6 +2123,7 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 }
 
 export function registerGameHandlers(): void {
+  const gameplayHandoffs = new Set<string>();
   ipcMain.handle("game:scan-local-custom-content", scanLocalCustomContent);
   ipcMain.handle("game:detect-enabled-ui-mods", detectEnabledUiMods);
   ipcMain.handle("game:disable-enabled-ui-mods", disableEnabledUiMods);
@@ -2276,6 +2278,25 @@ export function registerGameHandlers(): void {
       return { focused };
     }
     restoreAoe2Window(true, true);
+    return { focused: true };
+  });
+
+  ipcMain.handle("game:focus-for-gameplay", async (_event, matchId: string) => {
+    if (typeof matchId !== "string" || !matchId.trim()) {
+      throw new Error("A match ID is required for the gameplay handoff.");
+    }
+    restoreAoe2Window();
+    const game = detectAoe2NativeProcess();
+    if (!game.pid || !game.windowReady) return { focused: false };
+    const focused = focusAoe2NativeWindow(game.pid);
+    if (!focused) return { focused: false };
+    if (!gameplayHandoffs.has(matchId)) {
+      gameplayHandoffs.add(matchId);
+      minimizeOtherWindowsForGameplay(game.pid);
+      // Reassert focus after minimizing the other application windows.
+      focusAoe2NativeWindow(game.pid);
+    }
+    hideMainWindowGameCover();
     return { focused: true };
   });
 

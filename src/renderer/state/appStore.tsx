@@ -1509,10 +1509,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function revealAoe2AfterGameStart(): Promise<void> {
     if (!window.electronApi) return;
+    const matchId = stateRef.current.activeMatch?.id;
+    if (!matchId) return;
     if (gameRevealInFlightRef.current) return gameRevealInFlightRef.current;
     gameRevealInFlightRef.current = (async () => {
       await stopYouTubeShorts();
-      await window.electronApi!.focusAoe2();
+      const handoff = await window.electronApi!.focusAoe2ForGameplay(matchId);
+      if (!handoff.focused) throw new Error("AoE2 could not be focused for gameplay.");
       const completedState = stateRef.current;
       if (completedState.activeMatch && completedState.roomSetupStartedAt) {
         recordLobbySetupDuration(

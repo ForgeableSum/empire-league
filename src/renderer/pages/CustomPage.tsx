@@ -398,7 +398,8 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
         void (async () => {
           try {
             await stopYouTubeShorts();
-            await api.focusAoe2();
+            const handoff = await api.focusAoe2ForGameplay(`custom:${room.id}`);
+            if (!handoff.focused) throw new Error("AoE2 could not be focused for gameplay.");
           } catch (error) {
             notify("AoE2 could not be revealed after game start.", "danger", { detail: messageFor(error) });
           } finally {

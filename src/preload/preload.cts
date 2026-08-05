@@ -11,6 +11,7 @@ const electronApi: ElectronGameApi = {
   closeAoe2: (force) => ipcRenderer.invoke("game:close", force),
   launchAoe2: () => ipcRenderer.invoke("game:launch"),
   focusAoe2: () => ipcRenderer.invoke("game:focus"),
+  focusAoe2ForGameplay: (matchId) => ipcRenderer.invoke("game:focus-for-gameplay", matchId),
   setLobbyInputLock: (locked) => ipcRenderer.invoke("game:set-lobby-input-lock", locked),
   onLobbyGuardPointer: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, point: { x: number; y: number }) => listener(point);
