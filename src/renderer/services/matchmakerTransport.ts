@@ -18,6 +18,8 @@ interface Subscription {
   listener: QueueEventListener;
 }
 
+export type MatchmakerConnectionStatus = "disconnected" | "connecting" | "connected";
+
 export type SocialEvent =
   | { type: "snapshot"; snapshot: import("./socialService").SocialSnapshot }
   | { type: "presence"; playerId: string; presence: import("../pages/SocialPage").FriendPresence; activity: string; mapName?: string }
@@ -42,6 +44,15 @@ class MatchmakerTransport {
   private deliberatelyClosed = false;
   private socialListeners = new Set<(event: SocialEvent) => void>();
   private customLobbyListeners = new Set<(event: CustomLobbyEvent) => void>();
+  private connectionStatus: MatchmakerConnectionStatus = "disconnected";
+  private connectionStatusListeners = new Set<() => void>();
+
+  getConnectionStatus = (): MatchmakerConnectionStatus => this.connectionStatus;
+
+  onConnectionStatusChange = (listener: () => void): UnsubscribeFunction => {
+    this.connectionStatusListeners.add(listener);
+    return () => this.connectionStatusListeners.delete(listener);
+  };
 
   setToken(token: string | null): void {
     if (this.token === token) return;
@@ -96,6 +107,7 @@ class MatchmakerTransport {
     if (this.socket?.readyState === WebSocket.OPEN && !this.connectPromise) return Promise.resolve();
     if (this.connectPromise) return this.connectPromise;
     this.deliberatelyClosed = false;
+    this.setConnectionStatus("connecting");
     this.connectPromise = new Promise<void>((resolve, reject) => {
       this.connectResolve = resolve;
       this.connectReject = reject;
@@ -182,6 +194,7 @@ class MatchmakerTransport {
     this.connectResolve = null;
     this.connectReject = null;
     this.reconnectAttempts = 0;
+    this.setConnectionStatus("connected");
     resolve?.();
     this.sendSubscription();
   }
@@ -206,6 +219,7 @@ class MatchmakerTransport {
   private onClose(socket: WebSocket): void {
     if (socket !== this.socket) return;
     this.socket = null;
+    this.setConnectionStatus("disconnected");
     this.rejectConnecting(new Error("Matchmaker connection closed."));
     for (const pending of this.pending.values()) pending.reject(new Error("Matchmaker connection closed."));
     this.pending.clear();
@@ -223,6 +237,7 @@ class MatchmakerTransport {
     this.deliberatelyClosed = true;
     this.socket?.close(1000, reason);
     this.socket = null;
+    this.setConnectionStatus("disconnected");
     this.rejectConnecting(new Error(reason));
     for (const pending of this.pending.values()) pending.reject(new Error(reason));
     this.pending.clear();
@@ -232,6 +247,12 @@ class MatchmakerTransport {
     const subscription = this.subscription;
     this.subscription = null;
     subscription?.listener({ type: "error", code, message });
+  }
+
+  private setConnectionStatus(status: MatchmakerConnectionStatus): void {
+    if (this.connectionStatus === status) return;
+    this.connectionStatus = status;
+    for (const listener of this.connectionStatusListeners) listener();
   }
 }
 

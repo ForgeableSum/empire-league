@@ -7,6 +7,8 @@ import { useAppStore } from "../state/appStore";
 import { AlertTriangle, MessageCircle } from "lucide-react";
 import { isPreviewMode } from "../previewMode";
 import { isAppMinimizeLocked } from "../components/layout/WindowControls";
+import { useSyncExternalStore } from "react";
+import { matchmakerTransport } from "../services/matchmakerTransport";
 
 const openLandMaps = mapGroups.find((group) => group.id === "land-open")?.maps ?? [];
 
@@ -14,6 +16,15 @@ export function HomePage() {
   const { state, lobbyAutomationActive, weeklyQueueActive, notify } = useAppStore();
   const user = state.currentUser;
   const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
+  const matchmakerStatus = useSyncExternalStore(
+    matchmakerTransport.onConnectionStatusChange,
+    matchmakerTransport.getConnectionStatus
+  );
+  const matchmakerStatusLabel = matchmakerStatus === "connected"
+    ? "Connected"
+    : matchmakerStatus === "connecting"
+      ? "Connecting..."
+      : "Disconnected";
   const openDiscord = async () => {
     if (window.electronApi) {
       if (isAppMinimizeLocked(state.queueStatus, weeklyQueueActive, lobbyAutomationActive)) {
@@ -89,8 +100,7 @@ export function HomePage() {
       <div className="panel">
         <h2>Platform Status</h2>
         <div className="status-list">
-          <div><span>Matchmaking</span><strong>Operational</strong></div>
-          <div><span>Result service</span><strong>Connected</strong></div>
+          <div><span>Matchmaker</span><strong>{matchmakerStatusLabel}</strong></div>
           <div><span>Match history</span><strong>{state.recentMatches.length} recorded</strong></div>
         </div>
         <div className="discord-community">
