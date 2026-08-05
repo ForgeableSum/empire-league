@@ -3062,7 +3062,7 @@
   font-size: clamp(4rem, 10vw, 7rem);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.06em;
+  letter-spacing: 0.06em;
   line-height: 0.9;
 }
 
