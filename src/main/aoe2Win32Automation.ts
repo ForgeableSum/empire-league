@@ -83,16 +83,6 @@ type DesignTransform = {
 
 const aoe2DesignWidth = 3840;
 const aoe2DesignHeight = 2160;
-const windowsMinimizedForAoe2: Array<{ window: NativeHandle; processId: number }> = [];
-const shellProcessNames = new Set([
-  "dwm.exe",
-  "explorer.exe",
-  "searchapp.exe",
-  "searchhost.exe",
-  "shellexperiencehost.exe",
-  "sihost.exe",
-  "startmenuexperiencehost.exe"
-]);
 
 export interface NativeInputResult {
   sent: boolean;
@@ -163,33 +153,22 @@ export function focusAoe2NativeWindow(processId: number): boolean {
   return Boolean(SetForegroundWindow!(window));
 }
 
-// This is deliberately separate from generic focus. Only the confirmed
-// gameplay-start IPC is allowed to clear other application windows.
-export function minimizeOtherWindowsForGameplay(processId: number): void {
+// Raise only AoE2 instead of enumerating and minimizing unrelated windows.
+// Toggling topmost is more forceful than SetForegroundWindow by itself, but
+// removing topmost immediately keeps the game from covering later dialogs.
+export function focusAoe2ForGameplay(processId: number): boolean {
   ensureWindowsBindings();
-  const processNames = processNamesById();
-  EnumWindows!((candidate: NativeHandle) => {
-    if (!candidate || !IsWindowVisible!(candidate) || IsIconic!(candidate)) return true;
-    const ownerProcessId = processIdForWindow(candidate);
-    if (!ownerProcessId || ownerProcessId === processId || ownerProcessId === process.pid) return true;
-    const processName = processNames.get(ownerProcessId);
-    if (!processName || shellProcessNames.has(processName)) return true;
-    if (ShowWindow!(candidate, 7)) {
-      windowsMinimizedForAoe2.push({ window: candidate, processId: ownerProcessId });
-    }
-    return true;
-  }, 0);
-}
-
-export function restoreWindowsMinimizedForAoe2(): void {
-  if (process.platform !== "win32") return;
-  for (const entry of windowsMinimizedForAoe2.splice(0)) {
-    // HWND values can be reused. Only restore a still-valid window belonging
-    // to the same process that owned it when we minimized it.
-    if (IsWindow!(entry.window) && processIdForWindow(entry.window) === entry.processId) {
-      ShowWindow!(entry.window, 9); // SW_RESTORE
-    }
-  }
+  const window = findRecoverableProcessWindow(processId);
+  if (!window) return false;
+  // The game may have been minimized while running borderless fullscreen.
+  // SW_RESTORE can bring it back as a normal window, which also invalidates
+  // the design-space click layout. Maximize it before raising it instead.
+  ShowWindow!(window, 3); // SW_MAXIMIZE
+  Sleep!(150);
+  const raised = Boolean(SetWindowPos!(window, -1n, 0, 0, 0, 0, 0x0003)); // HWND_TOPMOST
+  const focused = Boolean(SetForegroundWindow!(window));
+  const released = Boolean(SetWindowPos!(window, -2n, 0, 0, 0, 0, 0x0003)); // HWND_NOTOPMOST
+  return raised && focused && released;
 }
 
 export function isAoe2NativeWindowForeground(processId: number): boolean {
@@ -982,27 +961,6 @@ function processIdForWindow(window: NativeHandle): number {
   const output: [number | null] = [null];
   GetWindowThreadProcessId!(window, output);
   return output[0] ?? 0;
-}
-
-function processNamesById(): Map<number, string> {
-  const names = new Map<number, string>();
-  const snapshot = CreateToolhelp32Snapshot!(0x00000002, 0) as NativeHandle;
-  if (!snapshot || snapshot === BigInt("0xffffffffffffffff")) return names;
-  const entry = { dwSize: koffi.sizeof(PROCESSENTRY32W) } as {
-    dwSize: number;
-    th32ProcessID: number;
-    szExeFile: string;
-  };
-  try {
-    let hasEntry = Boolean(Process32FirstW!(snapshot, entry));
-    while (hasEntry) {
-      names.set(entry.th32ProcessID, entry.szExeFile.toLowerCase());
-      hasEntry = Boolean(Process32NextW!(snapshot, entry));
-    }
-  } finally {
-    CloseHandle!(snapshot);
-  }
-  return names;
 }
 
 function sameHandle(first: NativeHandle, second: NativeHandle): boolean {

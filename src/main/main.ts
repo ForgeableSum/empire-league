@@ -5,11 +5,9 @@ import { installBundledAoe2Maps } from "./aoe2MapInstaller.js";
 import { createMainWindow } from "./window.js";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers.js";
 import { startAutoUpdates } from "./autoUpdate.js";
-import { restoreWindowsMinimizedForAoe2 } from "./aoe2Win32Automation.js";
 
 registerIpcHandlers();
 app.setAppUserModelId("community.empireleague.aoe2");
-app.on("will-quit", restoreWindowsMinimizedForAoe2);
 
 app.whenReady().then(async () => {
   nativeTheme.themeSource = "dark";

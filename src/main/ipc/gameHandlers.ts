@@ -42,7 +42,7 @@ import {
   clearAoe2TextField,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
-  minimizeOtherWindowsForGameplay,
+  focusAoe2ForGameplay,
   setWindowsInputBlocked,
   isAoe2NativeWindowForeground,
   keepAoe2NativeWindowBehind,
@@ -2288,13 +2288,11 @@ export function registerGameHandlers(): void {
     restoreAoe2Window();
     const game = detectAoe2NativeProcess();
     if (!game.pid || !game.windowReady) return { focused: false };
-    const focused = focusAoe2NativeWindow(game.pid);
-    if (!focused) return { focused: false };
     if (!gameplayHandoffs.has(matchId)) {
+      if (!focusAoe2ForGameplay(game.pid)) return { focused: false };
       gameplayHandoffs.add(matchId);
-      minimizeOtherWindowsForGameplay(game.pid);
-      // Reassert focus after minimizing the other application windows.
-      focusAoe2NativeWindow(game.pid);
+    } else if (!focusAoe2NativeWindow(game.pid)) {
+      return { focused: false };
     }
     hideMainWindowGameCover();
     return { focused: true };
