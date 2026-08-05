@@ -2128,6 +2128,14 @@ webSocketServer.on("connection", (socket) => {
           status = 500;
         }
         if (
+          message.method.toUpperCase() === "GET"
+          && new URL(message.path, "http://localhost").pathname === "/auth/me"
+          && status === 200
+          && body?.player
+        ) {
+          session.player = body.player;
+        }
+        if (
           message.method.toUpperCase() === "POST"
           && new URL(message.path, "http://localhost").pathname === "/queue"
           && status === 201

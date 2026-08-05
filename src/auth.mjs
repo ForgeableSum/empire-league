@@ -116,7 +116,7 @@ export async function pollSteamLogin(attemptId, pollToken) {
 }
 
 export async function authenticate(request, refreshSteamProfile = false) {
-  if (request.authenticatedPlayer) return request.authenticatedPlayer;
+  if (request.authenticatedPlayer && !refreshSteamProfile) return request.authenticatedPlayer;
   const authorization = request.headers.authorization ?? "";
   const match = authorization.match(/^Bearer (\S+)$/);
   if (!match) return null;
