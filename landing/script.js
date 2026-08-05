@@ -35,12 +35,9 @@ if (plannedFeaturesToggle) {
 const toast = document.querySelector('.toast');
 document.querySelectorAll('[data-download]').forEach((button) => {
   button.addEventListener('click', (event) => {
-    const url = button.getAttribute('href');
-    if (!url || url === '#') {
-      event.preventDefault();
-      toast.classList.add('show');
-      window.clearTimeout(window.downloadToastTimer);
-      window.downloadToastTimer = window.setTimeout(() => toast.classList.remove('show'), 2600);
-    }
+    event.preventDefault();
+    toast.classList.add('show');
+    window.clearTimeout(window.downloadToastTimer);
+    window.downloadToastTimer = window.setTimeout(() => toast.classList.remove('show'), 3600);
   });
 });

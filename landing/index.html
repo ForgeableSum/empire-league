@@ -15,7 +15,7 @@
   <body>
     <header>
       <a class="brand" href="#top"><img src="assets/empire-league.png" alt="" /><span>Empire League</span></a>
-      <nav aria-label="Main navigation"><a href="#features">Features</a><a href="#how-it-works">How it works</a><a href="#faq">FAQ</a><a href="updates/windows/Empire-League-Preview-Setup.exe" data-download>Download</a></nav>
+      <nav aria-label="Main navigation"><a href="#features">Features</a><a href="#how-it-works">How it works</a><a href="#faq">FAQ</a><a class="discord-link" href="https://discord.gg/jJZRZv77Kh" target="_blank" rel="noopener noreferrer">Join Discord</a><a class="download-unavailable" href="#" data-download aria-disabled="true">Download</a></nav>
     </header>
 
     <main id="top">
@@ -23,10 +23,9 @@
         <div class="hero-copy">
           <h1>Community Matchmaker<br />for AeE2:DE</h1>
           <p>Empire League is a lightweight desktop client and matchmaker for AoE2 with its own map pool, seasonal leaderboards, custom games browser and intricate social features.</p>
-          <a class="primary download-button" href="updates/windows/Empire-League-Preview-Setup.exe" data-download>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5 10.4 4.5v7H3m8.3-7.1L21 3v8.5h-9.7M3 12.6h7.4v7L3 18.5m8.3-5.9H21V21l-9.7-1.3"/></svg>
-            <span><strong>Download for Windows</strong><small>Free · Windows 10+</small></span>
-          </a>
+          <div class="hero-actions">
+            <a class="discord-button" href="https://discord.gg/jJZRZv77Kh" target="_blank" rel="noopener noreferrer"><strong>Join our Discord</strong><small>Request closed beta access</small></a>
+          </div>
         </div>
 
         <div class="real-app-preview">
@@ -182,7 +181,7 @@
       <section class="final-cta">
         <img src="assets/empire-league.png" alt="" />
         <div><h2>Empire League</h2><p>Desktop client and matchmaker for Age of Empires II.</p></div>
-        <a class="primary download-button" href="updates/windows/Empire-League-Preview-Setup.exe" data-download>
+        <a class="primary download-button download-unavailable" href="#" data-download aria-disabled="true">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5 10.4 4.5v7H3m8.3-7.1L21 3v8.5h-9.7M3 12.6h7.4v7L3 18.5m8.3-5.9H21V21l-9.7-1.3"/></svg>
           <span><strong>Download for Windows</strong><small>Free · Windows 10+</small></span>
         </a>
@@ -190,7 +189,7 @@
     </main>
 
     <footer><span>Empire League</span><p>Not affiliated with Microsoft or World’s Edge.</p><span>© <span id="year"></span></span></footer>
-    <div class="toast" role="status" aria-live="polite">The download will be available soon.</div>
+    <div class="toast" role="status" aria-live="polite">You can request access to the closed beta in Discord!</div>
     <script src="script.js"></script>
   </body>
 </html>
