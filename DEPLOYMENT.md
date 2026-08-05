@@ -35,6 +35,18 @@ The deployment machine needs:
 Prefer an SSH private key kept outside the repository. Never commit server
 passwords, private keys, database credentials, or authentication files.
 
+Local deployment passwords are stored in the Git-ignored file
+`.deploy-secrets.ps1`. It defines `$EmpireWebPassword` and
+`$EmpireMatchmakerPassword`. Dot-source that file when password authentication
+is required; never copy its values into tracked files or command examples.
+This workstation also has a Git-ignored `.deploy-askpass.cmd` helper. To use
+the saved webserver password non-interactively, load the secrets file, assign
+`$EmpireWebPassword` to the `EMPIRE_DEPLOY_PASSWORD` environment variable, and
+set `SSH_ASKPASS` to the resolved helper path, `SSH_ASKPASS_REQUIRE` to `force`,
+and `DISPLAY` to any non-empty value before running `deploy-web.ps1`. Use
+`$EmpireMatchmakerPassword` in the same way only for an authorized matchmaker
+deployment.
+
 Before any release, install dependencies and verify the checkout:
 
 ```powershell
@@ -231,4 +243,3 @@ production queue test.
 5. Deploy the website when its content, application preview, or download
    presentation changed.
 6. Verify the website and installer download.
-

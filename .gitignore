@@ -7,3 +7,5 @@ npm-debug.log*
 .env
 .env.*
 !.env.example
+.deploy-secrets.ps1
+.deploy-askpass.cmd
