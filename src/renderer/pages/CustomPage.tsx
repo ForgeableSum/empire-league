@@ -118,17 +118,6 @@ export function CustomPage() {
 
   return (
     <section className="custom-page">
-      <div className="custom-intro">
-        <div>
-          <span className="eyebrow">Community games</span>
-          <h2>Custom lobby browser</h2>
-          <p>Browse live Empire League rooms or create one using content installed on your PC.</p>
-        </div>
-        <div className="button-row">
-          {!creating && <button className="primary" type="button" disabled={state.gameStatus === "loading"} onClick={() => void openCreateRoom()}><Plus size={17} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "Create Lobby"}</button>}
-        </div>
-      </div>
-
       {creating && (
         <article className="panel custom-create-card">
           <div className="custom-create-heading">
@@ -159,14 +148,15 @@ export function CustomPage() {
           {[...catalog.maps, ...catalog.dataMods].some((item) => !item.enabled) && <small className="custom-disabled-mod-hint">Disabled mods must be enabled at the mods interface inside the game.</small>}
           <div className="custom-scan-meta"><span>{catalog.maps.length} maps/scenarios</span><span>{catalog.dataMods.length} data mods</span><span>{catalog.scannedRoots.length} folders scanned</span></div>
           <div className="custom-create-actions">
-            <button className="primary large" type="button" disabled={!lobbyName.trim() || !(contentKind === "map" ? mapId : scenarioId) || pending} onClick={() => void createRoom()}>{pending ? "Creating…" : "Create Lobby"}</button>
-            <button className="secondary large" type="button" disabled={pending} onClick={() => setCreating(false)}>Cancel</button>
+            <button className="primary" type="button" disabled={!lobbyName.trim() || !(contentKind === "map" ? mapId : scenarioId) || pending} onClick={() => void createRoom()}>{pending ? "Creating…" : "Create Lobby"}</button>
+            <button className="secondary" type="button" disabled={pending} onClick={() => setCreating(false)}>Cancel</button>
           </div>
         </article>
       )}
 
       <div className="custom-room-section">
         <div className="custom-room-toolbar">
+          {!creating && <button className="primary" type="button" disabled={state.gameStatus === "loading"} onClick={() => void openCreateRoom()}><Plus size={17} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "New Lobby"}</button>}
           <button className="secondary" type="button" onClick={() => void refreshRooms()} disabled={loadingRooms}><RefreshCw size={16} className={loadingRooms ? "spin" : ""} /> {loadingRooms ? "Refreshing…" : "Refresh Rooms"}</button>
         </div>
         <div className="custom-room-list">

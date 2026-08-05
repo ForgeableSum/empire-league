@@ -203,7 +203,7 @@ function titleFor(page: AppPage): string {
     home: "Home",
     ranked: "Ranked",
     weekly: "Weekly Queue",
-    custom: "Custom",
+    custom: "Custom Games",
     "match-history": "Match History",
     leaderboard: "Leaderboard",
     profile: "Player Profile",

@@ -3804,7 +3804,6 @@
   gap: 18px;
 }
 
-.custom-intro,
 .custom-lobby-heading,
 .custom-lobby-actions {
   display: flex;
@@ -3813,7 +3812,6 @@
   gap: 20px;
 }
 
-.custom-intro > div,
 .custom-lobby-heading > div {
   display: grid;
   gap: 7px;
@@ -3871,7 +3869,7 @@
 .custom-create-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
 }
 
@@ -3888,7 +3886,8 @@
 
 .custom-room-toolbar {
   display: flex;
-  justify-content: flex-end;
+  gap: 10px;
+  justify-content: flex-start;
 }
 
 .custom-room-list {
