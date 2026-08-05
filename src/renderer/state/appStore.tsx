@@ -58,6 +58,7 @@ interface AppContextValue {
     tone?: NotificationItem["tone"],
     options?: { detail?: string; durationMs?: number | null; dismissible?: boolean; action?: NotificationItem["action"] }
   ) => string;
+  appendDiagnosticLog: (message: string) => void;
   dismissNotification: (id: string) => void;
   clearError: () => void;
   authStatus: "loading" | "unauthenticated" | "authenticating" | "authenticated";
@@ -599,8 +600,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   function log(message: string): void {
-    setState((previous) => ({ ...previous, eventLog: [nowLog(message), ...previous.eventLog].slice(0, 80) }));
+    setState((previous) => ({ ...previous, eventLog: [nowLog(message), ...previous.eventLog].slice(0, 1000) }));
   }
+
+  useEffect(() => {
+    return window.electronApi?.onAoe2AutomationLog((message) => log(`[AoE2 automation] ${message}`));
+  }, []);
 
   function notify(
     message: string,
@@ -1576,6 +1581,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateMockConfig,
     updateSettings,
     notify,
+    appendDiagnosticLog: log,
     dismissNotification: dismissNotificationById,
     clearError: () => setState((previous) => ({
       ...previous,

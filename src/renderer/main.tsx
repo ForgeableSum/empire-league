@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { AppProvider } from "./state/appStore";
+import { DiagnosticLogWindow } from "./components/common/DiagnosticLogWindow";
 import "flag-icons/css/flag-icons.min.css";
 import "./styles/variables.css";
 import "./styles/global.css";
@@ -11,6 +12,7 @@ createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>
     <AppProvider>
       <App />
+      <DiagnosticLogWindow />
     </AppProvider>
   </StrictMode>
 );
