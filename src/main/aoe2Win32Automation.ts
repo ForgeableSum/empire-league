@@ -755,21 +755,32 @@ export function readAoe2HostSetupState(
   const multiplayerPanelPoint = transformDesignPoint(2000, 1040, transform);
   const lowerButtonPoint = transformDesignPoint(1500, 1979, transform);
   const guestReadyButtonPoint = transformDesignPoint(1500, 1875, transform);
+  const mainMenuButtonPoints = [
+    transformDesignPoint(375, 680, transform),
+    transformDesignPoint(1050, 680, transform),
+    transformDesignPoint(375, 1265, transform),
+    transformDesignPoint(1050, 1265, transform),
+    transformDesignPoint(375, 2030, transform),
+    transformDesignPoint(1050, 2030, transform)
+  ];
   let upperLeft: [number, number, number] | null;
   let upperCenter: [number, number, number] | null;
   let multiplayerPanel: [number, number, number] | null;
   let lowerButton: [number, number, number] | null;
   let guestReadyButton: [number, number, number] | null;
+  let mainMenuButtons: Array<[number, number, number] | null>;
   try {
     upperLeft = readRgb(dc, upperLeftPoint.x, upperLeftPoint.y);
     upperCenter = readRgb(dc, upperCenterPoint.x, upperCenterPoint.y);
     multiplayerPanel = readRgb(dc, multiplayerPanelPoint.x, multiplayerPanelPoint.y);
     lowerButton = readRgb(dc, lowerButtonPoint.x, lowerButtonPoint.y);
     guestReadyButton = readRgb(dc, guestReadyButtonPoint.x, guestReadyButtonPoint.y);
+    mainMenuButtons = mainMenuButtonPoints.map((point) => readRgb(dc, point.x, point.y));
   } finally {
     ReleaseDC!(window, dc);
   }
-  if (!upperLeft || !upperCenter || !multiplayerPanel || !lowerButton || !guestReadyButton) {
+  if (!upperLeft || !upperCenter || !multiplayerPanel || !lowerButton || !guestReadyButton
+    || mainMenuButtons.some((sample) => !sample)) {
     return { state: "unknown", detail: "PIXEL_READ_FAILED" };
   }
 
@@ -819,6 +830,18 @@ export function readAoe2HostSetupState(
     && Math.max(...guestReadyButton) <= 40
     && Math.max(...lowerButton) >= 30
     && Math.max(...lowerButton) <= 80;
+  const isMainMenuRed = ([red, green, blue]: [number, number, number]) =>
+    red >= 35 && red <= 180
+    && green <= 45 && blue <= 45
+    && red >= green * 2.5 && red >= blue * 2.5;
+  // Sample text-free interiors at both ends of Single Player, Multiplayer,
+  // and Exit. These controls are unaffected by the animated main-menu
+  // background. Five of six permits one hovered/obscured point without
+  // allowing an ordinary bright in-game parchment panel to impersonate the
+  // main menu.
+  const mainMenuRedMatches = (mainMenuButtons as Array<[number, number, number]>)
+    .filter(isMainMenuRed).length;
+  const hasMainMenuButtons = mainMenuRedMatches >= 5;
   const state = darkSamples >= 4
     ? "loading-screen"
     : hasMainMenuNews
@@ -833,7 +856,7 @@ export function readAoe2HostSetupState(
         ? "lobby-room"
     : hasMultiplayerPanel
       ? "multiplayer-menu"
-      : centerRed > 150 && centerGreen > 150 && centerBlue > 140
+    : hasMainMenuButtons
         ? "main-menu"
         : centerRed > 120 && centerGreen > 100 && centerBlue > 70
           && leftRed < 100 && leftGreen < 80 && leftBlue < 70
@@ -850,7 +873,9 @@ export function readAoe2HostSetupState(
       `UpperCenterRGB=${upperCenter.join(",")}`,
       `MultiplayerPanelRGB=${multiplayerPanel.join(",")}`,
       `LowerButtonRGB=${lowerButton.join(",")}`,
-      `GuestReadyButtonRGB=${guestReadyButton.join(",")}`
+      `GuestReadyButtonRGB=${guestReadyButton.join(",")}`,
+      `MainMenuRedMatches=${mainMenuRedMatches}/6`,
+      `MainMenuButtonsRGB=${mainMenuButtons.map((sample) => sample?.join(",") ?? "FAILED").join(";")}`
     ].join("|")
   };
 }
