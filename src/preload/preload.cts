@@ -94,6 +94,7 @@ const electronApi: ElectronGameApi = {
   clearUnreadMessageAlert: () => ipcRenderer.invoke("system:clear-unread-message-alert"),
   getLoginItemSettings: () => ipcRenderer.invoke("system:get-login-item-settings"),
   getAppVersion: () => ipcRenderer.invoke("system:get-app-version"),
+  openDiscordInvite: () => ipcRenderer.invoke("system:open-discord-invite"),
   getPendingUpdate: () => ipcRenderer.invoke("system:get-pending-update"),
   installPendingUpdate: () => ipcRenderer.invoke("system:install-pending-update"),
   onUpdateReady: (listener) => {

@@ -4,15 +4,32 @@ import { FormPips } from "../components/common/FormPips";
 import { MapPool } from "../components/common/MapPool";
 import { mapGroups } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, MessageCircle } from "lucide-react";
 import { isPreviewMode } from "../previewMode";
+import { isAppMinimizeLocked } from "../components/layout/WindowControls";
 
 const openLandMaps = mapGroups.find((group) => group.id === "land-open")?.maps ?? [];
 
 export function HomePage() {
-  const { state } = useAppStore();
+  const { state, lobbyAutomationActive, weeklyQueueActive, notify } = useAppStore();
   const user = state.currentUser;
   const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
+  const openDiscord = async () => {
+    if (window.electronApi) {
+      if (isAppMinimizeLocked(state.queueStatus, weeklyQueueActive, lobbyAutomationActive)) {
+        notify(
+          "Discord opened without minimizing Empire League.",
+          "warning",
+          { detail: "Cancel matchmaking or finish the current match before minimizing." }
+        );
+      } else {
+        await window.electronApi.minimizeToTaskbar();
+      }
+      await window.electronApi.openDiscordInvite();
+      return;
+    }
+    window.open("https://discord.gg/arRjVxx2y7", "_blank", "noopener,noreferrer");
+  };
   return (
     <section className="page-grid">
       {!isPreviewMode && (
@@ -75,6 +92,15 @@ export function HomePage() {
           <div><span>Matchmaking</span><strong>Operational</strong></div>
           <div><span>Result service</span><strong>Connected</strong></div>
           <div><span>Match history</span><strong>{state.recentMatches.length} recorded</strong></div>
+        </div>
+        <div className="discord-community">
+          <div>
+            <strong>Join the community</strong>
+            <span>Find opponents, get support, and follow beta updates.</span>
+          </div>
+          <button className="secondary" type="button" onClick={() => void openDiscord()}>
+            <MessageCircle size={18} /> Join our Discord
+          </button>
         </div>
       </div>
     </section>

@@ -93,6 +93,7 @@ export interface ElectronGameApi {
   clearUnreadMessageAlert(): Promise<void>;
   getLoginItemSettings(): Promise<LoginItemSettings>;
   getAppVersion(): Promise<string>;
+  openDiscordInvite(): Promise<void>;
   getPendingUpdate(): Promise<PendingAppUpdate | null>;
   installPendingUpdate(): Promise<boolean>;
   onUpdateReady(listener: (update: PendingAppUpdate) => void): () => void;

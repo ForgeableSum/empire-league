@@ -52,6 +52,9 @@ export function registerSystemHandlers(): void {
   });
   ipcMain.handle("system:get-login-item-settings", async () => getLoginItemSettings());
   ipcMain.handle("system:get-app-version", async () => app.getVersion());
+  ipcMain.handle("system:open-discord-invite", async () => {
+    await shell.openExternal("https://discord.gg/arRjVxx2y7");
+  });
   ipcMain.handle("system:get-pending-update", async () => {
     const version = getDownloadedUpdateVersion();
     return version ? { version } : null;

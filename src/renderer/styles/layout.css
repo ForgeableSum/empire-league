@@ -707,6 +707,21 @@
 .closed-beta-warning svg { flex: 0 0 auto; color: var(--warning); }
 .closed-beta-warning strong { color: #efc873; }
 
+.discord-community {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.discord-community > div { display: grid; gap: 4px; }
+.discord-community > div > strong { color: var(--accent-2); }
+.discord-community > div > span { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.discord-community button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; }
+
 .leaderboard-mode {
   display: inline-flex;
   align-self: end;
