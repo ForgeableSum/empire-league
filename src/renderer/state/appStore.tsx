@@ -33,6 +33,8 @@ interface AppContextValue {
   state: AppState;
   lobbyAutomationActive: boolean;
   setLobbyAutomationActive: (active: boolean) => void;
+  customLobbyAutomationActive: boolean;
+  setCustomLobbyAutomationActive: (active: boolean) => void;
   claimCustomLobbyAutomationStep: (key: string) => boolean;
   releaseCustomLobbyAutomationStep: (key: string) => void;
   clearCustomLobbyAutomationSteps: (roomId: string) => void;
@@ -121,6 +123,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [lobbyAutomationActive, setLobbyAutomationActive] = useState(false);
+  const [customLobbyAutomationActive, setCustomLobbyAutomationActive] = useState(false);
   const [weeklyQueueActive, setWeeklyQueueActive] = useState(false);
   const [page, setPage] = useState<AppPage>(() => isAppPage(previewPage) ? previewPage : "home");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
@@ -1525,6 +1528,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     state,
     lobbyAutomationActive,
     setLobbyAutomationActive,
+    customLobbyAutomationActive,
+    setCustomLobbyAutomationActive,
     claimCustomLobbyAutomationStep,
     releaseCustomLobbyAutomationStep,
     clearCustomLobbyAutomationSteps,

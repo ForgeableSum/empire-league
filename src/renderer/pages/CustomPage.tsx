@@ -194,6 +194,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
 }) {
   const {
     setLobbyAutomationActive,
+    setCustomLobbyAutomationActive,
     claimCustomLobbyAutomationStep,
     releaseCustomLobbyAutomationStep,
     clearCustomLobbyAutomationSteps
@@ -210,21 +211,28 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
 
   useEffect(() => {
+    const isCustomRoom = room.source !== "weekly";
     if (room.status !== "open") {
       startRequestInFlight.current = false;
       setStartRequestPending(false);
     }
     if (room.status === "launching") {
       setLobbyAutomationActive(true);
+      if (isCustomRoom) setCustomLobbyAutomationActive(true);
       return;
     }
     if (room.status === "started") {
       setLobbyAutomationActive(true);
-      void armGameStartReveal().finally(() => setLobbyAutomationActive(false));
+      if (isCustomRoom) setCustomLobbyAutomationActive(true);
+      void armGameStartReveal().finally(() => {
+        setLobbyAutomationActive(false);
+        if (isCustomRoom) setCustomLobbyAutomationActive(false);
+      });
       return;
     }
     setLobbyAutomationActive(false);
-  }, [room.status, setLobbyAutomationActive]);
+    if (isCustomRoom) setCustomLobbyAutomationActive(false);
+  }, [room.source, room.status, setCustomLobbyAutomationActive, setLobbyAutomationActive]);
 
   async function startCustomGame() {
     if (startRequestInFlight.current || room.status !== "open") return;

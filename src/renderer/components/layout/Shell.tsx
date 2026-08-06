@@ -19,7 +19,7 @@ const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
 ];
 
 export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode; socialUnreadCount?: number }) {
-  const { page, setPage, state, signOut, selectedProfileId, openPlayerProfile, returnFromPlayerProfile } = useAppStore();
+  const { page, setPage, state, customLobbyAutomationActive, signOut, selectedProfileId, openPlayerProfile, returnFromPlayerProfile } = useAppStore();
   const viewingLinkedProfile = page === "profile" && selectedProfileId !== null && selectedProfileId !== state.currentUser.id;
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
   const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
@@ -126,6 +126,13 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
                   role="status"
                   aria-label={state.queueStatus === "searching" ? "Searching for a match" : "Preparing game"}
                 >
+                  <span aria-hidden="true" />
+                  <span aria-hidden="true" />
+                  <span aria-hidden="true" />
+                </span>
+              )}
+              {item.page === "custom" && customLobbyAutomationActive && (
+                <span className="medieval-loader nav-search-loader" role="status" aria-label="Preparing custom game">
                   <span aria-hidden="true" />
                   <span aria-hidden="true" />
                   <span aria-hidden="true" />
