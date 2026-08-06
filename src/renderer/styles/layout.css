@@ -367,6 +367,14 @@
   scrollbar-color: #4a4239 #141312;
 }
 
+.persistent-page {
+  display: contents;
+}
+
+.persistent-page[hidden] {
+  display: none;
+}
+
 .main-area::before {
   content: "";
   position: absolute;

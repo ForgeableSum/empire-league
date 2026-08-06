@@ -241,7 +241,9 @@ export function App() {
       <Shell socialUnreadCount={friends.reduce((total, friend) => total + (friend.unread ?? 0), 0)}>
         {page === "home" && <HomePage />}
         {page === "ranked" && <QueuePage />}
-        {page === "weekly" && <WeeklyPage />}
+        <div className="persistent-page" hidden={page !== "weekly"}>
+          <WeeklyPage />
+        </div>
         {page === "custom" && <CustomPage />}
         {page === "match-history" && <MatchHistoryPage />}
         {page === "leaderboard" && <LeaderboardPage />}
