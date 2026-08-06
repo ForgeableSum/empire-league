@@ -26,14 +26,26 @@ export function MatchFoundOverlay() {
 
   useEffect(() => {
     if (requiresFamilySharingDecision) return;
+    const focusCheckDelay = Math.max(0, deadline - Date.now() - 3_000);
+    const focusCheckTimer = window.setTimeout(() => {
+      if (autoAcceptStarted.current) return;
+      void (window.electronApi?.isAppFocused() ?? Promise.resolve(document.hasFocus())).then((focused) => {
+        if (focused || autoAcceptStarted.current) return;
+        autoAcceptStarted.current = true;
+        void declineMatch();
+      });
+    }, focusCheckDelay);
     const delay = Math.max(0, deadline - Date.now());
-    const timer = window.setTimeout(() => {
+    const autoAcceptTimer = window.setTimeout(() => {
       if (autoAcceptStarted.current) return;
       autoAcceptStarted.current = true;
       void acceptMatch();
     }, delay);
-    return () => window.clearTimeout(timer);
-  }, [acceptMatch, deadline, requiresFamilySharingDecision]);
+    return () => {
+      window.clearTimeout(focusCheckTimer);
+      window.clearTimeout(autoAcceptTimer);
+    };
+  }, [acceptMatch, deadline, declineMatch, requiresFamilySharingDecision]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

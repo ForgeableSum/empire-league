@@ -40,6 +40,10 @@ export function registerSystemHandlers(): void {
       notification.show();
     }
   });
+  ipcMain.handle("system:is-app-focused", async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return Boolean(window && !window.isDestroyed() && window.isVisible() && !window.isMinimized() && window.isFocused());
+  });
   ipcMain.handle("system:stop-match-found-alert", async (event) => {
     BrowserWindow.fromWebContents(event.sender)?.flashFrame(false);
   });

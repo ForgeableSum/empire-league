@@ -91,6 +91,7 @@ export interface ElectronGameApi {
   storeAuthToken(token: string): Promise<void>;
   clearAuthToken(): Promise<void>;
   alertMatchFound(showNotification: boolean): Promise<void>;
+  isAppFocused(): Promise<boolean>;
   stopMatchFoundAlert(): Promise<void>;
   alertUnreadMessage(): Promise<void>;
   clearUnreadMessageAlert(): Promise<void>;

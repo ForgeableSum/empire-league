@@ -91,6 +91,7 @@ const electronApi: ElectronGameApi = {
   storeAuthToken: (token) => ipcRenderer.invoke("auth:store-token", token),
   clearAuthToken: () => ipcRenderer.invoke("auth:clear-token"),
   alertMatchFound: (showNotification) => ipcRenderer.invoke("system:alert-match-found", showNotification),
+  isAppFocused: () => ipcRenderer.invoke("system:is-app-focused"),
   stopMatchFoundAlert: () => ipcRenderer.invoke("system:stop-match-found-alert"),
   alertUnreadMessage: () => ipcRenderer.invoke("system:alert-unread-message"),
   clearUnreadMessageAlert: () => ipcRenderer.invoke("system:clear-unread-message-alert"),
