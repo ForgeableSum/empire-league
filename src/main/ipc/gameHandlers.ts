@@ -957,6 +957,7 @@ $interop = @'
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 public static class AoeInputGuard {
   private const int WH_KEYBOARD_LL = 13;
@@ -1025,6 +1026,9 @@ public static class AoeInputGuard {
   private static int virtualTop;
   private static int virtualRight;
   private static int virtualBottom;
+  private static Timer movementPublishTimer;
+  private static int movementDirty;
+  private static int movementPublishBusy;
 
   public static int Run(uint processId) {
     targetWindow = FindWindow(processId);
@@ -1044,6 +1048,10 @@ public static class AoeInputGuard {
       Release();
       return 3;
     }
+    // The mouse hook can receive thousands of movement callbacks per second.
+    // Keep those callbacks lightweight and publish only the newest position at
+    // display cadence; buttons and wheel events remain immediate.
+    movementPublishTimer = new Timer(PublishLatestMovement, null, 16, 16);
 
     Console.WriteLine("GUARD_READY");
     Console.Out.Flush();
@@ -1096,6 +1104,8 @@ public static class AoeInputGuard {
         virtualMouseX = Math.Max(virtualLeft, Math.Min(virtualRight, virtualMouseX + data.Point.X - mouseAnchor.X));
         virtualMouseY = Math.Max(virtualTop, Math.Min(virtualBottom, virtualMouseY + data.Point.Y - mouseAnchor.Y));
         SetCursorPos(mouseAnchor.X, mouseAnchor.Y);
+        Interlocked.Exchange(ref movementDirty, 1);
+        return new IntPtr(1);
       }
       Console.WriteLine("MOUSE|{0}|{1}|{2}|{3}", message, virtualMouseX, virtualMouseY, wheel);
       Console.Out.Flush();
@@ -1104,7 +1114,24 @@ public static class AoeInputGuard {
     return CallNextHookEx(mouseHook, code, wParam, lParam);
   }
 
+  private static void PublishLatestMovement(object state) {
+    if (Interlocked.Exchange(ref movementDirty, 0) == 0) return;
+    if (Interlocked.CompareExchange(ref movementPublishBusy, 1, 0) != 0) {
+      Interlocked.Exchange(ref movementDirty, 1);
+      return;
+    }
+    try {
+      Console.WriteLine("MOUSE|512|{0}|{1}|0", virtualMouseX, virtualMouseY);
+      Console.Out.Flush();
+    } finally {
+      Interlocked.Exchange(ref movementPublishBusy, 0);
+    }
+  }
+
   private static void Release() {
+    Timer timer = movementPublishTimer;
+    movementPublishTimer = null;
+    if (timer != null) timer.Dispose();
     if (keyboardHook != IntPtr.Zero) UnhookWindowsHookEx(keyboardHook);
     if (mouseHook != IntPtr.Zero) UnhookWindowsHookEx(mouseHook);
     keyboardHook = IntPtr.Zero;
