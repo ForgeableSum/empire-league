@@ -71,7 +71,6 @@ const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
 const aoe2LaunchAttemptTimeoutMs = 30_000;
 const roomSetupTimeoutMs = 65_000;
-const restartAoe2AfterLobbyAutomationFailure = import.meta.env.VITE_DISABLE_AOE2_LOBBY_AUTO_RESTART !== "true";
 const defaultSettings: UserSettings = {
   launchAoe2OnStartup: false,
   matchNotifications: true,
@@ -542,76 +541,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return launchAoe2ForActivity(purpose);
   }
 
-  async function recoverAoe2AfterLobbyFailure(): Promise<boolean> {
-    let recoveryNotificationId: string | null = null;
-    try {
-      if (!window.electronApi) throw new Error("The Electron game integration bridge is unavailable.");
-      lobbyAutomationRef.current = null;
-      await window.electronApi.setLobbyInputLock(false).catch(() => ({ locked: false }));
-      setState((previous) => ({
-        ...previous,
-        gameStatus: "loading",
-        transitionInputLocked: false,
-        roomSetupStartedAt: null,
-        roomSetupEstimateMs: null,
-        roomSetupMilestone: "Resetting AoE2 after disconnect"
-      }));
-      recoveryNotificationId = notify("Resetting AoE2 after the disconnect…", "loading", {
-        detail: "Closing the abandoned lobby before returning to matchmaking.",
-        durationMs: null,
-        dismissible: false
-      });
-
-      const process = await window.electronApi.detectAoe2Process();
-      if (process.running) {
-        const gracefulClose = await window.electronApi.closeAoe2(false);
-        if (!gracefulClose.closed) {
-          updateNotification(recoveryNotificationId, { detail: "AoE2 did not close normally; forcing it to exit." });
-          const forcedClose = await window.electronApi.closeAoe2(true);
-          if (!forcedClose.closed) {
-            throw new Error(forcedClose.message ?? "The abandoned AoE2 process could not be closed.");
-          }
-        }
-      }
-
-      const exited = await window.electronApi.detectAoe2Process();
-      if (exited.running) throw new Error("AoE2 was still running after the close operation.");
-
-      updateNotification(recoveryNotificationId, { detail: "Launching a clean AoE2 session." });
-      const launch = await window.electronApi.launchAoe2();
-      if (!launch.launched) {
-        throw new Error(launch.message ?? "Steam did not accept the AoE2 DE launch request.");
-      }
-      const ready = await waitForAoe2Window(120_000);
-      if (!ready) throw new Error("AoE2 restarted, but its game window did not become ready in time.");
-      updateNotification(recoveryNotificationId, { detail: "Finishing game startup." });
-      await delayForStartup(aoe2PostWindowReadyDelayMs);
-      setState((previous) => ({
-        ...previous,
-        gameStatus: "running",
-        roomSetupMilestone: null
-      }));
-      updateNotification(recoveryNotificationId, {
-        message: "AoE2 is ready",
-        tone: "success",
-        detail: "Returning to matchmaking.",
-        durationMs: 3000,
-        dismissible: true
-      });
-      return true;
-    } catch (error) {
-      if (recoveryNotificationId) dismissNotificationById(recoveryNotificationId);
-      setState((previous) => ({
-        ...previous,
-        gameStatus: "installed",
-        transitionInputLocked: false,
-        roomSetupMilestone: null
-      }));
-      notify(error instanceof Error ? error.message : "AoE2 could not be reset after the disconnect.", "danger");
-      return false;
-    }
-  }
-
   function log(message: string): void {
     setState((previous) => ({ ...previous, eventLog: [nowLog(message), ...previous.eventLog].slice(0, 1000) }));
   }
@@ -652,7 +581,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }, roomSetupTimeoutMs);
   }
 
-  async function handleLobbySetupFailure(queue: QueueDefinition, message: string): Promise<void> {
+  async function handleLobbySetupFailure(_queue: QueueDefinition, message: string): Promise<void> {
     if (lobbyRecoveryInFlightRef.current) return;
     lobbyRecoveryInFlightRef.current = true;
     void window.electronApi?.stopMatchFoundAlert();
@@ -667,6 +596,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((previous) => ({
       ...previous,
       queueStatus: "cancelled",
+      gameStatus: "installed",
       activeMatch: null,
       error: null,
       transitionInputLocked: false,
@@ -676,16 +606,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
     notify(message, "warning", { durationMs: 5000, dismissible: false });
     if (ticketId) await services.matchmaking.leaveQueue(ticketId).catch(() => undefined);
-    if (!restartAoe2AfterLobbyAutomationFailure) {
-      await window.electronApi?.setLobbyInputLock(false).catch(() => ({ locked: false }));
-      log("Lobby setup failed; automatic AoE2 restart is disabled");
-      lobbyRecoveryInFlightRef.current = false;
-      return;
+    await window.electronApi?.setLobbyInputLock(false).catch(() => ({ locked: false }));
+    log("Lobby setup failed; terminating AoE2 and leaving matchmaking cancelled");
+    const closed = await window.electronApi?.closeAoe2(true).catch(() => null);
+    if (closed && !closed.closed) {
+      notify(closed.message ?? "AoE2 could not be terminated after the lobby setup failure.", "danger");
     }
-    log("Lobby setup failed; resetting AoE2 before returning to queue");
-    const recovered = await recoverAoe2AfterLobbyFailure();
     lobbyRecoveryInFlightRef.current = false;
-    if (recovered) await startQueue(queue);
   }
 
   function clearRoomSetupWatchdog(): void {
@@ -1106,7 +1033,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           if (event.code === "GAME_START_FAILED") {
-            log("Game start failed after the Start Game click; restarting AoE2");
+            log("Game start failed after the Start Game click; terminating AoE2");
             void handleLobbySetupFailure(queue, event.message);
             return;
           }
