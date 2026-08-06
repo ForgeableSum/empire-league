@@ -61,7 +61,7 @@ interface AppContextValue {
   notify: (
     message: string,
     tone?: NotificationItem["tone"],
-    options?: { detail?: string; durationMs?: number | null; dismissible?: boolean; action?: NotificationItem["action"] }
+    options?: { detail?: string; durationMs?: number | null; dismissible?: boolean; action?: NotificationItem["action"]; secondaryAction?: NotificationItem["secondaryAction"] }
   ) => string;
   appendDiagnosticLog: (message: string) => void;
   dismissNotification: (id: string) => void;
@@ -509,39 +509,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const { mods } = await window.electronApi.detectEnabledUiMods();
     if (mods.length) {
       if (uiModWarningIdRef.current) dismissNotificationById(uiModWarningIdRef.current);
-      uiModWarningIdRef.current = notify("Disable UI mods to continue", "warning", {
-        detail: `Disable: ${mods.join(", ")}. AoE2 will close if it is currently running; retry your action afterward.`,
-        durationMs: null,
-        dismissible: true,
-        action: {
-          label: "Disable UI mods",
-          run: async () => {
-            try {
-              const process = await window.electronApi!.detectAoe2Process();
-              if (process.running) {
-                const graceful = await window.electronApi!.closeAoe2(false);
-                if (!graceful.closed) {
-                  const forced = await window.electronApi!.closeAoe2(true);
-                  if (!forced.closed) throw new Error(forced.message ?? "AoE2 could not be closed.");
+      return new Promise<boolean>((resolve) => {
+        uiModWarningIdRef.current = notify("UI mods may interfere with Empire League", "warning", {
+          detail: `${mods.join(", ")} might interfere with automated lobby setup. You can disable ${mods.length === 1 ? "it" : "them"}, or continue anyway.`,
+          durationMs: null,
+          dismissible: false,
+          action: {
+            label: "Disable UI mods",
+            pendingLabel: "Disabling…",
+            run: async () => {
+              try {
+                const process = await window.electronApi!.detectAoe2Process();
+                if (process.running) {
+                  const graceful = await window.electronApi!.closeAoe2(false);
+                  if (!graceful.closed) {
+                    const forced = await window.electronApi!.closeAoe2(true);
+                    if (!forced.closed) throw new Error(forced.message ?? "AoE2 could not be closed.");
+                  }
                 }
+                const result = await window.electronApi!.disableEnabledUiMods();
+                if (!result.disabled.length) throw new Error("The enabled UI mods could not be updated.");
+                if (uiModWarningIdRef.current) dismissNotificationById(uiModWarningIdRef.current);
+                uiModWarningIdRef.current = null;
+                notify("UI mods disabled", "success", {
+                  detail: `${result.disabled.join(", ")} disabled. You can try again now.`
+                });
+                resolve(false);
+              } catch (error) {
+                notify("UI mods could not be disabled", "danger", {
+                  detail: error instanceof Error ? error.message : "Update the mods manually in AoE2.",
+                  durationMs: null
+                });
               }
-              const result = await window.electronApi!.disableEnabledUiMods();
-              if (!result.disabled.length) throw new Error("The enabled UI mods could not be updated.");
+            }
+          },
+          secondaryAction: {
+            label: "Continue anyway",
+            run: () => {
               if (uiModWarningIdRef.current) dismissNotificationById(uiModWarningIdRef.current);
               uiModWarningIdRef.current = null;
-              notify("UI mods disabled", "success", {
-                detail: `${result.disabled.join(", ")} disabled. You can try again now.`
-              });
-            } catch (error) {
-              notify("UI mods could not be disabled", "danger", {
-                detail: error instanceof Error ? error.message : "Update the mods manually in AoE2.",
-                durationMs: null
-              });
+              resolve(true);
             }
           }
-        }
+        });
       });
-      return false;
     }
     const gameProcess = await window.electronApi.detectAoe2Process();
     if (gameProcess.running && gameProcess.windowReady && gameProcess.owned) return true;
@@ -559,7 +570,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   function notify(
     message: string,
     tone: NotificationItem["tone"] = "info",
-    options: { detail?: string; durationMs?: number | null; dismissible?: boolean; action?: NotificationItem["action"] } = {}
+    options: { detail?: string; durationMs?: number | null; dismissible?: boolean; action?: NotificationItem["action"]; secondaryAction?: NotificationItem["secondaryAction"] } = {}
   ): string {
     const id = crypto.randomUUID();
     setState((previous) => ({
@@ -571,7 +582,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         detail: options.detail,
         durationMs: options.durationMs === undefined ? (tone === "danger" ? 8000 : 5000) : options.durationMs,
         dismissible: options.dismissible,
-        action: options.action
+        action: options.action,
+        secondaryAction: options.secondaryAction
       }, ...previous.notifications].slice(0, 4)
     }));
     return id;
