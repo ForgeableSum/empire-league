@@ -229,6 +229,11 @@ function playerCustomLobby(playerId) {
   return [...customLobbies.values()].find((room) => room.players.some((player) => player.id === playerId));
 }
 
+function playerHasRankedActivity(playerId) {
+  return playersJoiningQueue.has(playerId)
+    || [...tickets.values()].some((ticket) => ticket.player.id === playerId);
+}
+
 function cleanupCustomLobbyDisconnect(playerId) {
   removeWeeklyQueuePlayer(playerId);
   const room = playerCustomLobby(playerId);
@@ -1166,7 +1171,7 @@ async function handleRequest(request, response) {
       if (playerCustomLobby(authenticatedPlayer.id)) {
         return send(response, 409, { error: "Leave your current lobby before joining the weekly queue." });
       }
-      if ([...tickets.values()].some((ticket) => ticket.player.id === authenticatedPlayer.id)) {
+      if (playerHasRankedActivity(authenticatedPlayer.id)) {
         return send(response, 409, { error: "Leave your active matchmaking queue before joining the weekly queue." });
       }
       const body = await readJson(request);
@@ -1200,6 +1205,8 @@ async function handleRequest(request, response) {
 
     if (request.method === "POST" && url.pathname === "/custom-lobbies") {
       if (playerCustomLobby(authenticatedPlayer.id)) return send(response, 409, { error: "Leave your current custom lobby first." });
+      if (weeklyQueue.has(authenticatedPlayer.id)) return send(response, 409, { error: "Leave the weekly queue before creating a custom lobby." });
+      if (playerHasRankedActivity(authenticatedPlayer.id)) return send(response, 409, { error: "Leave matchmaking before creating a custom lobby." });
       const body = await readJson(request);
       const name = String(body.name ?? "").trim().slice(0, 64);
       if (!name) return send(response, 400, { error: "A lobby name is required." });
@@ -1247,6 +1254,8 @@ async function handleRequest(request, response) {
       if (!room || room.status !== "open") return send(response, 404, { error: "That lobby is no longer available." });
       const current = playerCustomLobby(authenticatedPlayer.id);
       if (current && current.id !== room.id) return send(response, 409, { error: "Leave your current custom lobby first." });
+      if (weeklyQueue.has(authenticatedPlayer.id)) return send(response, 409, { error: "Leave the weekly queue before joining a custom lobby." });
+      if (playerHasRankedActivity(authenticatedPlayer.id)) return send(response, 409, { error: "Leave matchmaking before joining a custom lobby." });
       if (!room.players.some((player) => player.id === authenticatedPlayer.id)) {
         if (room.players.length >= room.maxPlayers) return send(response, 409, { error: "That lobby is full." });
         const occupied = new Set(room.players.map((player) => player.slot));
@@ -1613,8 +1622,9 @@ async function handleRequest(request, response) {
         }
       }
       const alreadyActive = weeklyQueue.has(authenticatedPlayer.id)
-        || [...tickets.values()].some((ticket) => ticket.player.id === authenticatedPlayer.id);
-      if (alreadyActive || playersJoiningQueue.has(authenticatedPlayer.id)) {
+        || playerCustomLobby(authenticatedPlayer.id)
+        || playerHasRankedActivity(authenticatedPlayer.id);
+      if (alreadyActive) {
         return send(response, 409, { error: "player already has an active queue or match" });
       }
       playersJoiningQueue.add(authenticatedPlayer.id);

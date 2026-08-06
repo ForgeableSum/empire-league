@@ -29,6 +29,14 @@ export function CustomPage() {
 
   const customRooms = rooms.filter((room) => room.source !== "weekly");
   const activeRoom = customRooms.find((room) => room.players.some((player) => player.id === state.currentUser.id));
+  const canEnterCustomLobby = ["idle", "cancelled", "completed"].includes(state.queueStatus)
+    && (!state.activeMatch || state.queueStatus === "completed");
+
+  function guardCustomLobbyEntry(): boolean {
+    if (canEnterCustomLobby) return true;
+    notify("Leave matchmaking before entering a custom lobby.", "warning");
+    return false;
+  }
 
   async function refreshRooms() {
     setLoadingRooms(true);
@@ -75,6 +83,7 @@ export function CustomPage() {
   }, []);
 
   async function createRoom() {
+    if (!guardCustomLobbyEntry()) return;
     setPending(true);
     try {
       const contentId = contentKind === "map" ? mapId : scenarioId;
@@ -93,10 +102,12 @@ export function CustomPage() {
   }
 
   async function openCreateRoom() {
+    if (!guardCustomLobbyEntry()) return;
     if (await ensureAoe2Ready("custom")) setCreating(true);
   }
 
   async function joinRoom(roomId: string) {
+    if (!guardCustomLobbyEntry()) return;
     if (!(await ensureAoe2Ready("custom"))) return;
     setPending(true);
     try {
@@ -156,7 +167,7 @@ export function CustomPage() {
 
       <div className="custom-room-section">
         <div className="custom-room-toolbar">
-          {!creating && <button className="primary" type="button" disabled={state.gameStatus === "loading"} onClick={() => void openCreateRoom()}><Plus size={17} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "New Lobby"}</button>}
+          {!creating && <button className="primary" type="button" disabled={state.gameStatus === "loading" || !canEnterCustomLobby} onClick={() => void openCreateRoom()}><Plus size={17} /> {state.gameStatus === "loading" ? "Launching AoE2…" : "New Lobby"}</button>}
           <button className="secondary" type="button" onClick={() => void refreshRooms()} disabled={loadingRooms}><RefreshCw size={16} className={loadingRooms ? "spin" : ""} /> {loadingRooms ? "Refreshing…" : "Refresh Rooms"}</button>
         </div>
         <div className="custom-room-list">
@@ -167,7 +178,7 @@ export function CustomPage() {
               <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
               <div className="room-player-count"><Users size={16} /> {room.players.length}/{room.maxPlayers}</div>
               <span className={`custom-room-status ${room.status}`}>{customRoomStatusLabel(room.status)}</span>
-              <button className="secondary" type="button" disabled={room.status !== "open" || room.players.length >= room.maxPlayers || pending || state.gameStatus === "loading"} onClick={() => void joinRoom(room.id)}><LogIn size={16} /> {state.gameStatus === "loading" ? "Launching…" : "Join"}</button>
+              <button className="secondary" type="button" disabled={room.status !== "open" || room.players.length >= room.maxPlayers || pending || state.gameStatus === "loading" || !canEnterCustomLobby} onClick={() => void joinRoom(room.id)}><LogIn size={16} /> {state.gameStatus === "loading" ? "Launching…" : "Join"}</button>
             </article>
           ))}
           {!loadingRooms && !customRooms.length && <div className="panel empty-state">No custom rooms are open. Create the first one.</div>}
