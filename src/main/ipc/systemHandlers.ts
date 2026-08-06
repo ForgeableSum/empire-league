@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, Notification, safeStorage, shell } from "e
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { minimizeMainWindowToTaskbar } from "../window.js";
-import { getPendingUpdate, installDownloadedUpdate } from "../autoUpdate.js";
+import { getPendingUpdate, installDownloadedUpdate, setAutoUpdateChecksPaused } from "../autoUpdate.js";
 
 export function registerSystemHandlers(): void {
   ipcMain.handle("system:ping", async () => ({ ok: true, at: new Date().toISOString() }));
@@ -59,6 +59,10 @@ export function registerSystemHandlers(): void {
     return getPendingUpdate();
   });
   ipcMain.handle("system:install-pending-update", async () => installDownloadedUpdate());
+  ipcMain.handle("system:set-update-checks-paused", async (_event, paused: boolean) => {
+    if (typeof paused !== "boolean") throw new TypeError("Update pause state must be a boolean.");
+    setAutoUpdateChecksPaused(paused);
+  });
   ipcMain.handle("system:set-login-item-open-at-login", async (_event, openAtLogin: boolean) => {
     if (typeof openAtLogin !== "boolean") throw new TypeError("Startup preference must be a boolean.");
     if (!supportsLoginItems()) return getLoginItemSettings();

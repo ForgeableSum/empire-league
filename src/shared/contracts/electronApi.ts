@@ -99,6 +99,7 @@ export interface ElectronGameApi {
   openDiscordInvite(): Promise<void>;
   getPendingUpdate(): Promise<PendingAppUpdate | null>;
   installPendingUpdate(): Promise<boolean>;
+  setUpdateChecksPaused(paused: boolean): Promise<void>;
   onUpdateDetected(listener: (update: PendingAppUpdate) => void): () => void;
   onUpdateReady(listener: (update: PendingAppUpdate) => void): () => void;
   setLoginItemOpenAtLogin(openAtLogin: boolean): Promise<LoginItemSettings>;

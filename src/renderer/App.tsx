@@ -40,6 +40,11 @@ export function App() {
 
   const { page, state, lobbyAutomationActive, authStatus, authError, signInWithSteam } = useAppStore();
   const rankedLobbyTransition = ["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error;
+  const gameInSession = state.queueStatus === "in_game" || state.gameStatus === "in_match";
+
+  useEffect(() => {
+    void window.electronApi?.setUpdateChecksPaused(gameInSession);
+  }, [gameInSession]);
 
   useEffect(() => {
     chatsRef.current = chats;
