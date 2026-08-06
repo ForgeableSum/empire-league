@@ -309,7 +309,7 @@ export function QueuePage() {
                   <div><span>Time searching</span><strong>{formatTime(elapsed)}</strong></div>
                   <div><span>Estimated wait</span><strong>{state.selectedQueue?.estimatedWaitSeconds}s</strong></div>
                 </div>
-                <p>Rating range expands automatically. Civilization and map changes below update your active search.</p>
+                <p className="search-helper">Civ and map changes below auto-update your search. It's safe to minimize the app while searching.</p>
                 <label className="toggle-row compact-toggle">
                   <span>Find anyone</span>
                   <input

@@ -2512,6 +2512,10 @@
   min-width: 0;
 }
 
+.search-helper {
+  font-size: 14px;
+}
+
 .matchmaking-brand {
   min-width: 0;
   min-height: 440px;
