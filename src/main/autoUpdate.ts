@@ -1,14 +1,16 @@
 import { app, BrowserWindow } from "electron";
 import electronUpdater from "electron-updater";
+import type { PendingAppUpdate } from "../shared/contracts/electronApi.js";
 
 const { autoUpdater } = electronUpdater;
 
 const firstCheckDelayMs = 3_000;
 const recurringCheckIntervalMs = 10 * 60 * 1_000;
 let downloadedVersion: string | null = null;
+let pendingUpdate: PendingAppUpdate | null = null;
 
-export function getDownloadedUpdateVersion(): string | null {
-  return downloadedVersion;
+export function getPendingUpdate(): PendingAppUpdate | null {
+  return pendingUpdate;
 }
 
 export function installDownloadedUpdate(): boolean {
@@ -40,21 +42,27 @@ export function startAutoUpdates(): void {
 
   autoUpdater.on("update-available", (info) => {
     console.info(`[Updater] Downloading version ${info.version}`);
+    pendingUpdate = { version: info.version, status: "downloading" };
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send("system:update-detected", pendingUpdate);
+    }
   });
   autoUpdater.on("update-not-available", (info) => {
     console.info(`[Updater] Version ${info.version} is current`);
+    pendingUpdate = null;
   });
   autoUpdater.on("error", (error) => {
     console.error("[Updater] Error", error);
   });
   autoUpdater.on("update-downloaded", (info) => {
     downloadedVersion = info.version;
+    pendingUpdate = { version: info.version, status: "downloaded" };
     for (const window of BrowserWindow.getAllWindows()) {
       if (window.isDestroyed()) continue;
       if (window.isMinimized()) window.restore();
       window.show();
       window.focus();
-      window.webContents.send("system:update-ready", { version: info.version });
+      window.webContents.send("system:update-ready", pendingUpdate);
     }
   });
 

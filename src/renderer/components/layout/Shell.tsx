@@ -58,7 +58,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
     if (!electronApi) return;
     let active = true;
     void electronApi.getPendingUpdate().then((update) => {
-      if (active && update) setPendingUpdateVersion(update.version);
+      if (active && update?.status === "downloaded") setPendingUpdateVersion(update.version);
     });
     const unsubscribe = electronApi.onUpdateReady((update) => {
       if (active) setPendingUpdateVersion(update.version);

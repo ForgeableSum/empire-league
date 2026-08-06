@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, Notification, safeStorage, shell } from "e
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { minimizeMainWindowToTaskbar } from "../window.js";
-import { getDownloadedUpdateVersion, installDownloadedUpdate } from "../autoUpdate.js";
+import { getPendingUpdate, installDownloadedUpdate } from "../autoUpdate.js";
 
 export function registerSystemHandlers(): void {
   ipcMain.handle("system:ping", async () => ({ ok: true, at: new Date().toISOString() }));
@@ -56,8 +56,7 @@ export function registerSystemHandlers(): void {
     await shell.openExternal("https://discord.gg/arRjVxx2y7");
   });
   ipcMain.handle("system:get-pending-update", async () => {
-    const version = getDownloadedUpdateVersion();
-    return version ? { version } : null;
+    return getPendingUpdate();
   });
   ipcMain.handle("system:install-pending-update", async () => installDownloadedUpdate());
   ipcMain.handle("system:set-login-item-open-at-login", async (_event, openAtLogin: boolean) => {

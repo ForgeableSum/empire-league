@@ -173,6 +173,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const uiModWarningIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const electronApi = window.electronApi;
+    if (!electronApi) return;
+    return electronApi.onUpdateDetected((update) => {
+      if (stateRef.current.queueStatus !== "searching") return;
+      notify(`Empire League v${update.version} is downloading`, "warning", {
+        detail: "Matchmaking was cancelled because the required update must be installed first.",
+        durationMs: null
+      });
+      void cancelQueue();
+    });
+  }, []);
+
+  useEffect(() => {
     const pending = pendingScrollRestoreRef.current;
     if (!pending || pending.page !== page) return;
     pendingScrollRestoreRef.current = null;
@@ -726,6 +739,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (state.gameStatus === "loading" || !canStartQueue || queueJoinInFlightRef.current) return;
     queueJoinInFlightRef.current = true;
     try {
+      if (await blockQueueForPendingUpdate()) return;
       if (!(await ensureAoe2Ready())) {
         queueJoinInFlightRef.current = false;
         return;
@@ -743,6 +757,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (currentUser !== state.currentUser) {
         setState((previous) => ({ ...previous, currentUser }));
       }
+      if (await blockQueueForPendingUpdate()) return;
       const ticket = await services.matchmaking.joinQueue({
         queueId: queue.id,
         queue,
@@ -1150,6 +1165,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         retryable: true
       });
     }
+  }
+
+  async function blockQueueForPendingUpdate(): Promise<boolean> {
+    const update = await window.electronApi?.getPendingUpdate().catch(() => null);
+    if (!update) return false;
+    queueJoinInFlightRef.current = false;
+    notify(`Empire League v${update.version} is ${update.status === "downloaded" ? "ready to install" : "downloading"}`, "warning", {
+      detail: "Restart and install the required update before joining matchmaking.",
+      durationMs: null
+    });
+    return true;
   }
 
   async function cancelQueue(): Promise<void> {

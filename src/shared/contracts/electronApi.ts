@@ -39,6 +39,7 @@ export interface LoginItemSettings {
 
 export interface PendingAppUpdate {
   version: string;
+  status: "available" | "downloading" | "downloaded";
 }
 
 export interface ElectronGameApi {
@@ -97,6 +98,7 @@ export interface ElectronGameApi {
   openDiscordInvite(): Promise<void>;
   getPendingUpdate(): Promise<PendingAppUpdate | null>;
   installPendingUpdate(): Promise<boolean>;
+  onUpdateDetected(listener: (update: PendingAppUpdate) => void): () => void;
   onUpdateReady(listener: (update: PendingAppUpdate) => void): () => void;
   setLoginItemOpenAtLogin(openAtLogin: boolean): Promise<LoginItemSettings>;
   minimizeToTaskbar(): Promise<void>;
