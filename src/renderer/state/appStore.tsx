@@ -33,6 +33,9 @@ interface AppContextValue {
   state: AppState;
   lobbyAutomationActive: boolean;
   setLobbyAutomationActive: (active: boolean) => void;
+  claimCustomLobbyAutomationStep: (key: string) => boolean;
+  releaseCustomLobbyAutomationStep: (key: string) => void;
+  clearCustomLobbyAutomationSteps: (roomId: string) => void;
   weeklyQueueActive: boolean;
   setWeeklyQueueActive: (active: boolean) => void;
   page: AppPage;
@@ -162,6 +165,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const queueJoinInFlightRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const lobbyAutomationRef = useRef<Promise<GameInputResult> | null>(null);
+  const customLobbyAutomationStepsRef = useRef(new Set<string>());
   const lobbyRecoveryInFlightRef = useRef(false);
   const matchedSessionRef = useRef<MatchSession | null>(null);
   const roomSetupTimeoutRef = useRef<number | null>(null);
@@ -1500,10 +1504,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }
 
+  function claimCustomLobbyAutomationStep(key: string): boolean {
+    if (customLobbyAutomationStepsRef.current.has(key)) return false;
+    customLobbyAutomationStepsRef.current.add(key);
+    return true;
+  }
+
+  function releaseCustomLobbyAutomationStep(key: string): void {
+    customLobbyAutomationStepsRef.current.delete(key);
+  }
+
+  function clearCustomLobbyAutomationSteps(roomId: string): void {
+    const prefix = `${roomId}:`;
+    for (const key of customLobbyAutomationStepsRef.current) {
+      if (key.startsWith(prefix)) customLobbyAutomationStepsRef.current.delete(key);
+    }
+  }
+
   const value: AppContextValue = {
     state,
     lobbyAutomationActive,
     setLobbyAutomationActive,
+    claimCustomLobbyAutomationStep,
+    releaseCustomLobbyAutomationStep,
+    clearCustomLobbyAutomationSteps,
     weeklyQueueActive,
     setWeeklyQueueActive,
     page,

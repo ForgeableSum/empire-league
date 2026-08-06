@@ -89,6 +89,8 @@ let replayFocusTimers: NodeJS.Timeout[] = [];
 let returnToMenuPoller: NodeJS.Timeout | undefined;
 let replayDetectionGeneration = 0;
 const builtInGameMapNames = new Set<string>();
+let createLobbySequenceCounter = 0;
+let activeCreateLobbySequence: { id: number; context: "ranked" | "custom" } | undefined;
 
 function startLoadingScreenWatch(processId: number, sender: WebContents): boolean {
   if (loadingScreenWatchers.has(sender)) return true;
@@ -2611,14 +2613,34 @@ export function registerGameHandlers(): void {
       return { sent: false, message: "The lobby must contain between 2 and 8 players." };
     }
 
-    const emitLog = (message: string) => {
-      console.info(`[AoE2 automation] ${message}`);
+    const sequenceId = ++createLobbySequenceCounter;
+    if (activeCreateLobbySequence) {
+      const message = `SEQUENCE|Id=${sequenceId}|Context=${automationContext}|Rejected=AlreadyRunning|ActiveId=${activeCreateLobbySequence.id}|ActiveContext=${activeCreateLobbySequence.context}`;
+      console.warn(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+      return { sent: false, message: "Lobby creation is already in progress." };
+    }
+    activeCreateLobbySequence = { id: sequenceId, context: automationContext };
+
+    const emitLog = (message: string) => {
+      const sequencedMessage = `SEQUENCE|Id=${sequenceId}|Context=${automationContext}|${message}`;
+      console.info(`[AoE2 automation] ${sequencedMessage}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", sequencedMessage);
     };
+    emitLog("Started=True");
     emitLog(`GAME_SETTINGS_PAYLOAD|${JSON.stringify(requestedGameSettings ?? null)}`);
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    const gameProcess = await detectAoe2Process();
+    let gameProcess: Awaited<ReturnType<typeof detectAoe2Process>>;
+    try {
+      gameProcess = await detectAoe2Process();
+    } catch (error) {
+      emitLog(`ERROR|${error instanceof Error ? error.message : "AoE2 process detection failed."}`);
+      activeCreateLobbySequence = undefined;
+      return { sent: false, message: "The AoE2 game window could not be detected." };
+    }
     if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
+      emitLog("Complete=False|Reason=GameWindowNotReady");
+      activeCreateLobbySequence = undefined;
       return { sent: false, message: "The AoE2 game window was not ready." };
     }
     const gamePid: number = gameProcess.pid;
@@ -2945,6 +2967,10 @@ export function registerGameHandlers(): void {
         setWindowsInputBlocked(false);
         stopInputGuard();
         emitLog("INPUT_LOCK|Requested=False|Source=CreateLobbyCleanup");
+      }
+      if (activeCreateLobbySequence?.id === sequenceId) {
+        activeCreateLobbySequence = undefined;
+        emitLog(`Released=True|Complete=${sequenceCompleted}`);
       }
     }
   });

@@ -192,20 +192,28 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   notify: ReturnType<typeof useAppStore>["notify"];
   weeklyView?: ReactNode;
 }) {
-  const { setLobbyAutomationActive } = useAppStore();
+  const {
+    setLobbyAutomationActive,
+    claimCustomLobbyAutomationStep,
+    releaseCustomLobbyAutomationStep,
+    clearCustomLobbyAutomationSteps
+  } = useAppStore();
   const [draft, setDraft] = useState("");
-  const automationSteps = useRef(new Set<string>());
   const replayResultInFlight = useRef(false);
   const gameStartRevealRef = useRef<Promise<void> | null>(null);
+  const startRequestInFlight = useRef(false);
+  const [startRequestPending, setStartRequestPending] = useState(false);
   const me = room.players.find((player) => player.id === currentPlayerId)!;
   const isHost = room.hostId === currentPlayerId;
   const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => room.players.find((player) => player.slot === index + 1)), [room]);
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
 
-  useEffect(() => () => setLobbyAutomationActive(false), [room.id, setLobbyAutomationActive]);
-
   useEffect(() => {
+    if (room.status !== "open") {
+      startRequestInFlight.current = false;
+      setStartRequestPending(false);
+    }
     if (room.status === "launching") {
       setLobbyAutomationActive(true);
       return;
@@ -218,21 +226,28 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     setLobbyAutomationActive(false);
   }, [room.status, setLobbyAutomationActive]);
 
-  useEffect(() => () => {
-    void window.electronApi?.setLobbyInputLock(false);
-    void window.electronApi?.stopReplayEndDetection();
-  }, [room.id]);
+  async function startCustomGame() {
+    if (startRequestInFlight.current || room.status !== "open") return;
+    startRequestInFlight.current = true;
+    setStartRequestPending(true);
+    try {
+      await customLobbyService.start(room.id);
+    } catch (error) {
+      startRequestInFlight.current = false;
+      setStartRequestPending(false);
+      throw error;
+    }
+  }
 
   useEffect(() => {
     if (room.status === "open") {
-      automationSteps.current.clear();
+      clearCustomLobbyAutomationSteps(room.id);
       return;
     }
     if (room.status !== "launching" || !window.electronApi) return;
     const content = room.map;
     const hostSetupKey = `${room.id}:host-setup`;
-    if (isHost && !room.platformLobbyId && !automationSteps.current.has(hostSetupKey)) {
-      automationSteps.current.add(hostSetupKey);
+    if (isHost && !room.platformLobbyId && claimCustomLobbyAutomationStep(hostSetupKey)) {
       void (async () => {
         try {
           if (!content) throw new Error("Choose a map or scenario before starting.");
@@ -253,15 +268,14 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           await customLobbyService.publish(room.id, result.lobbyUri);
         } catch (error) {
           await customLobbyService.failStart(room.id, messageFor(error));
-          automationSteps.current.delete(hostSetupKey);
+          releaseCustomLobbyAutomationStep(hostSetupKey);
         }
       })();
       return;
     }
 
     const guestJoinKey = `${room.id}:guest-join:${room.platformLobbyId ?? "pending"}`;
-    if (!isHost && room.platformLobbyId && !me.aoeJoined && !automationSteps.current.has(guestJoinKey)) {
-      automationSteps.current.add(guestJoinKey);
+    if (!isHost && room.platformLobbyId && !me.aoeJoined && claimCustomLobbyAutomationStep(guestJoinKey)) {
       void (async () => {
         try {
           const opened = await window.electronApi!.openAoe2Lobby(room.platformLobbyId!);
@@ -270,7 +284,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           await customLobbyService.reportJoined(room.id);
         } catch (error) {
           notify("Could not join the AoE2 lobby.", "danger", { detail: messageFor(error), durationMs: null });
-          automationSteps.current.delete(guestJoinKey);
+          releaseCustomLobbyAutomationStep(guestJoinKey);
         }
       })();
       return;
@@ -278,8 +292,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
 
     const hostPlayer = room.players.find((player) => player.host);
     const guestReadyKey = `${room.id}:guest-ready:${room.platformLobbyId ?? "pending"}`;
-    if (!isHost && me.aoeJoined && hostPlayer?.aoeReady && !me.aoeReady && !automationSteps.current.has(guestReadyKey)) {
-      automationSteps.current.add(guestReadyKey);
+    if (!isHost && me.aoeJoined && hostPlayer?.aoeReady && !me.aoeReady && claimCustomLobbyAutomationStep(guestReadyKey)) {
       void (async () => {
         try {
           const deadline = Date.now() + lobbySetupTiming.customMapTransferTimeoutMs;
@@ -299,7 +312,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           await customLobbyService.reportAoeReady(room.id);
         } catch (error) {
           notify("Could not ready in the AoE2 lobby.", "danger", { detail: messageFor(error), durationMs: null });
-          automationSteps.current.delete(guestReadyKey);
+          releaseCustomLobbyAutomationStep(guestReadyKey);
         }
       })();
       return;
@@ -307,8 +320,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
 
     const guestsJoined = room.players.filter((player) => !player.host).every((player) => player.aoeJoined);
     const hostReadyKey = `${room.id}:host-ready:${room.platformLobbyId ?? "pending"}`;
-    if (isHost && room.platformLobbyId && guestsJoined && !me.aoeReady && !automationSteps.current.has(hostReadyKey)) {
-      automationSteps.current.add(hostReadyKey);
+    if (isHost && room.platformLobbyId && guestsJoined && !me.aoeReady && claimCustomLobbyAutomationStep(hostReadyKey)) {
       void (async () => {
         try {
           if (content?.kind !== "scenario" || room.source === "weekly") await applyMapPlayerSettings(me);
@@ -317,7 +329,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           await customLobbyService.reportAoeReady(room.id);
         } catch (error) {
           await customLobbyService.failStart(room.id, messageFor(error));
-          automationSteps.current.delete(hostReadyKey);
+          releaseCustomLobbyAutomationStep(hostReadyKey);
         }
       })();
       return;
@@ -326,8 +338,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     const allAoeReady = room.players.every((player) => player.aoeReady);
     if (allAoeReady) void armGameStartReveal();
     const startKey = `${room.id}:aoe-start`;
-    if (isHost && allAoeReady && !automationSteps.current.has(startKey)) {
-      automationSteps.current.add(startKey);
+    if (isHost && allAoeReady && claimCustomLobbyAutomationStep(startKey)) {
       void (async () => {
         try {
           const started = await window.electronApi!.runAoe2LobbyCursorAction("start", "custom");
@@ -338,7 +349,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           );
         } catch (error) {
           await customLobbyService.failStart(room.id, messageFor(error));
-          automationSteps.current.delete(startKey);
+          releaseCustomLobbyAutomationStep(startKey);
         }
       })();
     }
@@ -484,7 +495,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
       />
       <div className={`custom-lobby-actions${room.status !== "open" ? " launching" : ""}`}>
         <span>{room.status === "started" ? <GameStartCountdown startedAt={room.gameStartedAt} /> : room.status === "launching" ? <>Creating and synchronizing the AoE2 lobby<AnimatedEllipsis /></> : room.automationError ? room.automationError : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>
-        {isHost && <button className="primary large" disabled={room.status !== "open" || !room.map || !room.players.every((player) => player.ready)} onClick={() => act(customLobbyService.start(room.id))}>{room.status !== "open" ? <>Starting<AnimatedEllipsis /></> : "Start Game"}</button>}
+        {isHost && <button className="primary large" disabled={startRequestPending || room.status !== "open" || !room.map || !room.players.every((player) => player.ready)} onClick={() => act(startCustomGame())}>{startRequestPending || room.status !== "open" ? <>Starting<AnimatedEllipsis /></> : "Start Game"}</button>}
       </div>
     </section>
   );
