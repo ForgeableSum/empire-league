@@ -1,5 +1,5 @@
 import type { PlayerProfile } from "../../shared/contracts/players";
-import { matchmakerTransport } from "./matchmakerTransport";
+import { MatchmakerTransportError, matchmakerTransport } from "./matchmakerTransport";
 
 let accessToken: string | null = null;
 
@@ -8,13 +8,23 @@ export const authService = {
     accessToken = await window.electronApi?.loadAuthToken() ?? null;
     if (!accessToken) return null;
     matchmakerTransport.setToken(accessToken);
-    try {
-      const player = (await matchmakerTransport.request<{ player: PlayerProfile }>("/auth/me")).player;
-      return await this.reportSteamLicense(player);
-    } catch {
-      await this.logout(false);
-      return null;
+    const retryDelaysMs = [0, 500, 1_000, 2_000, 4_000, 8_000];
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      if (retryDelaysMs[attempt]) {
+        await new Promise((resolve) => window.setTimeout(resolve, retryDelaysMs[attempt]));
+      }
+      try {
+        const player = (await matchmakerTransport.request<{ player: PlayerProfile }>("/auth/me")).player;
+        return await this.reportSteamLicense(player);
+      } catch (error) {
+        if (isAuthenticationRejection(error)) {
+          await this.logout(false);
+          return null;
+        }
+        if (attempt === retryDelaysMs.length - 1) throw error;
+      }
     }
+    return null;
   },
 
   async signIn(): Promise<PlayerProfile> {
@@ -67,3 +77,12 @@ export const authService = {
     await window.electronApi?.clearAuthToken();
   }
 };
+
+function isAuthenticationRejection(error: unknown): boolean {
+  return error instanceof MatchmakerTransportError && (
+    error.status === 401
+    || error.status === 403
+    || error.code === "AUTHENTICATION_FAILED"
+    || error.code === "AUTHENTICATION_REQUIRED"
+  );
+}

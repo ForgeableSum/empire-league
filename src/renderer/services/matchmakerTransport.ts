@@ -18,6 +18,13 @@ interface Subscription {
   listener: QueueEventListener;
 }
 
+export class MatchmakerTransportError extends Error {
+  constructor(message: string, readonly status?: number, readonly code?: string) {
+    super(message);
+    this.name = "MatchmakerTransportError";
+  }
+}
+
 export type MatchmakerConnectionStatus = "disconnected" | "connecting" | "connected";
 
 export type SocialEvent =
@@ -164,7 +171,10 @@ class MatchmakerTransport {
       this.pending.delete(message.id);
       if ((message.status ?? 500) >= 400) {
         const body = message.body as { error?: string } | null;
-        pending.reject(new Error(body?.error ?? `Matchmaker request failed (${message.status}).`));
+        pending.reject(new MatchmakerTransportError(
+          body?.error ?? `Matchmaker request failed (${message.status}).`,
+          message.status
+        ));
       } else {
         pending.resolve(message.body);
       }
@@ -183,7 +193,7 @@ class MatchmakerTransport {
     }
     if (message.type === "error") {
       const detail = message.message ?? message.code ?? "Matchmaker WebSocket error.";
-      if (this.connectReject) this.rejectConnecting(new Error(detail));
+      if (this.connectReject) this.rejectConnecting(new MatchmakerTransportError(detail, undefined, message.code));
       else this.failSubscription(detail, message.code);
     }
   }
