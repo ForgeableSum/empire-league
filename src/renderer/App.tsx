@@ -275,7 +275,7 @@ function initialsFor(name: string): string {
 }
 
 function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; manageNativeLock: boolean }) {
-  const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+  const [pointer, setPointer] = useState<{ x: number; y: number; sequence: number } | null>(null);
 
   useEffect(() => {
     if (!active) {
@@ -283,7 +283,10 @@ function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; m
       return;
     }
     if (manageNativeLock) void window.electronApi?.setLobbyInputLock(true);
-    const removePointerListener = window.electronApi?.onLobbyGuardPointer(setPointer);
+    const removePointerListener = window.electronApi?.onLobbyGuardPointer((point) => {
+      setPointer(point);
+      window.electronApi?.acknowledgeLobbyGuardPointer(point.sequence);
+    });
     (document.activeElement as HTMLElement | null)?.blur?.();
     return () => {
       if (manageNativeLock) void window.electronApi?.setLobbyInputLock(false);

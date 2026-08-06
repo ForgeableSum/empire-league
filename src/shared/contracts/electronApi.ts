@@ -54,7 +54,8 @@ export interface ElectronGameApi {
   focusAoe2(): Promise<GameFocusResult>;
   focusAoe2ForGameplay(matchId: string): Promise<GameFocusResult>;
   setLobbyInputLock(locked: boolean): Promise<{ locked: boolean }>;
-  onLobbyGuardPointer(listener: (point: { x: number; y: number }) => void): () => void;
+  onLobbyGuardPointer(listener: (point: { x: number; y: number; sequence: number }) => void): () => void;
+  acknowledgeLobbyGuardPointer(sequence: number): void;
   startReplayEndDetection(replayFolder?: string): Promise<{ started: boolean; message?: string }>;
   stopReplayEndDetection(): Promise<void>;
   confirmReplayEnded(): Promise<void>;

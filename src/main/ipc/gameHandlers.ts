@@ -73,6 +73,12 @@ let tabTestProcess: ChildProcess | undefined;
 let inputGuardProcess: ChildProcess | undefined;
 let inputGuardWindow: BrowserWindow | undefined;
 let inputGuardStopTimer: NodeJS.Timeout | undefined;
+let inputGuardFrameSequence = 0;
+let inputGuardLastAcknowledgedFrame = 0;
+let inputGuardFramesReceived = 0;
+let inputGuardFramesSent = 0;
+let inputGuardFramesDiscarded = 0;
+let inputGuardLastAcknowledgedAt = 0;
 const guardedSenders = new WeakSet<object>();
 const loadingScreenWatchers = new WeakSet<WebContents>();
 let offscreenWindowProcess: ChildProcess | undefined;
@@ -1009,10 +1015,16 @@ public static class AoeInputGuard {
   [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
   [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out Rect rect);
   [DllImport("user32.dll")] private static extern int GetMessage(out Message message, IntPtr window, uint min, uint max);
   [DllImport("user32.dll")] private static extern bool PostThreadMessage(uint threadId, uint message, IntPtr wParam, IntPtr lParam);
   [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
   [DllImport("kernel32.dll")] private static extern IntPtr GetModuleHandle(string moduleName);
+  [DllImport("user32.dll")] private static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct Rect { public int Left; public int Top; public int Right; public int Bottom; }
 
   private static IntPtr targetWindow;
   private static IntPtr keyboardHook;
@@ -1028,10 +1040,23 @@ public static class AoeInputGuard {
   private static int virtualRight;
   private static int virtualBottom;
   private static Timer movementPublishTimer;
+  private static Timer healthPublishTimer;
   private static int movementDirty;
   private static int movementPublishBusy;
+  private static long physicalMoveEvents;
+  private static long injectedMoveEvents;
+  private static long ignoredRecenterEvents;
+  private static long publishedMoveFrames;
+  private static long setCursorFailures;
+  private static long lastUsableMovementTimestamp;
+  private static bool dpiAwarenessRequested;
 
   public static int Run(uint processId) {
+    try {
+      dpiAwarenessRequested = SetProcessDpiAwarenessContext(new IntPtr(-4));
+    } catch (EntryPointNotFoundException) {
+      dpiAwarenessRequested = SetProcessDPIAware();
+    }
     targetWindow = FindWindow(processId);
     if (targetWindow == IntPtr.Zero) return 2;
     if (!GetCursorPos(out mouseAnchor)) return 4;
@@ -1053,8 +1078,26 @@ public static class AoeInputGuard {
     // Keep those callbacks lightweight and publish only the newest position at
     // display cadence; buttons and wheel events remain immediate.
     movementPublishTimer = new Timer(PublishLatestMovement, null, 8, 8);
+    lastUsableMovementTimestamp = Stopwatch.GetTimestamp();
+    healthPublishTimer = new Timer(PublishHealth, null, 1000, 1000);
 
-    Console.WriteLine("GUARD_READY");
+    Rect targetRect;
+    bool targetRectRead = GetWindowRect(targetWindow, out targetRect);
+    Console.WriteLine(
+      "GUARD_READY|DpiAwarenessRequested={0}|Anchor={1},{2}|VirtualBounds={3},{4},{5},{6}|TargetRect={7},{8},{9},{10}|TargetRectRead={11}",
+      dpiAwarenessRequested,
+      mouseAnchor.X,
+      mouseAnchor.Y,
+      virtualLeft,
+      virtualTop,
+      virtualRight,
+      virtualBottom,
+      targetRect.Left,
+      targetRect.Top,
+      targetRect.Right,
+      targetRect.Bottom,
+      targetRectRead
+    );
     Console.Out.Flush();
     Message message;
     while (GetMessage(out message, IntPtr.Zero, 0, 0) > 0) { }
@@ -1098,16 +1141,26 @@ public static class AoeInputGuard {
   private static IntPtr OnMouse(int code, IntPtr wParam, IntPtr lParam) {
     if (code >= 0) {
       MouseHookData data = Marshal.PtrToStructure<MouseHookData>(lParam);
-      if ((data.Flags & LLMHF_INJECTED) != 0) return new IntPtr(1);
       uint message = unchecked((uint)wParam.ToInt64());
       int wheel = unchecked((short)(data.MouseData >> 16));
       if (message == 0x0200) {
+        bool injected = (data.Flags & LLMHF_INJECTED) != 0;
+        if (injected && data.Point.X == mouseAnchor.X && data.Point.Y == mouseAnchor.Y) {
+          Interlocked.Increment(ref ignoredRecenterEvents);
+          return new IntPtr(1);
+        }
+        if (injected) Interlocked.Increment(ref injectedMoveEvents);
+        else Interlocked.Increment(ref physicalMoveEvents);
         virtualMouseX = Math.Max(virtualLeft, Math.Min(virtualRight, virtualMouseX + data.Point.X - mouseAnchor.X));
         virtualMouseY = Math.Max(virtualTop, Math.Min(virtualBottom, virtualMouseY + data.Point.Y - mouseAnchor.Y));
-        SetCursorPos(mouseAnchor.X, mouseAnchor.Y);
+        Interlocked.Exchange(ref lastUsableMovementTimestamp, Stopwatch.GetTimestamp());
+        if (!SetCursorPos(mouseAnchor.X, mouseAnchor.Y)) Interlocked.Increment(ref setCursorFailures);
         Interlocked.Exchange(ref movementDirty, 1);
         return new IntPtr(1);
       }
+      // Suppress non-movement injected input so our own synthetic automation
+      // and input forwarded by other software cannot bleed into AoE2.
+      if ((data.Flags & LLMHF_INJECTED) != 0) return new IntPtr(1);
       Console.WriteLine("MOUSE|{0}|{1}|{2}|{3}", message, virtualMouseX, virtualMouseY, wheel);
       Console.Out.Flush();
       return new IntPtr(1);
@@ -1124,15 +1177,38 @@ public static class AoeInputGuard {
     try {
       Console.WriteLine("MOUSE|512|{0}|{1}|0", virtualMouseX, virtualMouseY);
       Console.Out.Flush();
+      Interlocked.Increment(ref publishedMoveFrames);
     } finally {
       Interlocked.Exchange(ref movementPublishBusy, 0);
     }
+  }
+
+  private static void PublishHealth(object state) {
+    long lastMovement = Interlocked.Read(ref lastUsableMovementTimestamp);
+    long ageMs = lastMovement == 0
+      ? -1
+      : (long)((Stopwatch.GetTimestamp() - lastMovement) * 1000.0 / Stopwatch.Frequency);
+    Console.WriteLine(
+      "GUARD_HEALTH|PhysicalMoves={0}|InjectedMoves={1}|IgnoredRecenters={2}|PublishedFrames={3}|SetCursorFailures={4}|LastUsableMoveMs={5}|Virtual={6},{7}",
+      Interlocked.Read(ref physicalMoveEvents),
+      Interlocked.Read(ref injectedMoveEvents),
+      Interlocked.Read(ref ignoredRecenterEvents),
+      Interlocked.Read(ref publishedMoveFrames),
+      Interlocked.Read(ref setCursorFailures),
+      ageMs,
+      virtualMouseX,
+      virtualMouseY
+    );
+    Console.Out.Flush();
   }
 
   private static void Release() {
     Timer timer = movementPublishTimer;
     movementPublishTimer = null;
     if (timer != null) timer.Dispose();
+    Timer healthTimer = healthPublishTimer;
+    healthPublishTimer = null;
+    if (healthTimer != null) healthTimer.Dispose();
     if (keyboardHook != IntPtr.Zero) UnhookWindowsHookEx(keyboardHook);
     if (mouseHook != IntPtr.Zero) UnhookWindowsHookEx(mouseHook);
     keyboardHook = IntPtr.Zero;
@@ -1166,6 +1242,12 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
   inputGuardStopTimer = undefined;
   if (window && !window.isDestroyed()) inputGuardWindow = window;
   if (inputGuardProcess && !inputGuardProcess.killed) return true;
+  inputGuardFrameSequence = 0;
+  inputGuardLastAcknowledgedFrame = 0;
+  inputGuardFramesReceived = 0;
+  inputGuardFramesSent = 0;
+  inputGuardFramesDiscarded = 0;
+  inputGuardLastAcknowledgedAt = 0;
   const encodedScript = Buffer.from(inputGuardScript, "utf16le").toString("base64");
   const child = spawn("powershell.exe", [
     "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
@@ -1196,7 +1278,22 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
           forwardGuardedInput(message);
           return;
         }
-        console.info(`[AoE2 automation] INPUT_GUARD|${message}`);
+        const window = inputGuardWindow;
+        let diagnostic = message;
+        if (message.startsWith("GUARD_HEALTH|")) {
+          const bounds = window && !window.isDestroyed() ? window.getContentBounds() : null;
+          const display = bounds ? screen.getDisplayMatching(bounds) : null;
+          diagnostic += `|MainReceived=${inputGuardFramesReceived}|MainSent=${inputGuardFramesSent}`
+            + `|MainDiscarded=${inputGuardFramesDiscarded}|LastSequence=${inputGuardFrameSequence}`
+            + `|RendererAck=${inputGuardLastAcknowledgedFrame}`
+            + `|RendererAckAgeMs=${inputGuardLastAcknowledgedAt ? Date.now() - inputGuardLastAcknowledgedAt : -1}`
+            + `|ElectronBounds=${bounds ? `${bounds.x},${bounds.y},${bounds.width},${bounds.height}` : "unavailable"}`
+            + `|ScaleFactor=${display?.scaleFactor ?? "unknown"}`;
+        }
+        console.info(`[AoE2 automation] INPUT_GUARD|${diagnostic}`);
+        if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) {
+          window.webContents.send("game:automation-log", `INPUT_GUARD|${diagnostic}`);
+        }
         if (message.includes("GUARD_READY")) finish(true);
         if (message.includes("GUARD_ERROR")) finish(false);
       });
@@ -1225,9 +1322,15 @@ function forwardGuardedInput(message: string): void {
   const bounds = window.getContentBounds();
   const x = Math.round(screenPoint.x - bounds.x);
   const y = Math.round(screenPoint.y - bounds.y);
-  if (x < 0 || y < 0 || x >= bounds.width || y >= bounds.height) return;
+  if (messageId === 0x0200) inputGuardFramesReceived += 1;
+  if (x < 0 || y < 0 || x >= bounds.width || y >= bounds.height) {
+    if (messageId === 0x0200) inputGuardFramesDiscarded += 1;
+    return;
+  }
   if (messageId === 0x0200) {
-    window.webContents.send("game:lobby-guard-pointer", { x, y });
+    const sequence = ++inputGuardFrameSequence;
+    window.webContents.send("game:lobby-guard-pointer", { x, y, sequence });
+    inputGuardFramesSent += 1;
     window.webContents.sendInputEvent({ type: "mouseMove", x, y });
   } else if (messageId === 0x0201 || messageId === 0x0204 || messageId === 0x0207) {
     window.webContents.sendInputEvent({
@@ -2169,6 +2272,11 @@ export function registerGameHandlers(): void {
       });
     }
     return { locked: requested && (applied || guardApplied) };
+  });
+  ipcMain.on("game:lobby-guard-pointer-ack", (_event, sequence: number) => {
+    if (!Number.isInteger(sequence) || sequence < inputGuardLastAcknowledgedFrame) return;
+    inputGuardLastAcknowledgedFrame = sequence;
+    inputGuardLastAcknowledgedAt = Date.now();
   });
 
   app.on("before-quit", (event) => {
