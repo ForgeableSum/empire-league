@@ -30,6 +30,7 @@ export function DiagnosticLogWindow() {
       event.preventDefault();
       setOpen((current) => !current);
     };
+    const openForAutomationFailure = () => setOpen(true);
     const recordError = (event: ErrorEvent) => {
       appendDiagnosticLog(`[Client error] ${event.message}${event.filename ? ` (${event.filename}:${event.lineno})` : ""}`);
     };
@@ -42,11 +43,13 @@ export function DiagnosticLogWindow() {
       appendDiagnosticLog(`[Console error] ${values.map(formatConsoleValue).join(" ")}`);
     };
     window.addEventListener("keydown", toggle);
+    window.addEventListener("empire:open-diagnostic-log", openForAutomationFailure);
     window.addEventListener("error", recordError);
     window.addEventListener("unhandledrejection", recordRejection);
     return () => {
       console.error = originalConsoleError;
       window.removeEventListener("keydown", toggle);
+      window.removeEventListener("empire:open-diagnostic-log", openForAutomationFailure);
       window.removeEventListener("error", recordError);
       window.removeEventListener("unhandledrejection", recordRejection);
     };

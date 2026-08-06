@@ -612,6 +612,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (closed && !closed.closed) {
       notify(closed.message ?? "AoE2 could not be terminated after the lobby setup failure.", "danger");
     }
+    log(`Opening diagnostic log after lobby setup failure|Aoe2Closed=${closed?.closed ?? false}`);
+    window.dispatchEvent(new Event("empire:open-diagnostic-log"));
     lobbyRecoveryInFlightRef.current = false;
   }
 
