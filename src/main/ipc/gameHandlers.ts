@@ -1079,7 +1079,7 @@ public static class AoeInputGuard {
     // The mouse hook can receive thousands of movement callbacks per second.
     // Keep those callbacks lightweight and publish only the newest position at
     // display cadence; buttons and wheel events remain immediate.
-    movementPublishTimer = new Timer(PublishLatestMovement, null, 8, 8);
+    movementPublishTimer = new Timer(PublishLatestMovement, null, 4, 4);
     lastUsableMovementTimestamp = Stopwatch.GetTimestamp();
     healthPublishTimer = new Timer(PublishHealth, null, 1000, 1000);
 
