@@ -177,6 +177,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const gameStartSignalInFlightRef = useRef<Promise<boolean> | null>(null);
   const familySharingNoticeShownRef = useRef(false);
   const uiModWarningIdRef = useRef<string | null>(null);
+  const acknowledgedUiModsRef = useRef<string | null>(null);
 
   useEffect(() => {
     const electronApi = window.electronApi;
@@ -507,7 +508,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (isPreviewMode) return true;
     if (!window.electronApi) return true;
     const { mods } = await window.electronApi.detectEnabledUiMods();
-    if (mods.length) {
+    const uiModsKey = mods.map((mod) => mod.toLowerCase()).sort().join("\n");
+    if (mods.length && acknowledgedUiModsRef.current !== uiModsKey) {
       if (uiModWarningIdRef.current) dismissNotificationById(uiModWarningIdRef.current);
       return new Promise<boolean>((resolve) => {
         uiModWarningIdRef.current = notify("UI mods may interfere with Empire League", "warning", {
@@ -531,6 +533,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 if (!result.disabled.length) throw new Error("The enabled UI mods could not be updated.");
                 if (uiModWarningIdRef.current) dismissNotificationById(uiModWarningIdRef.current);
                 uiModWarningIdRef.current = null;
+                acknowledgedUiModsRef.current = null;
                 notify("UI mods disabled", "success", {
                   detail: `${result.disabled.join(", ")} disabled. You can try again now.`
                 });
@@ -548,7 +551,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             run: () => {
               if (uiModWarningIdRef.current) dismissNotificationById(uiModWarningIdRef.current);
               uiModWarningIdRef.current = null;
-              resolve(true);
+              acknowledgedUiModsRef.current = uiModsKey;
+              resolve(false);
             }
           }
         });
