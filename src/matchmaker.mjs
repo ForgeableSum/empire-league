@@ -1168,13 +1168,13 @@ async function handleRequest(request, response) {
     }
 
     if (request.method === "POST" && url.pathname === "/weekly-queue") {
+      const body = await readJson(request);
       if (playerCustomLobby(authenticatedPlayer.id)) {
         return send(response, 409, { error: "Leave your current lobby before joining the weekly queue." });
       }
       if (playerHasRankedActivity(authenticatedPlayer.id)) {
         return send(response, 409, { error: "Leave your active matchmaking queue before joining the weekly queue." });
       }
-      const body = await readJson(request);
       const civilization = String(body.civilization ?? "Random").trim().slice(0, 40) || "Random";
       const mode = currentWeeklyMode();
       const existing = weeklyQueue.get(authenticatedPlayer.id);
@@ -1204,10 +1204,10 @@ async function handleRequest(request, response) {
     }
 
     if (request.method === "POST" && url.pathname === "/custom-lobbies") {
+      const body = await readJson(request);
       if (playerCustomLobby(authenticatedPlayer.id)) return send(response, 409, { error: "Leave your current custom lobby first." });
       if (weeklyQueue.has(authenticatedPlayer.id)) return send(response, 409, { error: "Leave the weekly queue before creating a custom lobby." });
       if (playerHasRankedActivity(authenticatedPlayer.id)) return send(response, 409, { error: "Leave matchmaking before creating a custom lobby." });
-      const body = await readJson(request);
       const name = String(body.name ?? "").trim().slice(0, 64);
       if (!name) return send(response, 400, { error: "A lobby name is required." });
       const maxPlayers = Number(body.maxPlayers ?? 8);
