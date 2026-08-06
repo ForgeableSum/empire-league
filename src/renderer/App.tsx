@@ -39,7 +39,7 @@ export function App() {
   }, []);
 
   const { page, state, lobbyAutomationActive, authStatus, authError, signInWithSteam } = useAppStore();
-  const rankedLobbyTransition = ["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error;
+  const gameHandoffInputLocked = state.transitionInputLocked && !state.error;
 
   useEffect(() => {
     chatsRef.current = chats;
@@ -232,7 +232,7 @@ export function App() {
 
   return (
     <>
-      <LobbyInputForwarding active={lobbyAutomationActive || rankedLobbyTransition} manageNativeLock={rankedLobbyTransition && !lobbyAutomationActive} />
+      <LobbyInputForwarding active={lobbyAutomationActive || gameHandoffInputLocked} manageNativeLock={gameHandoffInputLocked && !lobbyAutomationActive} />
       <Shell socialUnreadCount={friends.reduce((total, friend) => total + (friend.unread ?? 0), 0)}>
         {page === "home" && <HomePage />}
         {page === "ranked" && <QueuePage />}

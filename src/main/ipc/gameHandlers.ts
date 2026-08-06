@@ -2536,27 +2536,35 @@ export function registerGameHandlers(): void {
           }
           await delay(action.settleMs);
         };
+        const waitForStableState = async (expected: NonNullable<typeof expectedState>, deadline: number) => {
+          let consecutiveMatches = 0;
+          let observed = readAoe2HostSetupState(process.pid as number);
+          while (Date.now() < deadline) {
+            consecutiveMatches = observed.state === expected ? consecutiveMatches + 1 : 0;
+            if (consecutiveMatches >= 3) return observed;
+            await delay(250);
+            observed = readAoe2HostSetupState(process.pid as number);
+          }
+          return observed;
+        };
 
         await performAction(1);
         if (!expectedState) return;
-        let verification = readAoe2HostSetupState(process.pid as number);
-        const verificationDeadline = Date.now() + 15_000;
-        while (verification.state !== expectedState && Date.now() < verificationDeadline) {
-          await delay(250);
-          verification = readAoe2HostSetupState(process.pid as number);
-        }
+        let verification = await waitForStableState(expectedState, Date.now() + 15_000);
         emitLog(`STEP_VERIFY|${action.label}|Attempt=1|Expected=${expectedState}|${verification.detail}`);
         if (verification.state === "unknown") {
           throw new Error(`${action.label} could not be verified after waiting for AoE2; no retry input was sent.`);
         }
         if (verification.state !== expectedState) {
-          await performAction(2);
-          verification = readAoe2HostSetupState(process.pid as number);
-          const retryVerificationDeadline = Date.now() + 15_000;
-          while (verification.state !== expectedState && Date.now() < retryVerificationDeadline) {
-            await delay(250);
-            verification = readAoe2HostSetupState(process.pid as number);
+          // Never send Host Game coordinates from the main menu. Re-run and
+          // stably verify Multiplayer first, then retry the normal Host Game
+          // action used by the other installations.
+          if (actionName === "hostGame" && verification.state === "main-menu") {
+            emitLog("STEP_RECOVERY|Host Game|State=main-menu|Action=Reopen Multiplayer");
+            await actionStep("multiplayer");
           }
+          await performAction(2);
+          verification = await waitForStableState(expectedState, Date.now() + 15_000);
           emitLog(`STEP_VERIFY|${action.label}|Attempt=2|Expected=${expectedState}|${verification.detail}`);
         }
         if (verification.state !== expectedState) {

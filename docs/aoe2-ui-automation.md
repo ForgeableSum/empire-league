@@ -11,6 +11,10 @@ The checked-in source of truth is `src/shared/aoe2UiManifest.ts`. Coordinates ar
 
 Legacy buttons such as Multiplayer and Host Game require `clickEnter`. Create Lobby and direct lobby controls such as Ready, Start, browser tabs, civilization tiles, and Copy respond to `click`.
 
+The ranked lobby countdown does not itself request the native input lock. Each
+automation operation owns the guard it needs, while the renderer only requests
+the native lock for the final game handoff (`transitionInputLocked`).
+
 Click timing is action-specific. General navigation uses a 100 ms hover and
 120 ms press. Ready and Start use a 250 ms hover and 250 ms press because the
 lobby message loop can be throttled while AoE2 is in the background.
@@ -53,9 +57,11 @@ lobby message loop can be throttled while AoE2 is in the background.
 17. `startGame` (`click`)
 
 The first three transitions are verified from stable points on AoE2's rendered
-window surface. If the expected next screen is not present, that step is
-retried once; the sequence stops rather than sending later coordinates to the
-wrong screen.
+window surface. A transition must match across three consecutive samples so a
+transient frame cannot advance the sequence. If Host Game returns to the main
+menu, automation stably reopens Multiplayer before retrying. Other failed
+transitions are retried once; the sequence stops rather than sending later
+coordinates to the wrong screen.
 
 ## Guest flow
 
