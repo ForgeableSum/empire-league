@@ -67,6 +67,7 @@ const currentDir = dirname(fileURLToPath(import.meta.url));
 let launchRequested = false;
 let launchRequestedAt = 0;
 let ownedAoe2Pid: number | undefined;
+let ownedAoe2WindowReady = false;
 let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
 let inputGuardProcess: ChildProcess | undefined;
@@ -2172,12 +2173,18 @@ export function registerGameHandlers(): void {
 
   app.on("before-quit", (event) => {
     stopReplayEndDetection();
-    if ((!ownedAoe2Pid && !launchRequested) || quittingAfterGameCleanup) return;
+    if (!ownedAoe2Pid || !ownedAoe2WindowReady || quittingAfterGameCleanup) {
+      if ((ownedAoe2Pid || launchRequested) && !ownedAoe2WindowReady) {
+        console.info("[AoE2 process] SHUTDOWN_CLEANUP_SKIPPED|Reason=WindowNotReady");
+      }
+      return;
+    }
     event.preventDefault();
     quittingAfterGameCleanup = true;
     void (async () => {
-      const pid = ownedAoe2Pid ?? (await detectAoe2Process()).pid;
+      const pid = ownedAoe2Pid;
       ownedAoe2Pid = undefined;
+      ownedAoe2WindowReady = false;
       if (pid) await forceCloseAoe2Process(pid);
     })().finally(() => app.quit());
   });
@@ -2194,12 +2201,17 @@ export function registerGameHandlers(): void {
         + `|CurrentPid=${status.pid ?? "none"}|Running=${status.running}`
       );
       ownedAoe2Pid = undefined;
+      ownedAoe2WindowReady = false;
     }
     if (launchRequested && status.running && status.pid && !ownedAoe2Pid) {
       ownedAoe2Pid = status.pid;
+      ownedAoe2WindowReady = status.windowReady === true;
       launchRequested = false;
       launchRequestedAt = 0;
       console.info(`[AoE2 process] OWNERSHIP_ACQUIRED|Pid=${status.pid}`);
+    }
+    if (ownedAoe2Pid === status.pid && status.windowReady) {
+      ownedAoe2WindowReady = true;
     }
     return {
       ...status,
@@ -2226,7 +2238,10 @@ export function registerGameHandlers(): void {
     if (closed) {
       launchRequested = false;
       launchRequestedAt = 0;
-      if (ownedAoe2Pid === processStatus.pid) ownedAoe2Pid = undefined;
+      if (ownedAoe2Pid === processStatus.pid) {
+        ownedAoe2Pid = undefined;
+        ownedAoe2WindowReady = false;
+      }
     }
     return {
       closed,
