@@ -755,9 +755,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             activeMatch: matchedSession
           }));
           log(`Match found: ${event.match.id}`);
-          if (state.settings.matchNotifications) {
-            void window.electronApi?.alertMatchFound();
-          }
+          void window.electronApi?.alertMatchFound(state.settings.matchNotifications);
         }
         if (event.type === "opponent_accepted") {
           const matchedSession = matchedSessionRef.current;

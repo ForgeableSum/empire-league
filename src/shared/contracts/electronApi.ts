@@ -90,7 +90,7 @@ export interface ElectronGameApi {
   loadAuthToken(): Promise<string | null>;
   storeAuthToken(token: string): Promise<void>;
   clearAuthToken(): Promise<void>;
-  alertMatchFound(): Promise<void>;
+  alertMatchFound(showNotification: boolean): Promise<void>;
   stopMatchFoundAlert(): Promise<void>;
   alertUnreadMessage(): Promise<void>;
   clearUnreadMessageAlert(): Promise<void>;

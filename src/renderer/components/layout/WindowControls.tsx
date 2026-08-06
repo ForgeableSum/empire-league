@@ -3,7 +3,6 @@ import type { QueueStatus } from "../../../shared/contracts/matchmaking";
 import { useAppStore } from "../../state/appStore";
 
 const minimizeLockedStatuses = new Set<QueueStatus>([
-  "searching",
   "match_found",
   "accepting",
   "creating_lobby",

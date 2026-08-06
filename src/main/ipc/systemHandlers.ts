@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, Notification, safeStorage, shell } from "electron";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { minimizeMainWindowToTaskbar } from "../window.js";
+import { focusMainWindow, minimizeMainWindowToTaskbar } from "../window.js";
 import { getPendingUpdate, installDownloadedUpdate, setAutoUpdateChecksPaused } from "../autoUpdate.js";
 
 export function registerSystemHandlers(): void {
@@ -13,13 +13,13 @@ export function registerSystemHandlers(): void {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (window) minimizeMainWindowToTaskbar(window);
   });
-  ipcMain.handle("system:alert-match-found", async (event) => {
+  ipcMain.handle("system:alert-match-found", async (event, showNotification: boolean) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return;
-    if (window.isMinimized()) window.restore();
-    window.show();
+    focusMainWindow(window);
     window.moveTop();
-    window.focus();
+    if (!showNotification) return;
+
     window.flashFrame(true);
 
     if (Notification.isSupported()) {

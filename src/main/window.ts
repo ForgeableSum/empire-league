@@ -283,9 +283,16 @@ export function restoreMainWindowFromGameCover(): void {
 export function focusMainWindow(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   logWindowLifecycle(window, "CALL focusMainWindow");
+  const wasTaskbarMinimized = taskbarMinimizedWindow === window;
   if (coveredMainWindow === window && coveredMainWindowState) {
     restoreMainWindowFromGameCover();
-    return;
+    // A taskbar-minimized cover intentionally stays minimized when ordinary
+    // cover mode ends. An explicit focus request (such as match found) must
+    // continue through the restore path below.
+  }
+  if (wasTaskbarMinimized && process.platform === "win32" && !independentWindowMinimize) {
+    const game = detectAoe2NativeProcess();
+    if (game.pid) restoreAoe2NativeWindowBehind(game.pid);
   }
   taskbarMinimizedWindow = null;
   taskbarMinimizeCompletedWindow = null;
