@@ -1503,9 +1503,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!matchId) return;
     if (gameRevealInFlightRef.current) return gameRevealInFlightRef.current;
     gameRevealInFlightRef.current = (async () => {
-      await stopYouTubeShorts();
-      const handoff = await window.electronApi!.focusAoe2ForGameplay(matchId);
-      if (!handoff.focused) throw new Error("AoE2 could not be focused for gameplay.");
       const completedState = stateRef.current;
       if (completedState.activeMatch && completedState.roomSetupStartedAt) {
         recordLobbySetupDuration(
@@ -1513,6 +1510,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           Date.now() - new Date(completedState.roomSetupStartedAt).getTime()
         );
       }
+      // Start confirmation controls the match lifecycle. Native foreground
+      // focus is presentation only and must never prevent replay reporting or
+      // leave the low-level lobby input guard active.
       setState((previous) => ({
         ...previous,
         queueStatus: "in_game",
@@ -1520,7 +1520,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         transitionInputLocked: false,
         activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
       }));
-      log("Showing AoE2 after game start");
+      try {
+        await window.electronApi!.setLobbyInputLock(false).catch(() => ({ locked: false }));
+        await stopYouTubeShorts();
+        let timeout: number | undefined;
+        const handoff = await Promise.race([
+          window.electronApi!.focusAoe2ForGameplay(matchId),
+          new Promise<{ focused: false }>((resolve) => {
+            timeout = window.setTimeout(() => resolve({ focused: false }), 8_000);
+          })
+        ]);
+        if (timeout !== undefined) window.clearTimeout(timeout);
+        if (handoff.focused) {
+          log("Showing AoE2 after game start");
+        } else {
+          log("AoE2 gameplay focus was not confirmed; match lifecycle continued");
+          notify("Switch to AoE2 to continue", "warning", {
+            detail: "The game started, but Windows did not allow Empire League to bring it to the foreground.",
+            durationMs: 10_000,
+            dismissible: true
+          });
+        }
+      } catch (error) {
+        log(`AoE2 gameplay focus failed; match lifecycle continued: ${error instanceof Error ? error.message : String(error)}`);
+        notify("Switch to AoE2 to continue", "warning", {
+          detail: "The game started, but Empire League could not complete the foreground handoff.",
+          durationMs: 10_000,
+          dismissible: true
+        });
+      } finally {
+        setState((previous) => ({
+          ...previous,
+          queueStatus: "in_game",
+          roomSetupMilestone: null,
+          transitionInputLocked: false,
+          activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
+        }));
+        await window.electronApi!.setLobbyInputLock(false).catch(() => ({ locked: false }));
+      }
     })().finally(() => {
       gameRevealInFlightRef.current = null;
     });

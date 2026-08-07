@@ -114,7 +114,13 @@ Message delivery only proves Windows queued the input. Each destructive transiti
 - Ready: sample a text-free point on AoE2's rendered Ready button before and
   after input. Green is already Ready; red permits one conditional retry;
   an ambiguous state fails safely without notifying the host.
-- Start: matchmaker acknowledgements and replay/game-state detection.
+- Start: matchmaker acknowledgements and replay/game-state detection. Once
+  confirmed, match lifecycle and replay reporting advance independently from
+  Windows foreground focus. The client releases lobby input suppression,
+  retries the AoE2 handoff within a bounded window, and degrades to a manual
+  switch warning instead of remaining on `Starting game`. Native handoff
+  attempts are persisted in `logs/gameplay-handoff.jsonl` under Electron's
+  user-data directory.
 - Civilization: tile outlines verify selection while the picker is open. The
   picker's search-control chrome verifies that it actually closed; filtered
   tile color is diagnostic only because unowned DLC civilizations are dimmed.

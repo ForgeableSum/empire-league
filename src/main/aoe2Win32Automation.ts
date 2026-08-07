@@ -148,6 +148,16 @@ export interface NativeCivilizationTileStateResult {
   detail: string;
 }
 
+export interface NativeGameplayFocusResult {
+  focused: boolean;
+  windowFound: boolean;
+  raised: boolean;
+  foregroundRequested: boolean;
+  foregroundVerified: boolean;
+  releasedTopmost: boolean;
+  windowHandle?: string;
+}
+
 export interface NativeHostSetupStateResult {
   state: "main-menu" | "main-menu-news" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "content-picker" | "loading-screen" | "unknown";
   detail: string;
@@ -204,9 +214,22 @@ export function focusAoe2NativeWindow(processId: number): boolean {
 // Toggling topmost is more forceful than SetForegroundWindow by itself, but
 // removing topmost immediately keeps the game from covering later dialogs.
 export function focusAoe2ForGameplay(processId: number): boolean {
+  return focusAoe2ForGameplayDetailed(processId).focused;
+}
+
+export function focusAoe2ForGameplayDetailed(processId: number): NativeGameplayFocusResult {
   ensureWindowsBindings();
   const window = findRecoverableProcessWindow(processId);
-  if (!window) return false;
+  if (!window) {
+    return {
+      focused: false,
+      windowFound: false,
+      raised: false,
+      foregroundRequested: false,
+      foregroundVerified: false,
+      releasedTopmost: false
+    };
+  }
   restoreManagedWindowToShell(processId, window);
   // The game may have been minimized while running borderless fullscreen.
   // SW_RESTORE can bring it back as a normal window, which also invalidates
@@ -214,9 +237,19 @@ export function focusAoe2ForGameplay(processId: number): boolean {
   ShowWindow!(window, 3); // SW_MAXIMIZE
   Sleep!(150);
   const raised = Boolean(SetWindowPos!(window, -1n, 0, 0, 0, 0, 0x0003)); // HWND_TOPMOST
-  const focused = Boolean(SetForegroundWindow!(window));
-  const released = Boolean(SetWindowPos!(window, -2n, 0, 0, 0, 0, 0x0003)); // HWND_NOTOPMOST
-  return raised && focused && released;
+  const foregroundRequested = Boolean(SetForegroundWindow!(window));
+  Sleep!(50);
+  const foregroundVerified = sameHandle(GetForegroundWindow!(), window);
+  const releasedTopmost = Boolean(SetWindowPos!(window, -2n, 0, 0, 0, 0, 0x0003)); // HWND_NOTOPMOST
+  return {
+    focused: raised && foregroundVerified && releasedTopmost,
+    windowFound: true,
+    raised,
+    foregroundRequested,
+    foregroundVerified,
+    releasedTopmost,
+    windowHandle: String(window)
+  };
 }
 
 export function isAoe2NativeWindowForeground(processId: number): boolean {

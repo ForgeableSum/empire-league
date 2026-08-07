@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, ipcMain, screen, shell, type WebContents } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { access, copyFile, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { access, appendFile, copyFile, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,7 +48,7 @@ import {
   clearAoe2TextField,
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
-  focusAoe2ForGameplay,
+  focusAoe2ForGameplayDetailed,
   getAoe2NativeWindowHandle,
   setWindowsInputBlocked,
   isAoe2NativeWindowForeground,
@@ -728,6 +728,20 @@ async function prepareHiddenAoe2WindowBehind(): Promise<{ running: boolean; pid?
   await delay(100);
   status = await detectAoe2Process();
   return status;
+}
+
+async function appendGameplayHandoffLog(entry: Record<string, unknown>): Promise<void> {
+  try {
+    const logDirectory = join(app.getPath("userData"), "logs");
+    await mkdir(logDirectory, { recursive: true });
+    await appendFile(
+      join(logDirectory, "gameplay-handoff.jsonl"),
+      `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`,
+      "utf8"
+    );
+  } catch {
+    // Gameplay must never depend on diagnostics being writable.
+  }
 }
 
 async function waitForAoe2Exit(timeoutMs: number): Promise<boolean> {
@@ -2385,7 +2399,6 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 }
 
 export function registerGameHandlers(): void {
-  const gameplayHandoffs = new Set<string>();
   ipcMain.handle("game:scan-local-custom-content", scanLocalCustomContent);
   ipcMain.handle("game:detect-enabled-ui-mods", detectEnabledUiMods);
   ipcMain.handle("game:disable-enabled-ui-mods", disableEnabledUiMods);
@@ -2584,22 +2597,74 @@ export function registerGameHandlers(): void {
     if (typeof matchId !== "string" || !matchId.trim()) {
       throw new Error("A match ID is required for the gameplay handoff.");
     }
-    // A new gameplay handoff supersedes every delayed post-game recovery.
-    // Prevent an older timer or menu watcher from pushing AoE2 behind the
-    // shell after its native styles have been restored for play.
-    clearReplayFocusTimers();
-    stopReturnToMenuWatch();
-    restoreAoe2Window();
-    const game = detectAoe2NativeProcess();
-    if (!game.pid) return { focused: false };
-    if (!gameplayHandoffs.has(matchId)) {
-      if (!focusAoe2ForGameplay(game.pid)) return { focused: false };
-      gameplayHandoffs.add(matchId);
-    } else if (!focusAoe2NativeWindow(game.pid)) {
+    const startedAt = Date.now();
+    let focused = false;
+    let lastPid: number | undefined;
+    try {
+      // A new gameplay handoff supersedes every delayed post-game recovery.
+      // Do not stop replay detection: result monitoring is independent from
+      // whether Windows grants foreground focus.
+      clearReplayFocusTimers();
+      stopReturnToMenuWatch();
+      restoreAoe2Window();
+      const retryDelays = [0, 250, 500, 1_000] as const;
+      for (let index = 0; index < retryDelays.length && !focused; index += 1) {
+        if (retryDelays[index] > 0) await delay(retryDelays[index]);
+        const attemptStartedAt = Date.now();
+        const game = detectAoe2NativeProcess();
+        lastPid = game.pid;
+        const native = game.pid
+          ? focusAoe2ForGameplayDetailed(game.pid)
+          : {
+              focused: false,
+              windowFound: false,
+              raised: false,
+              foregroundRequested: false,
+              foregroundVerified: false,
+              releasedTopmost: false
+            };
+        focused = native.focused;
+        console.info(
+          `[AoE2 automation] GAMEPLAY_HANDOFF|Match=${matchId}|Attempt=${index + 1}`
+          + `|Pid=${game.pid ?? "none"}|Focused=${focused}|WindowFound=${native.windowFound}`
+          + `|Raised=${native.raised}|ForegroundRequested=${native.foregroundRequested}`
+          + `|ForegroundVerified=${native.foregroundVerified}|ReleasedTopmost=${native.releasedTopmost}`
+        );
+        await appendGameplayHandoffLog({
+          matchId,
+          phase: "attempt",
+          attempt: index + 1,
+          pid: game.pid ?? null,
+          windowReady: game.windowReady,
+          elapsedMs: Date.now() - attemptStartedAt,
+          ...native
+        });
+      }
+      // Even after a foreground-policy rejection, remove the Electron cover so
+      // the running game is visible and the user can switch to it manually.
+      hideMainWindowGameCover();
+      return { focused };
+    } catch (error) {
+      await appendGameplayHandoffLog({
+        matchId,
+        phase: "error",
+        pid: lastPid ?? null,
+        elapsedMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.stack ?? error.message : String(error)
+      });
+      hideMainWindowGameCover();
       return { focused: false };
+    } finally {
+      releaseAllInputSuppression("GameplayHandoff");
+      await appendGameplayHandoffLog({
+        matchId,
+        phase: "complete",
+        pid: lastPid ?? null,
+        focused,
+        inputSuppressionReleased: true,
+        elapsedMs: Date.now() - startedAt
+      });
     }
-    hideMainWindowGameCover();
-    return { focused: true };
   });
 
   ipcMain.handle("game:start-loading-screen-watch", async (event) => {
