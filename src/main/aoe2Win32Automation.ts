@@ -143,6 +143,11 @@ export interface NativeCivilizationPickerStateResult {
   detail: string;
 }
 
+export interface NativeCivilizationTileStateResult {
+  state: "selected" | "not-selected" | "unknown";
+  detail: string;
+}
+
 export interface NativeHostSetupStateResult {
   state: "main-menu" | "main-menu-news" | "multiplayer-menu" | "create-lobby-dialog" | "lobby-room" | "content-picker" | "loading-screen" | "unknown";
   detail: string;
@@ -757,6 +762,65 @@ export function readAoe2CivilizationPickerState(processId: number): NativeCivili
       `FilteredTileChroma=${tileChroma}`,
       describePixelRead(window)
     ].join("|")
+  };
+}
+
+export function readAoe2CivilizationTileState(
+  processId: number,
+  tileDesignX: number,
+  tileDesignY: number
+): NativeCivilizationTileStateResult {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { state: "unknown", detail: "State=unknown|Reason=WINDOW_NOT_FOUND" };
+
+  const rect = {} as Rect;
+  if (!GetClientRect!(window, rect)) {
+    return { state: "unknown", detail: "State=unknown|Reason=CLIENT_RECT_FAILED" };
+  }
+  const width = rect.right - rect.left;
+  const height = rect.bottom - rect.top;
+  if (width <= 0 || height <= 0) {
+    return { state: "unknown", detail: "State=unknown|Reason=INVALID_CLIENT_SIZE" };
+  }
+
+  // AoE2 draws a stable white outline around the selected tile. A gray outline
+  // only indicates hover, so sample several text-free points on the top and left
+  // borders and require more than one bright neutral hit before accepting it.
+  const sampleDesignPoints = [
+    [tileDesignX - 80, tileDesignY - 118],
+    [tileDesignX, tileDesignY - 118],
+    [tileDesignX + 80, tileDesignY - 118],
+    [tileDesignX - 118, tileDesignY - 80],
+    [tileDesignX - 118, tileDesignY],
+    [tileDesignX - 118, tileDesignY + 80]
+  ] as const;
+  const samples = sampleDesignPoints
+    .map(([designX, designY]) => {
+      const x = Math.round(designX * width / aoe2DesignWidth);
+      const y = Math.round(designY * height / aoe2DesignHeight);
+      return { x, y, rgb: readWindowRgb(window, x, y) };
+    })
+    .filter((sample): sample is { x: number; y: number; rgb: [number, number, number] } => Boolean(sample.rgb));
+  if (samples.length === 0) {
+    return { state: "unknown", detail: "State=unknown|Reason=PIXEL_READ_FAILED" };
+  }
+
+  const neutralBrightness = samples.map(({ rgb }) => {
+    const spread = Math.max(...rgb) - Math.min(...rgb);
+    return spread <= 12 ? (rgb[0] + rgb[1] + rgb[2]) / 3 : 0;
+  });
+  const brightSamples = neutralBrightness.filter((brightness) => brightness >= 190).length;
+  const graySamples = neutralBrightness.filter((brightness) => brightness >= 35 && brightness <= 165).length;
+  const state = brightSamples >= 2
+    ? "selected"
+    : graySamples >= 2
+      ? "not-selected"
+      : "unknown";
+  return {
+    state,
+    detail: `State=${state}|BrightSamples=${brightSamples}|GraySamples=${graySamples}`
+      + `|Samples=${samples.map(({ x, y, rgb }) => `${x},${y}:${formatRgb(rgb)}`).join(";")}`
   };
 }
 
