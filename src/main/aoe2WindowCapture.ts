@@ -15,12 +15,12 @@ export type CapturedPixel = {
 };
 
 let captureTimer: NodeJS.Timeout | undefined;
-let captureInFlight = false;
+let captureInFlight: Promise<void> | undefined;
 let captureFrame: CaptureFrame | undefined;
+let captureTargetHandle: string | undefined;
 
 export function startAoe2WindowCapture(): void {
   if (process.platform !== "win32" || captureTimer) return;
-  void refreshCaptureFrame();
   captureTimer = setInterval(() => void refreshCaptureFrame(), 200);
   captureTimer.unref();
 }
@@ -29,6 +29,25 @@ export function stopAoe2WindowCapture(): void {
   if (captureTimer) clearInterval(captureTimer);
   captureTimer = undefined;
   captureFrame = undefined;
+  captureTargetHandle = undefined;
+}
+
+export function isAoe2WindowCaptureActive(): boolean {
+  return Boolean(captureTimer);
+}
+
+export async function waitForFreshAoe2WindowCapture(windowHandle: string, timeoutMs = 10_000): Promise<boolean> {
+  if (process.platform !== "win32") return false;
+  startAoe2WindowCapture();
+  captureTargetHandle = windowHandle;
+  if (captureFrame && !sourceMatchesHandle(captureFrame.sourceId, windowHandle)) captureFrame = undefined;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await refreshCaptureFrame();
+    if (isFreshMatchingFrame(windowHandle)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return isFreshMatchingFrame(windowHandle);
 }
 
 export function readAoe2CapturedClientPixel(
@@ -38,6 +57,7 @@ export function readAoe2CapturedClientPixel(
   windowRect: { left: number; top: number; right: number; bottom: number },
   clientOrigin: { x: number; y: number }
 ): CapturedPixel | null {
+  captureTargetHandle = windowHandle;
   const frame = captureFrame;
   if (!frame || Date.now() - frame.capturedAt > 1_000) return null;
   if (!sourceMatchesHandle(frame.sourceId, windowHandle)) return null;
@@ -62,24 +82,27 @@ export function readAoe2CapturedClientPixel(
 export function describeAoe2WindowCapture(windowHandle: string): string {
   const frame = captureFrame;
   if (!frame) return "WindowCapture=Unavailable";
-  return `WindowCapture=${sourceMatchesHandle(frame.sourceId, windowHandle) ? "Ready" : "HandleMismatch"}`
-    + `|WindowCaptureAgeMs=${Date.now() - frame.capturedAt}|WindowCaptureSource=${frame.sourceId}`
+  const ageMs = Date.now() - frame.capturedAt;
+  const state = !sourceMatchesHandle(frame.sourceId, windowHandle)
+    ? "HandleMismatch"
+    : ageMs > 1_000 ? "Stale" : "Ready";
+  return `WindowCapture=${state}`
+    + `|WindowCaptureAgeMs=${ageMs}|WindowCaptureSource=${frame.sourceId}`
     + `|WindowCaptureSize=${frame.width}x${frame.height}`;
 }
 
-async function refreshCaptureFrame(): Promise<void> {
-  if (captureInFlight) return;
-  captureInFlight = true;
-  try {
+function refreshCaptureFrame(): Promise<void> {
+  if (captureInFlight) return captureInFlight;
+  captureInFlight = (async () => {
+    const targetHandle = captureTargetHandle;
+    if (!targetHandle) return;
+    try {
     const sources = await desktopCapturer.getSources({
       types: ["window"],
       thumbnailSize: { width: 1920, height: 1080 },
       fetchWindowIcons: false
     });
-    const source = sources.find((candidate) => {
-      const name = candidate.name.toLowerCase();
-      return name.includes("age of empires ii") || name.includes("aoe2");
-    });
+    const source = sources.find((candidate) => sourceMatchesHandle(candidate.id, targetHandle));
     if (!source || source.thumbnail.isEmpty()) return;
     const size = source.thumbnail.getSize();
     captureFrame = {
@@ -89,11 +112,17 @@ async function refreshCaptureFrame(): Promise<void> {
       sourceId: source.id,
       width: size.width
     };
-  } catch (error) {
-    console.error(`[AoE2 automation] WINDOW_CAPTURE_ERROR|${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    captureInFlight = false;
-  }
+    } catch (error) {
+      console.error(`[AoE2 automation] WINDOW_CAPTURE_ERROR|${error instanceof Error ? error.message : String(error)}`);
+    }
+  })().finally(() => { captureInFlight = undefined; });
+  return captureInFlight;
+}
+
+function isFreshMatchingFrame(windowHandle: string): boolean {
+  return Boolean(captureFrame
+    && Date.now() - captureFrame.capturedAt <= 1_000
+    && sourceMatchesHandle(captureFrame.sourceId, windowHandle));
 }
 
 function sourceMatchesHandle(sourceId: string, windowHandle: string): boolean {

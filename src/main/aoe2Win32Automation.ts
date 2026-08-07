@@ -1,6 +1,10 @@
 import koffi from "koffi";
 import { aoe2PhysicalClickSettleMs } from "../shared/runtimeConfig.js";
-import { describeAoe2WindowCapture, readAoe2CapturedClientPixel } from "./aoe2WindowCapture.js";
+import {
+  describeAoe2WindowCapture,
+  isAoe2WindowCaptureActive,
+  readAoe2CapturedClientPixel
+} from "./aoe2WindowCapture.js";
 
 const user32 = process.platform === "win32" ? koffi.load("user32.dll") : null;
 const kernel32 = process.platform === "win32" ? koffi.load("kernel32.dll") : null;
@@ -865,6 +869,10 @@ function readWindowRgb(window: NativeHandle, x: number, y: number): [number, num
       return captured.rgb;
     }
   }
+  if (isAoe2WindowCaptureActive()) {
+    lastPixelSource = "Unavailable";
+    return null;
+  }
   const dc = GetDC!(window) as NativeHandle;
   if (!dc) {
     lastPixelSource = "Unavailable";
@@ -876,6 +884,12 @@ function readWindowRgb(window: NativeHandle, x: number, y: number): [number, num
   } finally {
     ReleaseDC!(window, dc);
   }
+}
+
+export function getAoe2NativeWindowHandle(processId: number): string | undefined {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  return window ? String(window) : undefined;
 }
 
 function describePixelRead(window: NativeHandle): string {

@@ -6,7 +6,12 @@ import { basename, dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
-import { startAoe2WindowCapture, stopAoe2WindowCapture } from "../aoe2WindowCapture.js";
+import {
+  describeAoe2WindowCapture,
+  startAoe2WindowCapture,
+  stopAoe2WindowCapture,
+  waitForFreshAoe2WindowCapture
+} from "../aoe2WindowCapture.js";
 import { empireLeagueMapsModName, ensureEmpireLeagueMapsEnabled } from "../aoe2MapInstaller.js";
 import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings } from "../../shared/contracts/customLobby.js";
@@ -44,6 +49,7 @@ import {
   detectAoe2NativeProcess,
   focusAoe2NativeWindow,
   focusAoe2ForGameplay,
+  getAoe2NativeWindowHandle,
   setWindowsInputBlocked,
   isAoe2NativeWindowForeground,
   keepAoe2NativeWindowBehind,
@@ -2756,6 +2762,11 @@ export function registerGameHandlers(): void {
     let sequenceExpired = false;
     let sequenceSafetyTimer: NodeJS.Timeout | undefined;
     try {
+      const gameWindow = getAoe2NativeWindowHandle(gamePid);
+      if (!gameWindow) throw new Error("The AoE2 game window could not be resolved for window capture.");
+      const captureReady = await waitForFreshAoe2WindowCapture(gameWindow);
+      emitLog(`WINDOW_CAPTURE_WAIT|Ready=${captureReady}|${describeAoe2WindowCapture(gameWindow)}`);
+      if (!captureReady) throw new Error("A fresh AoE2 window capture was not available.");
       const inputBlocked = setWindowsInputBlocked(true);
       if (isCustomAutomation) {
         sequenceSafetyTimer = setTimeout(() => {
