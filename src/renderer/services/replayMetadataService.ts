@@ -91,18 +91,11 @@ export async function parseReplayMetadata(
   const loser = (!isTeamGame && resignedPlayer) || losingPlayers.find((player) => player.profile_id > 0);
   const reporter = players.find((player) => player.playerNumber === summary.header.replay.rec_player);
   if (![2, 4, 8].includes(players.length) || !winner || !loser || !reporter) {
-    if (hasPostGame) {
-      // PostGame is terminal. Some short surrender recordings have no Resign
-      // action and aoe2rec-js can expose an internally inconsistent summary
-      // (for example, both 1v1 teams marked as winners). No later file write
-      // can make that completed replay usable, so report a parse failure and
-      // let the opponent's replay resolve the result instead of keeping this
-      // client on Match in progress forever.
-      throw new Error("The completed replay does not contain a consistent winner and loser summary.");
-    }
-    // The replay watcher inspects every write. AoE2 can flush a terminal
-    // Resign operation before the summary's teams and recorded-player metadata
-    // are complete. Keep watching and parse again after the next notification.
+    // A terminal operation can be flushed before aoe2rec-js observes the
+    // completed summary. In particular, short surrenders can expose PostGame
+    // while both teams are temporarily marked as winners. Treat that snapshot
+    // as incomplete so the replay watcher's later write/stability notification
+    // can parse it again instead of permanently rejecting a valid result.
     throw new ReplayNotFinishedError(
       isTeamGame,
       "The replay summary does not contain complete player and team results yet."

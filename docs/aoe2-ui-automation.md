@@ -122,8 +122,7 @@ Message delivery only proves Windows queued the input. Each destructive transiti
   selection may legitimately fall back to Random without invalidating the
   players, outcome, teams, or ranked game settings.
 
-A replay containing `PostGame` is terminal even when its parsed team summary is
-internally inconsistent. That client reports the parse failure and enters result
-verification; the matchmaker waits for another participant's usable replay. It
-only resolves the result as contested when every participant reports an
-unusable replay.
+A replay containing `PostGame` can still be an intermediate file snapshot: AoE2
+may flush the terminal operation before the parsed winner/loser summary settles.
+An inconsistent summary remains retryable so the next replay write or stability
+notification can produce usable result metadata.
