@@ -76,6 +76,16 @@ const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
 const aoe2LaunchAttemptTimeoutMs = 30_000;
 const roomSetupTimeoutMs = 65_000;
+
+function isLobbyAutomationProgress(message: string): boolean {
+  if (message.includes("INPUT_GUARD|GUARD_HEALTH")) return false;
+  return message.includes("SEQUENCE|")
+    || message.includes("MAP_SELECT|")
+    || message.includes("CIV_SELECT|")
+    || message.includes("CURSOR_ACTION|")
+    || message.includes("START_RETRY|");
+}
+
 const defaultSettings: UserSettings = {
   launchAoe2OnStartup: false,
   matchNotifications: true,
@@ -579,7 +589,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    return window.electronApi?.onAoe2AutomationLog((message) => log(`[AoE2 automation] ${message}`));
+    return window.electronApi?.onAoe2AutomationLog((message) => {
+      log(`[AoE2 automation] ${message}`);
+      if (isLobbyAutomationProgress(message)) touchRoomSetupWatchdog();
+    });
   }, []);
 
   function notify(
@@ -613,6 +626,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         void handleLobbySetupFailure(queue, "Lobby setup stopped making progress for 65 seconds.");
       }
     }, roomSetupTimeoutMs);
+  }
+
+  function touchRoomSetupWatchdog(): void {
+    if (roomSetupTimeoutRef.current !== null) startRoomSetupWatchdog();
   }
 
   async function handleLobbySetupFailure(_queue: QueueDefinition, message: string): Promise<void> {
