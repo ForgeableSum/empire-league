@@ -154,8 +154,11 @@ export function detectAoe2NativeProcess(): NativeProcessStatus {
 
 export function focusAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
-  const window = findLargestProcessWindow(processId);
+  const window = findRecoverableProcessWindow(processId);
   if (!window) return false;
+  // Explicit focus is the only path that reveals a game window hidden while
+  // the Empire League shell is minimized.
+  ShowWindow!(window, 5); // SW_SHOW
   return Boolean(SetForegroundWindow!(window));
 }
 
@@ -185,31 +188,34 @@ export function isAoe2NativeWindowForeground(processId: number): boolean {
 
 export function closeAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
-  const window = findLargestProcessWindow(processId);
+  const window = findRecoverableProcessWindow(processId);
   return Boolean(window) && Boolean(PostMessageW!(window, 0x0010, 0, 0));
 }
 
-export function minimizeAoe2NativeWindow(processId: number): boolean {
+export function hideAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
-  // SW_SHOWMINNOACTIVE avoids Windows activating the next top-level window.
-  // SW_MINIMIZE would reactivate Electron while it is also being minimized.
-  return Boolean(window) && Boolean(ShowWindow!(window, 7));
+  if (!window) return false;
+  // Hiding preserves the game's current size/state. In particular, it avoids
+  // the minimize/restore messages that make borderless DirectX rebuild its
+  // client area and race the later gameplay focus handoff.
+  ShowWindow!(window, 0); // SW_HIDE
+  return true;
+}
+
+export function showAoe2NativeWindowBehind(processId: number): boolean {
+  ensureWindowsBindings();
+  const window = findRecoverableProcessWindow(processId);
+  if (!window) return false;
+  // Reveal the existing surface without restoring/maximizing or activating it.
+  // This makes it ready for automation while the Electron cover remains above.
+  ShowWindow!(window, 5); // SW_SHOW
+  return Boolean(SetWindowPos!(window, 1n, 0, 0, 0, 0, 0x0013)); // HWND_BOTTOM | SWP_NOACTIVATE
 }
 
 export function setWindowsInputBlocked(blocked: boolean): boolean {
   if (process.platform !== "win32" || !BlockInput) return false;
   return Boolean(BlockInput(blocked));
-}
-
-export function restoreAoe2NativeWindowBehind(processId: number): boolean {
-  ensureWindowsBindings();
-  const window = findRecoverableProcessWindow(processId);
-  if (!window) return false;
-  ShowWindow!(window, 9);
-  // Restore by the HWND we recovered while minimized. Re-enumerating through
-  // the ready-window path here can race the client area being recreated.
-  return Boolean(SetWindowPos!(window, 1n, 0, 0, 0, 0, 0x0013));
 }
 
 export function keepAoe2NativeWindowBehind(processId: number): boolean {

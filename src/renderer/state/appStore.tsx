@@ -512,6 +512,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       const existingProcess = await window.electronApi.detectAoe2Process();
+      if (existingProcess.running && existingProcess.owned) {
+        if (!existingProcess.windowReady) {
+          // The managed window is intentionally hidden while Empire League is
+          // minimized. The main-process launch guard reveals that same window
+          // behind Electron; it does not send another Steam launch request.
+          const resumed = await window.electronApi.launchAoe2();
+          if (!resumed.launched || !(await waitForAoe2Window(5_000))) {
+            throw new Error("The running AoE2 window could not be prepared for automation.");
+          }
+        }
+        setState((previous) => ({ ...previous, gameStatus: "running" }));
+        return true;
+      }
       if (existingProcess.running && !existingProcess.owned) {
         const gracefulClose = await window.electronApi.closeAoe2(false);
         if (!gracefulClose.closed) {

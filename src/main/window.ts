@@ -4,8 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   detectAoe2NativeProcess,
-  minimizeAoe2NativeWindow,
-  restoreAoe2NativeWindowBehind
+  hideAoe2NativeWindow
 } from "./aoe2Win32Automation.js";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -27,7 +26,6 @@ let latestPointer: {
 const copyCoordinatesAccelerator = "CommandOrControl+Shift+C";
 const toggleCoverAccelerator = "CommandOrControl+Shift+H";
 const toggleOpacityAccelerator = "CommandOrControl+Shift+O";
-const independentWindowMinimize = process.env.EMPIRE_INDEPENDENT_WINDOW_MINIMIZE === "true";
 const opacityMode = process.env.EMPIRE_OPACITY_MODE === "true";
 let reducedOpacityEnabled = opacityMode;
 let opacityShortcutWindow: BrowserWindow | null = null;
@@ -69,10 +67,6 @@ function loadRenderer(window: BrowserWindow, route = ""): void {
 function restoreFromTaskbar(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   logWindowLifecycle(window, "CALL restoreFromTaskbar");
-  if (process.platform === "win32" && !independentWindowMinimize) {
-    const game = detectAoe2NativeProcess();
-    if (game.pid) restoreAoe2NativeWindowBehind(game.pid);
-  }
   // Clear this before show/focus because fullscreen Windows restores can emit
   // focus without ever emitting Electron's restore event.
   taskbarMinimizedWindow = null;
@@ -85,10 +79,12 @@ function restoreFromTaskbar(window: BrowserWindow): void {
 export function minimizeMainWindowToTaskbar(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   logWindowLifecycle(window, "CALL minimizeMainWindowToTaskbar");
-  if (process.platform === "win32" && !independentWindowMinimize) {
+  if (process.platform === "win32") {
     const game = detectAoe2NativeProcess();
-    if (game.pid && game.windowReady) minimizeAoe2NativeWindow(game.pid);
+    if (game.pid && game.windowReady) hideAoe2NativeWindow(game.pid);
   }
+  // AoE2 stays hidden when Electron is restored. Only an explicit game-focus
+  // path reveals it, so the managed game can never leak behind the shell.
   taskbarMinimizedWindow = window;
   taskbarMinimizeCompletedWindow = null;
   window.minimize();
@@ -283,16 +279,11 @@ export function restoreMainWindowFromGameCover(): void {
 export function focusMainWindow(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   logWindowLifecycle(window, "CALL focusMainWindow");
-  const wasTaskbarMinimized = taskbarMinimizedWindow === window;
   if (coveredMainWindow === window && coveredMainWindowState) {
     restoreMainWindowFromGameCover();
     // A taskbar-minimized cover intentionally stays minimized when ordinary
     // cover mode ends. An explicit focus request (such as match found) must
     // continue through the restore path below.
-  }
-  if (wasTaskbarMinimized && process.platform === "win32" && !independentWindowMinimize) {
-    const game = detectAoe2NativeProcess();
-    if (game.pid) restoreAoe2NativeWindowBehind(game.pid);
   }
   taskbarMinimizedWindow = null;
   taskbarMinimizeCompletedWindow = null;

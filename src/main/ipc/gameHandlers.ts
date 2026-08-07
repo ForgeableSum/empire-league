@@ -64,7 +64,8 @@ import {
   sendAoe2Escape,
   sendAoe2Home,
   sendAoe2Tab,
-  sendAoe2Text
+  sendAoe2Text,
+  showAoe2NativeWindowBehind
 } from "../aoe2Win32Automation.js";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -704,6 +705,17 @@ async function startReplayEndDetection(
 async function detectAoe2Process(): Promise<{ running: boolean; pid?: number; windowReady?: boolean }> {
   if (process.platform !== "win32") return { running: false, windowReady: false };
   return detectAoe2NativeProcess();
+}
+
+async function prepareHiddenAoe2WindowBehind(): Promise<{ running: boolean; pid?: number; windowReady?: boolean }> {
+  let status = await detectAoe2Process();
+  if (!status.running || !status.pid || status.windowReady) return status;
+  showAoe2NativeWindowBehind(status.pid);
+  // ShowWindow is synchronous, but AoE2 may need a moment to publish a usable
+  // client surface after being intentionally hidden with SW_HIDE.
+  await delay(100);
+  status = await detectAoe2Process();
+  return status;
 }
 
 async function waitForAoe2Exit(timeoutMs: number): Promise<boolean> {
@@ -2473,6 +2485,17 @@ export function registerGameHandlers(): void {
   });
 
   ipcMain.handle("game:launch", async (event) => {
+    const existing = await detectAoe2Process();
+    if (existing.running) {
+      if (existing.pid && !existing.windowReady) {
+        showAoe2NativeWindowBehind(existing.pid);
+      }
+      return {
+        launched: true,
+        status: "running",
+        message: "AoE2 DE is already running."
+      };
+    }
     if (launchRequested) {
       const status = await detectAoe2Process();
       if (status.running || Date.now() - launchRequestedAt < 30_000) {
@@ -2551,7 +2574,7 @@ export function registerGameHandlers(): void {
     }
     restoreAoe2Window();
     const game = detectAoe2NativeProcess();
-    if (!game.pid || !game.windowReady) return { focused: false };
+    if (!game.pid) return { focused: false };
     if (!gameplayHandoffs.has(matchId)) {
       if (!focusAoe2ForGameplay(game.pid)) return { focused: false };
       gameplayHandoffs.add(matchId);
@@ -2742,9 +2765,10 @@ export function registerGameHandlers(): void {
     emitLog("Started=True");
     emitLog(`GAME_SETTINGS_PAYLOAD|${JSON.stringify(requestedGameSettings ?? null)}`);
     const appWindow = BrowserWindow.fromWebContents(event.sender);
+    if (appWindow) showMainWindowAsGameCover(appWindow);
     let gameProcess: Awaited<ReturnType<typeof detectAoe2Process>>;
     try {
-      gameProcess = await detectAoe2Process();
+      gameProcess = await prepareHiddenAoe2WindowBehind();
     } catch (error) {
       emitLog(`ERROR|${error instanceof Error ? error.message : "AoE2 process detection failed."}`);
       activeCreateLobbySequence = undefined;
@@ -2756,7 +2780,6 @@ export function registerGameHandlers(): void {
       return { sent: false, message: "The AoE2 game window was not ready." };
     }
     const gamePid: number = gameProcess.pid;
-    if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     let sequenceCompleted = false;
     let sequenceExpired = false;
@@ -3114,8 +3137,8 @@ export function registerGameHandlers(): void {
         });
       }
       console.info(`[AoE2 automation] INPUT_LOCK|Requested=True|Guard=${inputGuardStarted}|Source=LobbyAction|Target=${target}`);
-      const process = await detectAoe2Process();
-      if (!process.running || !process.pid) {
+      const process = await prepareHiddenAoe2WindowBehind();
+      if (!process.running || !process.pid || !process.windowReady) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
       const visibilityMessage = `ACTION_WINDOW|Target=${target}|CoverHidden=False|ClickThrough=False|ElectronFocused=${appWindow?.isFocused() ?? false}|AoeForeground=${isAoe2NativeWindowForeground(process.pid)}`;
@@ -3261,8 +3284,8 @@ export function registerGameHandlers(): void {
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
-      const gameProcess = await detectAoe2Process();
-      if (!gameProcess.running || !gameProcess.pid) {
+      const gameProcess = await prepareHiddenAoe2WindowBehind();
+      if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
       const [slotX, slotY] = civilizationSlotDesignPoint(slot);
@@ -3403,8 +3426,8 @@ export function registerGameHandlers(): void {
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
-      const gameProcess = await detectAoe2Process();
-      if (!gameProcess.running || !gameProcess.pid) {
+      const gameProcess = await prepareHiddenAoe2WindowBehind();
+      if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
       const [x, y] = teamSlotDesignPoint(slot);
@@ -3551,6 +3574,10 @@ export function registerGameHandlers(): void {
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
+    const game = await prepareHiddenAoe2WindowBehind();
+    if (!game.running || !game.pid || !game.windowReady) {
+      return { opened: false };
+    }
     const inputGuardStarted = await startInputGuard(appWindow);
     console.info(`[AoE2 automation] INPUT_LOCK|Requested=True|Guard=${inputGuardStarted}|Source=GuestOpenLobby`);
     await shell.openExternal(lobbyId);
