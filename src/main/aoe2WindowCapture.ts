@@ -25,17 +25,6 @@ export function startAoe2WindowCapture(): void {
   captureTimer.unref();
 }
 
-export function stopAoe2WindowCapture(): void {
-  if (captureTimer) clearInterval(captureTimer);
-  captureTimer = undefined;
-  captureFrame = undefined;
-  captureTargetHandle = undefined;
-}
-
-export function isAoe2WindowCaptureActive(): boolean {
-  return Boolean(captureTimer);
-}
-
 export function hasFreshAoe2WindowCapture(windowHandle: string): boolean {
   return isFreshMatchingFrame(windowHandle);
 }
@@ -61,7 +50,12 @@ export function readAoe2CapturedClientPixel(
   windowRect: { left: number; top: number; right: number; bottom: number },
   clientOrigin: { x: number; y: number }
 ): CapturedPixel | null {
+  // Pixel verification has no GDI fallback. Make every read self-healing so a
+  // stopped capture service is restarted and begins acquiring the requested
+  // AoE2 window immediately; the caller receives null until that frame is fresh.
+  startAoe2WindowCapture();
   captureTargetHandle = windowHandle;
+  void refreshCaptureFrame();
   const frame = captureFrame;
   if (!frame || Date.now() - frame.capturedAt > 1_000) return null;
   if (!sourceMatchesHandle(frame.sourceId, windowHandle)) return null;

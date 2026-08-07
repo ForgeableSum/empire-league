@@ -10,7 +10,6 @@ import {
   describeAoe2WindowCapture,
   hasFreshAoe2WindowCapture,
   startAoe2WindowCapture,
-  stopAoe2WindowCapture,
   waitForFreshAoe2WindowCapture
 } from "../aoe2WindowCapture.js";
 import { empireLeagueMapsModName, ensureEmpireLeagueMapsEnabled } from "../aoe2MapInstaller.js";
@@ -543,7 +542,6 @@ function stopReturnToMenuWatch(): void {
   returnToMenuWatchGeneration += 1;
   if (returnToMenuPoller) clearTimeout(returnToMenuPoller);
   returnToMenuPoller = undefined;
-  stopAoe2WindowCapture();
   hideReturnToMenuOverlay();
 }
 
@@ -903,7 +901,6 @@ while ($true) {
 
 function restoreAoe2Window(focus = false, maximize = false): void {
   if (process.platform !== "win32") return;
-  stopAoe2WindowCapture();
   offscreenWindowProcess?.kill();
   offscreenWindowProcess = undefined;
   if (aoe2WindowMonitor) clearInterval(aoe2WindowMonitor);

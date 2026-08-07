@@ -2,13 +2,11 @@ import koffi from "koffi";
 import { aoe2PhysicalClickSettleMs } from "../shared/runtimeConfig.js";
 import {
   describeAoe2WindowCapture,
-  isAoe2WindowCaptureActive,
   readAoe2CapturedClientPixel
 } from "./aoe2WindowCapture.js";
 
 const user32 = process.platform === "win32" ? koffi.load("user32.dll") : null;
 const kernel32 = process.platform === "win32" ? koffi.load("kernel32.dll") : null;
-const gdi32 = process.platform === "win32" ? koffi.load("gdi32.dll") : null;
 
 const HANDLE = koffi.pointer("HANDLE", koffi.opaque());
 const HWND = koffi.alias("HWND", HANDLE);
@@ -62,12 +60,9 @@ const MouseEvent = user32?.func("void __stdcall mouse_event(uint32_t flags, uint
 const KeybdEvent = user32?.func("void __stdcall keybd_event(uint8_t virtualKey, uint8_t scanCode, uint32_t flags, uintptr_t extraInfo)");
 const IsHungAppWindow = user32?.func("bool __stdcall IsHungAppWindow(HWND hwnd)");
 const PostMessageW = user32?.func("bool __stdcall PostMessageW(HWND hwnd, uint32_t message, uintptr_t wParam, intptr_t lParam)");
-const GetDC = user32?.func("HANDLE __stdcall GetDC(HWND hwnd)");
-const ReleaseDC = user32?.func("int32_t __stdcall ReleaseDC(HWND hwnd, HANDLE dc)");
 const SendMessageTimeoutW = user32?.func(
   "intptr_t __stdcall SendMessageTimeoutW(HWND hwnd, uint32_t message, uintptr_t wParam, intptr_t lParam, uint32_t flags, uint32_t timeoutMs, _Out_ uintptr_t *result)"
 );
-const GetPixel = gdi32?.func("uint32_t __stdcall GetPixel(HANDLE dc, int32_t x, int32_t y)");
 const Sleep = kernel32?.func("void __stdcall Sleep(uint32_t milliseconds)");
 const GetLastError = kernel32?.func("uint32_t __stdcall GetLastError()");
 const SetLastError = kernel32?.func("void __stdcall SetLastError(uint32_t errorCode)");
@@ -90,7 +85,7 @@ type DesignTransform = {
 
 const aoe2DesignWidth = 3840;
 const aoe2DesignHeight = 2160;
-let lastPixelSource: "WindowCapture" | "GDI" | "Unavailable" = "Unavailable";
+let lastPixelSource: "WindowCapture" | "Unavailable" = "Unavailable";
 const managedWindowStyles = new Map<number, { handle: string; extendedStyle: number }>();
 
 const extendedStyleIndex = -20; // GWL_EXSTYLE
@@ -1018,12 +1013,6 @@ export function readAoe2HostSetupState(
   };
 }
 
-function readRgb(dc: NativeHandle, x: number, y: number): [number, number, number] | null {
-  const color = Number(GetPixel!(dc, x, y));
-  if (color === 0xffffffff) return null;
-  return [color & 0xff, (color >> 8) & 0xff, (color >> 16) & 0xff];
-}
-
 function readWindowRgb(window: NativeHandle, x: number, y: number): [number, number, number] | null {
   const windowRect = {} as Rect;
   const clientOrigin = { x: 0, y: 0 };
@@ -1034,21 +1023,8 @@ function readWindowRgb(window: NativeHandle, x: number, y: number): [number, num
       return captured.rgb;
     }
   }
-  if (isAoe2WindowCaptureActive()) {
-    lastPixelSource = "Unavailable";
-    return null;
-  }
-  const dc = GetDC!(window) as NativeHandle;
-  if (!dc) {
-    lastPixelSource = "Unavailable";
-    return null;
-  }
-  try {
-    lastPixelSource = "GDI";
-    return readRgb(dc, x, y);
-  } finally {
-    ReleaseDC!(window, dc);
-  }
+  lastPixelSource = "Unavailable";
+  return null;
 }
 
 export function getAoe2NativeWindowHandle(processId: number): string | undefined {
@@ -1204,7 +1180,7 @@ interface MessageDispatchResult {
 }
 
 function ensureWindowsBindings(): void {
-  if (!user32 || !kernel32 || !gdi32) throw new Error("Native AoE2 automation is only supported on Windows.");
+  if (!user32 || !kernel32) throw new Error("Native AoE2 automation is only supported on Windows.");
 }
 
 function delay(milliseconds: number): Promise<void> {
