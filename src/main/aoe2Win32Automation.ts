@@ -47,6 +47,8 @@ const GetWindowRect = user32?.func("bool __stdcall GetWindowRect(HWND hwnd, _Out
 const ClientToScreen = user32?.func("bool __stdcall ClientToScreen(HWND hwnd, _Inout_ EL_POINT *point)");
 const ShowWindow = user32?.func("bool __stdcall ShowWindow(HWND hwnd, int32_t command)");
 const SetWindowPos = user32?.func("bool __stdcall SetWindowPos(HWND hwnd, HWND insertAfter, int32_t x, int32_t y, int32_t width, int32_t height, uint32_t flags)");
+const GetWindowLongW = user32?.func("int32_t __stdcall GetWindowLongW(HWND hwnd, int32_t index)");
+const SetWindowLongW = user32?.func("int32_t __stdcall SetWindowLongW(HWND hwnd, int32_t index, int32_t value)");
 const SetForegroundWindow = user32?.func("bool __stdcall SetForegroundWindow(HWND hwnd)");
 const GetForegroundWindow = user32?.func("HWND __stdcall GetForegroundWindow()");
 const WindowFromPoint = user32?.func("HWND __stdcall WindowFromPoint(EL_POINT point)");
@@ -89,6 +91,36 @@ type DesignTransform = {
 const aoe2DesignWidth = 3840;
 const aoe2DesignHeight = 2160;
 let lastPixelSource: "WindowCapture" | "GDI" | "Unavailable" = "Unavailable";
+const managedWindowStyles = new Map<number, { handle: string; extendedStyle: number }>();
+
+const extendedStyleIndex = -20; // GWL_EXSTYLE
+const appWindowStyle = 0x00040000; // WS_EX_APPWINDOW
+const toolWindowStyle = 0x00000080; // WS_EX_TOOLWINDOW
+const refreshWindowStyleFlags = 0x0037; // FRAMECHANGED | NOACTIVATE | NOMOVE | NOSIZE | NOZORDER
+
+function excludeManagedWindowFromShell(processId: number, window: NativeHandle): void {
+  if (!window || !GetWindowLongW || !SetWindowLongW || !SetWindowPos) return;
+  const handle = String(window);
+  const currentStyle = GetWindowLongW(window, extendedStyleIndex) as number;
+  const saved = managedWindowStyles.get(processId);
+  if (!saved || saved.handle !== handle) {
+    managedWindowStyles.set(processId, { handle, extendedStyle: currentStyle });
+  }
+  const managedStyle = ((currentStyle | toolWindowStyle) & ~appWindowStyle) | 0;
+  if (managedStyle === currentStyle) return;
+  SetWindowLongW(window, extendedStyleIndex, managedStyle);
+  SetWindowPos(window, 0n, 0, 0, 0, 0, refreshWindowStyleFlags);
+}
+
+function restoreManagedWindowToShell(processId: number, window: NativeHandle): void {
+  if (!window || !SetWindowLongW || !SetWindowPos) return;
+  const saved = managedWindowStyles.get(processId);
+  if (!saved) return;
+  managedWindowStyles.delete(processId);
+  if (saved.handle !== String(window)) return;
+  SetWindowLongW(window, extendedStyleIndex, saved.extendedStyle);
+  SetWindowPos(window, 0n, 0, 0, 0, 0, refreshWindowStyleFlags);
+}
 
 export interface NativeInputResult {
   sent: boolean;
@@ -156,6 +188,7 @@ export function focusAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findRecoverableProcessWindow(processId);
   if (!window) return false;
+  restoreManagedWindowToShell(processId, window);
   // Explicit focus is the only path that reveals a game window hidden while
   // the Empire League shell is minimized.
   ShowWindow!(window, 5); // SW_SHOW
@@ -169,6 +202,7 @@ export function focusAoe2ForGameplay(processId: number): boolean {
   ensureWindowsBindings();
   const window = findRecoverableProcessWindow(processId);
   if (!window) return false;
+  restoreManagedWindowToShell(processId, window);
   // The game may have been minimized while running borderless fullscreen.
   // SW_RESTORE can bring it back as a normal window, which also invalidates
   // the design-space click layout. Maximize it before raising it instead.
@@ -196,6 +230,7 @@ export function hideAoe2NativeWindow(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return false;
+  excludeManagedWindowFromShell(processId, window);
   // Hiding preserves the game's current size/state. In particular, it avoids
   // the minimize/restore messages that make borderless DirectX rebuild its
   // client area and race the later gameplay focus handoff.
@@ -207,6 +242,7 @@ export function showAoe2NativeWindowBehind(processId: number): boolean {
   ensureWindowsBindings();
   const window = findRecoverableProcessWindow(processId);
   if (!window) return false;
+  excludeManagedWindowFromShell(processId, window);
   // Reveal the existing surface without restoring/maximizing or activating it.
   // This makes it ready for automation while the Electron cover remains above.
   ShowWindow!(window, 5); // SW_SHOW
@@ -222,6 +258,7 @@ export function keepAoe2NativeWindowBehind(processId: number): boolean {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return false;
+  excludeManagedWindowFromShell(processId, window);
   // HWND_BOTTOM plus SWP_NOACTIVATE keeps the game below the Electron shell.
   // Passing null here means HWND_TOP, which allowed AoE2 to cover Electron.
   return Boolean(SetWindowPos!(window, 1n, 0, 0, 0, 0, 0x0013));

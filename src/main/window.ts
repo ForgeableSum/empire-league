@@ -131,6 +131,16 @@ export function createMainWindow(): BrowserWindow {
     mainWindow.on(event as "show", () => logWindowLifecycle(mainWindow, `EVENT ${event}`));
   }
 
+  // Keep the shell above the managed game only while the user is actively
+  // using it. A persistent screen-saver-level window obscures applications
+  // selected through Alt+Tab even though Windows changes the foreground app.
+  mainWindow.on("focus", () => {
+    if (!mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(true, "screen-saver");
+  });
+  mainWindow.on("blur", () => {
+    if (!mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false, "normal");
+  });
+
   const fitFullScreenToDisplay = (): void => {
     if (mainWindow.isDestroyed()) return;
     const display = screen.getAllDisplays().find((item) => item.id === displayId) ?? screen.getPrimaryDisplay();
