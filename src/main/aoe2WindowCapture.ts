@@ -36,6 +36,10 @@ export function isAoe2WindowCaptureActive(): boolean {
   return Boolean(captureTimer);
 }
 
+export function hasFreshAoe2WindowCapture(windowHandle: string): boolean {
+  return isFreshMatchingFrame(windowHandle);
+}
+
 export async function waitForFreshAoe2WindowCapture(windowHandle: string, timeoutMs = 10_000): Promise<boolean> {
   if (process.platform !== "win32") return false;
   startAoe2WindowCapture();

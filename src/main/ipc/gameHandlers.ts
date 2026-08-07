@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
 import {
   describeAoe2WindowCapture,
+  hasFreshAoe2WindowCapture,
   startAoe2WindowCapture,
   stopAoe2WindowCapture,
   waitForFreshAoe2WindowCapture
@@ -97,6 +98,7 @@ let aoe2WindowIsOffscreen = false;
 let replayEndPoller: NodeJS.Timeout | undefined;
 let replayFocusTimers: NodeJS.Timeout[] = [];
 let returnToMenuPoller: NodeJS.Timeout | undefined;
+let returnToMenuWatchGeneration = 0;
 let replayDetectionGeneration = 0;
 const builtInGameMapNames = new Set<string>();
 let createLobbySequenceCounter = 0;
@@ -538,18 +540,22 @@ function focusMainWindowAfterReplay(window: BrowserWindow, manageRunningGame = f
 }
 
 function stopReturnToMenuWatch(): void {
+  returnToMenuWatchGeneration += 1;
   if (returnToMenuPoller) clearTimeout(returnToMenuPoller);
   returnToMenuPoller = undefined;
+  stopAoe2WindowCapture();
   hideReturnToMenuOverlay();
 }
 
 function startReturnToMenuWatch(window: BrowserWindow): void {
   stopReturnToMenuWatch();
+  const generation = returnToMenuWatchGeneration;
   showReturnToMenuOverlay();
   let consecutiveMainMenuReads = 0;
+  let captureFailures = 0;
 
-  const poll = (): void => {
-    if (window.isDestroyed()) {
+  const poll = async (): Promise<void> => {
+    if (generation !== returnToMenuWatchGeneration || window.isDestroyed()) {
       stopReturnToMenuWatch();
       return;
     }
@@ -560,6 +566,39 @@ function startReturnToMenuWatch(window: BrowserWindow): void {
       return;
     }
     if (game.pid && game.windowReady) {
+      const gameWindow = getAoe2NativeWindowHandle(game.pid);
+      if (!gameWindow) {
+        captureFailures += 1;
+        if (captureFailures === 1 || captureFailures % 5 === 0) {
+          console.warn(`[AoE2 replay] MENU_CAPTURE|Ready=False|Reason=WindowNotFound|Attempt=${captureFailures}`);
+        }
+        if (generation === returnToMenuWatchGeneration) {
+          returnToMenuPoller = setTimeout(() => void poll(), 1_000);
+          returnToMenuPoller.unref();
+        }
+        return;
+      }
+      if (!hasFreshAoe2WindowCapture(gameWindow)) {
+        const captureReady = await waitForFreshAoe2WindowCapture(gameWindow, 2_000);
+        if (generation !== returnToMenuWatchGeneration) return;
+        if (!captureReady) {
+          captureFailures += 1;
+          if (captureFailures === 1 || captureFailures % 5 === 0) {
+            console.warn(
+              `[AoE2 replay] MENU_CAPTURE|Ready=False|Attempt=${captureFailures}`
+              + `|${describeAoe2WindowCapture(gameWindow)}`
+            );
+          }
+          returnToMenuPoller = setTimeout(() => void poll(), 1_000);
+          returnToMenuPoller.unref();
+          return;
+        }
+        console.info(
+          `[AoE2 replay] MENU_CAPTURE|Ready=True|Recovered=${captureFailures > 0}`
+          + `|${describeAoe2WindowCapture(gameWindow)}`
+        );
+        captureFailures = 0;
+      }
       const state = readAoe2HostSetupState(game.pid);
       consecutiveMainMenuReads = state.state === "main-menu"
         ? consecutiveMainMenuReads + 1
@@ -570,11 +609,13 @@ function startReturnToMenuWatch(window: BrowserWindow): void {
         return;
       }
     }
-    returnToMenuPoller = setTimeout(poll, 250);
-    returnToMenuPoller.unref();
+    if (generation === returnToMenuWatchGeneration) {
+      returnToMenuPoller = setTimeout(() => void poll(), 250);
+      returnToMenuPoller.unref();
+    }
   };
 
-  poll();
+  void poll();
 }
 
 async function startReplayEndDetection(
