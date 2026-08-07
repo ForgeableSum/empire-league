@@ -5,6 +5,7 @@ import { presenceService } from "../../services/presenceService";
 import { useAppStore, type AppPage } from "../../state/appStore";
 import { WindowControls } from "./WindowControls";
 import { isPreviewMode } from "../../previewMode";
+import type { PendingAppUpdate } from "../../../shared/contracts/electronApi";
 
 const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
   { page: "home", label: "Home", icon: <Home size={18} /> },
@@ -24,8 +25,9 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
   const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
-  const [pendingUpdateVersion, setPendingUpdateVersion] = useState<string | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<PendingAppUpdate | null>(null);
   const [installingUpdate, setInstallingUpdate] = useState(false);
+  const [retryingUpdate, setRetryingUpdate] = useState(false);
   const [gameCountdownActive, setGameCountdownActive] = useState(false);
 
   useEffect(() => {
@@ -58,14 +60,18 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
     if (!electronApi) return;
     let active = true;
     void electronApi.getPendingUpdate().then((update) => {
-      if (active && update?.status === "downloaded") setPendingUpdateVersion(update.version);
+      if (active && update) setPendingUpdate(update);
     });
     const unsubscribe = electronApi.onUpdateReady((update) => {
-      if (active) setPendingUpdateVersion(update.version);
+      if (active) setPendingUpdate(update);
+    });
+    const unsubscribeDetected = electronApi.onUpdateDetected((update) => {
+      if (active) setPendingUpdate(update);
     });
     return () => {
       active = false;
       unsubscribe();
+      unsubscribeDetected();
     };
   }, []);
 
@@ -74,6 +80,18 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
     setInstallingUpdate(true);
     const started = await window.electronApi.installPendingUpdate().catch(() => false);
     if (!started) setInstallingUpdate(false);
+  }
+
+  async function retryUpdate(): Promise<void> {
+    if (!window.electronApi || retryingUpdate) return;
+    setRetryingUpdate(true);
+    setPendingUpdate(null);
+    const started = await window.electronApi.retryPendingUpdate().catch(() => false);
+    if (!started) {
+      const update = await window.electronApi.getPendingUpdate().catch(() => null);
+      if (update?.status === "error") setPendingUpdate(update);
+    }
+    setRetryingUpdate(false);
   }
 
   useEffect(() => {
@@ -102,6 +120,11 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
         <img src={appIcon} alt="" />
         <span>Empire League - AoE2:DE Community Client &amp; Matchmaker</span>
         {appVersion && <span className="window-title-version">v{appVersion}</span>}
+        {pendingUpdate?.status === "downloading" && (
+          <span className="window-title-version">
+            Downloading v{pendingUpdate.version}{pendingUpdate.percent === undefined ? "…" : ` · ${pendingUpdate.percent}%`}
+          </span>
+        )}
       </div>
       <WindowControls />
       <aside className="sidebar">
@@ -185,18 +208,31 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
           </footer>
         </div>
       </main>
-      {pendingUpdateVersion && (
+      {pendingUpdate && (pendingUpdate.status === "downloaded" || pendingUpdate.status === "error") && (
         <div className="modal-backdrop update-ready-backdrop" role="presentation">
           <section className="match-modal update-ready-modal" role="alertdialog" aria-modal="true" aria-labelledby="update-ready-title">
             <div className="update-ready-icon"><Download size={28} aria-hidden="true" /></div>
-            <span className="eyebrow">Update downloaded</span>
-            <h2 id="update-ready-title">Update ready</h2>
-            <p>Empire League v{pendingUpdateVersion} has been downloaded. Restart the application to complete the required update.</p>
+            <span className="eyebrow">{pendingUpdate.status === "error" ? "Update failed" : "Update downloaded"}</span>
+            <h2 id="update-ready-title">{pendingUpdate.status === "error" ? "Update couldn't download" : "Update ready"}</h2>
+            <p>{pendingUpdate.status === "error"
+              ? `Empire League v${pendingUpdate.version} could not be downloaded automatically. Check your connection or security software, then retry or download the installer manually.`
+              : `Empire League v${pendingUpdate.version} has been downloaded. Restart the application to complete the required update.`}</p>
             <div className="modal-actions update-ready-actions">
+              {pendingUpdate.status === "error" && <>
+                <button className="primary" type="button" disabled={retryingUpdate} onClick={() => void retryUpdate()} autoFocus>
+                  <RotateCcw className={retryingUpdate ? "spin" : undefined} size={17} aria-hidden="true" />
+                  {retryingUpdate ? "Retrying…" : "Retry download"}
+                </button>
+                <button className="secondary" type="button" onClick={() => void window.electronApi?.openUpdateDownload()}>
+                  Download manually
+                </button>
+              </>}
+              {pendingUpdate.status !== "error" && (
               <button className="primary" type="button" disabled={installingUpdate} onClick={() => void restartForUpdate()} autoFocus>
                 <RotateCcw className={installingUpdate ? "spin" : undefined} size={17} aria-hidden="true" />
                 {installingUpdate ? "Restarting…" : "Restart and update"}
               </button>
+              )}
             </div>
           </section>
         </div>

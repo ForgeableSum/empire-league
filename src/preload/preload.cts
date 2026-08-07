@@ -100,6 +100,8 @@ const electronApi: ElectronGameApi = {
   openDiscordInvite: () => ipcRenderer.invoke("system:open-discord-invite"),
   getPendingUpdate: () => ipcRenderer.invoke("system:get-pending-update"),
   installPendingUpdate: () => ipcRenderer.invoke("system:install-pending-update"),
+  retryPendingUpdate: () => ipcRenderer.invoke("system:retry-pending-update"),
+  openUpdateDownload: () => ipcRenderer.invoke("system:open-update-download"),
   setUpdateChecksPaused: (paused) => ipcRenderer.invoke("system:set-update-checks-paused", paused),
   onUpdateDetected: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, update: Parameters<typeof listener>[0]) => listener(update);

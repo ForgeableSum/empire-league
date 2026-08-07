@@ -24,6 +24,22 @@ export function installDownloadedUpdate(): boolean {
   return true;
 }
 
+export async function retryPendingUpdate(): Promise<boolean> {
+  if (updateChecksPaused || !pendingUpdate || pendingUpdate.status === "downloaded") return false;
+  pendingUpdate = { version: pendingUpdate.version, status: "downloading" };
+  notifiedUpdateVersion = null;
+  sendPendingUpdate();
+  try {
+    await autoUpdater.downloadUpdate();
+    return true;
+  } catch (error) {
+    // electron-updater normally emits `error`; this catch also prevents a
+    // provider failure from becoming an unhandled rejection.
+    markUpdateFailed(error);
+    return false;
+  }
+}
+
 async function checkForUpdates(): Promise<void> {
   if (updateChecksPaused || checkInFlight) return;
   checkInFlight = true;
@@ -50,6 +66,14 @@ function sendPendingUpdate(): void {
     }
     window.webContents.send(channel, pendingUpdate);
   }
+}
+
+function markUpdateFailed(error: unknown): void {
+  console.error("[Updater] Error", error);
+  if (!pendingUpdate || pendingUpdate.status === "downloaded" || pendingUpdate.status === "error") return;
+  pendingUpdate = { version: pendingUpdate.version, status: "error" };
+  notifiedUpdateVersion = null;
+  sendPendingUpdate();
 }
 
 export function setAutoUpdateChecksPaused(paused: boolean): void {
@@ -81,8 +105,18 @@ export function startAutoUpdates(): void {
     console.info(`[Updater] Version ${info.version} is current`);
     pendingUpdate = null;
   });
+  autoUpdater.on("download-progress", (progress) => {
+    if (!pendingUpdate || pendingUpdate.status === "downloaded") return;
+    pendingUpdate = {
+      version: pendingUpdate.version,
+      status: "downloading",
+      percent: Math.max(0, Math.min(100, Math.round(progress.percent)))
+    };
+    notifiedUpdateVersion = null;
+    sendPendingUpdate();
+  });
   autoUpdater.on("error", (error) => {
-    console.error("[Updater] Error", error);
+    markUpdateFailed(error);
   });
   autoUpdater.on("update-downloaded", (info) => {
     downloadedVersion = info.version;

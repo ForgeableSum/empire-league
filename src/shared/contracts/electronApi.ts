@@ -39,7 +39,8 @@ export interface LoginItemSettings {
 
 export interface PendingAppUpdate {
   version: string;
-  status: "available" | "downloading" | "downloaded";
+  status: "available" | "downloading" | "downloaded" | "error";
+  percent?: number;
 }
 
 export interface ElectronGameApi {
@@ -100,6 +101,8 @@ export interface ElectronGameApi {
   openDiscordInvite(): Promise<void>;
   getPendingUpdate(): Promise<PendingAppUpdate | null>;
   installPendingUpdate(): Promise<boolean>;
+  retryPendingUpdate(): Promise<boolean>;
+  openUpdateDownload(): Promise<void>;
   setUpdateChecksPaused(paused: boolean): Promise<void>;
   onUpdateDetected(listener: (update: PendingAppUpdate) => void): () => void;
   onUpdateReady(listener: (update: PendingAppUpdate) => void): () => void;

@@ -2,7 +2,9 @@ import { app, BrowserWindow, ipcMain, Notification, safeStorage, shell } from "e
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { focusMainWindow, minimizeMainWindowToTaskbar } from "../window.js";
-import { getPendingUpdate, installDownloadedUpdate, setAutoUpdateChecksPaused } from "../autoUpdate.js";
+import { getPendingUpdate, installDownloadedUpdate, retryPendingUpdate, setAutoUpdateChecksPaused } from "../autoUpdate.js";
+
+const windowsInstallerUrl = "https://empireleague.gg/updates/windows/Empire-League-Setup.exe";
 
 export function registerSystemHandlers(): void {
   ipcMain.handle("system:ping", async () => ({ ok: true, at: new Date().toISOString() }));
@@ -63,6 +65,10 @@ export function registerSystemHandlers(): void {
     return getPendingUpdate();
   });
   ipcMain.handle("system:install-pending-update", async () => installDownloadedUpdate());
+  ipcMain.handle("system:retry-pending-update", async () => retryPendingUpdate());
+  ipcMain.handle("system:open-update-download", async () => {
+    await shell.openExternal(windowsInstallerUrl);
+  });
   ipcMain.handle("system:set-update-checks-paused", async (_event, paused: boolean) => {
     if (typeof paused !== "boolean") throw new TypeError("Update pause state must be a boolean.");
     setAutoUpdateChecksPaused(paused);
