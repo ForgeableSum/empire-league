@@ -90,7 +90,7 @@ export function minimizeMainWindowToTaskbar(window: BrowserWindow): void {
   window.minimize();
 }
 
-export function createMainWindow(): BrowserWindow {
+export function createMainWindow({ startMinimized = false }: { startMinimized?: boolean } = {}): BrowserWindow {
   const isDev = process.env.NODE_ENV === "development" || !app.isPackaged;
   const displayId = screen.getPrimaryDisplay().id;
   const area = screen.getPrimaryDisplay().bounds;
@@ -173,8 +173,13 @@ export function createMainWindow(): BrowserWindow {
     logWindowLifecycle(mainWindow, "CALL ready-to-show");
     mainWindow.setFullScreen(true);
     fitFullScreenToDisplay();
-    mainWindow.show();
-    mainWindow.focus();
+    if (startMinimized) {
+      mainWindow.showInactive();
+      minimizeMainWindowToTaskbar(mainWindow);
+    } else {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
   mainWindow.on("leave-full-screen", () => {
     if (mainWindow.isDestroyed() || taskbarMinimizedWindow === mainWindow) return;

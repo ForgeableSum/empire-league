@@ -70,7 +70,7 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:set-login-item-open-at-login", async (_event, openAtLogin: boolean) => {
     if (typeof openAtLogin !== "boolean") throw new TypeError("Startup preference must be a boolean.");
     if (!supportsLoginItems()) return getLoginItemSettings();
-    app.setLoginItemSettings({ openAtLogin });
+    app.setLoginItemSettings({ openAtLogin, args: ["--minimized-at-login"] });
     return getLoginItemSettings();
   });
   ipcMain.handle("system:restart", async () => {
