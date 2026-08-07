@@ -71,6 +71,7 @@ let ownedAoe2WindowReady = false;
 let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
 let inputGuardProcess: ChildProcess | undefined;
+let inputGuardHeartbeatTimer: NodeJS.Timeout | undefined;
 let inputGuardWindow: BrowserWindow | undefined;
 let inputGuardStopTimer: NodeJS.Timeout | undefined;
 let inputGuardFrameSequence = 0;
@@ -1043,6 +1044,8 @@ public static class AoeInputGuard {
   private static int virtualBottom;
   private static Timer movementPublishTimer;
   private static Timer healthPublishTimer;
+  private static Timer processWatchTimer;
+  private static Thread parentPipeWatchThread;
   private static int movementDirty;
   private static int movementPublishBusy;
   private static long physicalMoveEvents;
@@ -1052,8 +1055,18 @@ public static class AoeInputGuard {
   private static long setCursorFailures;
   private static long lastUsableMovementTimestamp;
   private static bool dpiAwarenessRequested;
+  private static uint ownerProcessId;
+  private static uint targetProcessId;
+  private static int shutdownSignaled;
+  private static long lastOwnerHeartbeatTimestamp;
+  private static long guardStartedTimestamp;
 
-  public static int Run(uint processId) {
+  public static int Run(uint processId, uint parentProcessId) {
+    if (!IsProcessAlive(parentProcessId) || !IsProcessAlive(processId)) return 5;
+    ownerProcessId = parentProcessId;
+    targetProcessId = processId;
+    lastOwnerHeartbeatTimestamp = Stopwatch.GetTimestamp();
+    guardStartedTimestamp = lastOwnerHeartbeatTimestamp;
     try {
       dpiAwarenessRequested = SetProcessDpiAwarenessContext(new IntPtr(-4));
     } catch (EntryPointNotFoundException) {
@@ -1082,6 +1095,11 @@ public static class AoeInputGuard {
     movementPublishTimer = new Timer(PublishLatestMovement, null, 4, 4);
     lastUsableMovementTimestamp = Stopwatch.GetTimestamp();
     healthPublishTimer = new Timer(PublishHealth, null, 1000, 1000);
+    processWatchTimer = new Timer(WatchProcesses, null, 100, 100);
+    parentPipeWatchThread = new Thread(WatchParentPipe);
+    parentPipeWatchThread.IsBackground = true;
+    parentPipeWatchThread.Name = "EmpireLeagueInputGuardParentPipe";
+    parentPipeWatchThread.Start();
 
     Rect targetRect;
     bool targetRectRead = GetWindowRect(targetWindow, out targetRect);
@@ -1105,6 +1123,51 @@ public static class AoeInputGuard {
     while (GetMessage(out message, IntPtr.Zero, 0, 0) > 0) { }
     Release();
     return 0;
+  }
+
+  private static bool IsProcessAlive(uint processId) {
+    try {
+      using (Process process = Process.GetProcessById(unchecked((int)processId))) {
+        return !process.HasExited;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  private static void WatchProcesses(object state) {
+    if (!IsProcessAlive(ownerProcessId)) {
+      SignalShutdown("PARENT_PROCESS_EXIT");
+    } else if (!IsProcessAlive(targetProcessId)) {
+      SignalShutdown("AOE2_PROCESS_EXIT");
+    } else {
+      long heartbeat = Interlocked.Read(ref lastOwnerHeartbeatTimestamp);
+      long heartbeatAgeMs = (long)((Stopwatch.GetTimestamp() - heartbeat) * 1000.0 / Stopwatch.Frequency);
+      long guardAgeMs = (long)((Stopwatch.GetTimestamp() - guardStartedTimestamp) * 1000.0 / Stopwatch.Frequency);
+      if (heartbeatAgeMs > 5000) SignalShutdown("PARENT_HEARTBEAT_TIMEOUT");
+      else if (guardAgeMs > 300000) SignalShutdown("MAXIMUM_LIFETIME_TIMEOUT");
+    }
+  }
+
+  private static void WatchParentPipe() {
+    try {
+      string line;
+      while ((line = Console.In.ReadLine()) != null) {
+        if (line == "PING") Interlocked.Exchange(ref lastOwnerHeartbeatTimestamp, Stopwatch.GetTimestamp());
+      }
+    } catch {
+      // A broken parent pipe is equivalent to parent termination.
+    }
+    SignalShutdown("PARENT_PIPE_CLOSED");
+  }
+
+  private static void SignalShutdown(string reason) {
+    if (Interlocked.Exchange(ref shutdownSignaled, 1) != 0) return;
+    try {
+      Console.WriteLine("GUARD_SHUTDOWN|Reason={0}", reason);
+      Console.Out.Flush();
+    } catch { }
+    PostThreadMessage(guardThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
   }
 
   private static IntPtr FindWindow(uint targetProcessId) {
@@ -1205,6 +1268,9 @@ public static class AoeInputGuard {
   }
 
   private static void Release() {
+    Timer watcher = processWatchTimer;
+    processWatchTimer = null;
+    if (watcher != null) watcher.Dispose();
     Timer timer = movementPublishTimer;
     movementPublishTimer = null;
     if (timer != null) timer.Dispose();
@@ -1221,17 +1287,26 @@ public static class AoeInputGuard {
 Add-Type -TypeDefinition $interop
 $game = Get-Process -Name 'AoE2DE_s' -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $game) { Write-Output 'GUARD_ERROR|AoE2 process not found'; exit 2 }
-$exitCode = [AoeInputGuard]::Run([uint32]$game.Id)
+$exitCode = [AoeInputGuard]::Run([uint32]$game.Id, [uint32]${process.pid})
 exit $exitCode
 `;
 
 function stopInputGuard(): void {
+  if (inputGuardHeartbeatTimer) clearInterval(inputGuardHeartbeatTimer);
+  inputGuardHeartbeatTimer = undefined;
   if (inputGuardStopTimer) clearTimeout(inputGuardStopTimer);
   inputGuardStopTimer = undefined;
   const guard = inputGuardProcess;
   inputGuardProcess = undefined;
   inputGuardWindow = undefined;
+  guard?.stdin?.end();
   guard?.kill();
+}
+
+function releaseAllInputSuppression(reason: string): void {
+  setWindowsInputBlocked(false);
+  stopInputGuard();
+  console.info(`[AoE2 automation] INPUT_SAFETY_RELEASE|Reason=${reason}`);
 }
 
 function scheduleInputGuardStop(): void {
@@ -1251,15 +1326,36 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
   inputGuardFramesDiscarded = 0;
   inputGuardLastAcknowledgedAt = 0;
   const encodedScript = Buffer.from(inputGuardScript, "utf16le").toString("base64");
+  const bootstrap = "[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String([Console]::In.ReadLine())) | Invoke-Expression";
   const child = spawn("powershell.exe", [
-    "-NoProfile", "-STA", "-OutputFormat", "Text", "-EncodedCommand", encodedScript
-  ], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    "-NoProfile", "-STA", "-OutputFormat", "Text", "-Command", bootstrap
+  ], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   inputGuardProcess = child;
+  const sendHeartbeat = () => {
+    if (child.killed || child.stdin?.destroyed) return;
+    child.stdin?.write("PING\n", () => undefined);
+  };
+  // Keep the large guard source off the Windows command line. The bootstrap
+  // consumes this first line, then the running guard consumes heartbeat lines.
+  child.stdin?.write(`${encodedScript}\n`, sendHeartbeat);
+  const heartbeatTimer = setInterval(sendHeartbeat, 500);
+  heartbeatTimer.unref();
+  inputGuardHeartbeatTimer = heartbeatTimer;
+  child.once("error", (error) => {
+    clearInterval(heartbeatTimer);
+    if (inputGuardProcess === child) inputGuardProcess = undefined;
+    if (inputGuardHeartbeatTimer === heartbeatTimer) inputGuardHeartbeatTimer = undefined;
+    console.error(`[AoE2 automation] INPUT_GUARD_SPAWN_ERROR|${error.message}`);
+  });
   child.stderr?.on("data", (chunk: Buffer) => {
     console.error(`[AoE2 automation] INPUT_GUARD_ERROR|${chunk.toString().trim()}`);
   });
   child.once("exit", (code) => {
-    if (inputGuardProcess === child) inputGuardProcess = undefined;
+    clearInterval(heartbeatTimer);
+    if (inputGuardProcess === child) {
+      inputGuardProcess = undefined;
+      if (inputGuardHeartbeatTimer === heartbeatTimer) inputGuardHeartbeatTimer = undefined;
+    }
     console.info(`[AoE2 automation] INPUT_GUARD_EXIT|Code=${code ?? "null"}`);
   });
   return new Promise<boolean>((resolve) => {
@@ -1270,6 +1366,7 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
       settled = true;
       resolve(ready);
     };
+    child.once("error", () => finish(false));
     child.once("exit", () => finish(false));
     child.stdout?.on("data", (chunk: Buffer) => {
       stdoutBuffer += chunk.toString();
@@ -1300,7 +1397,6 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
         if (message.includes("GUARD_ERROR")) finish(false);
       });
     });
-    child.once("exit", () => finish(false));
     setTimeout(() => finish(false), 5_000);
   });
 }
@@ -2282,6 +2378,7 @@ export function registerGameHandlers(): void {
   });
 
   app.on("before-quit", (event) => {
+    releaseAllInputSuppression("BeforeQuit");
     stopReplayEndDetection();
     if (!ownedAoe2Pid || !ownedAoe2WindowReady || quittingAfterGameCleanup) {
       if ((ownedAoe2Pid || launchRequested) && !ownedAoe2WindowReady) {
@@ -2298,6 +2395,12 @@ export function registerGameHandlers(): void {
       if (pid) await forceCloseAoe2Process(pid);
     })().finally(() => app.quit());
   });
+  app.on("will-quit", () => releaseAllInputSuppression("WillQuit"));
+  process.once("exit", () => {
+    setWindowsInputBlocked(false);
+    stopInputGuard();
+  });
+  process.on("uncaughtExceptionMonitor", () => releaseAllInputSuppression("UncaughtException"));
 
   ipcMain.handle("game:detect-installation", async () => {
     return detectAoe2Installation();
