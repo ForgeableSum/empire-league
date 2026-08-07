@@ -21,6 +21,7 @@ export interface MatchmakingService {
   acceptMatch(matchId: string): Promise<void>;
   declineMatch(matchId: string): Promise<void>;
   publishLobby(matchId: string, lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void>;
+  reportLobbySetupEstimate(matchId: string, estimateMs: number): Promise<void>;
   reportGuestLobbyJoined(matchId: string): Promise<void>;
   reportHostLobbyReady(matchId: string): Promise<void>;
   reportGuestContentAccepted(matchId: string): Promise<void>;
@@ -75,6 +76,14 @@ export class LocalMatchmakingService implements MatchmakingService {
     await matchmakerTransport.request(`/matches/${encodeURIComponent(matchId)}/lobby`, {
       method: "POST",
       body: { ticketId: this.activeTicketId, lobby }
+    });
+  }
+
+  async reportLobbySetupEstimate(matchId: string, estimateMs: number): Promise<void> {
+    if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
+    await matchmakerTransport.request(`/matches/${encodeURIComponent(matchId)}/setup-estimate`, {
+      method: "POST",
+      body: { ticketId: this.activeTicketId, estimateMs }
     });
   }
 
@@ -291,6 +300,10 @@ export class MockMatchmakingService implements MatchmakingService {
 
   async publishLobby(_matchId: string, _lobby: import("../../shared/contracts/matchmaking").LobbySession): Promise<void> {
     await delay(100);
+  }
+
+  async reportLobbySetupEstimate(_matchId: string, _estimateMs: number): Promise<void> {
+    await delay(50);
   }
 
   async reportGuestLobbyJoined(_matchId: string): Promise<void> {
