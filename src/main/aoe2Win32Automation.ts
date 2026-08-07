@@ -737,26 +737,43 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
   const height = rect.bottom - rect.top;
   if (width <= 0 || height <= 0) return { state: "unknown", detail: "INVALID_CLIENT_SIZE" };
 
-  // Sample a text-free area inside the Ready button. The button is green when
-  // selected and red when unselected in both host and guest lobby layouts.
+  // Sample a small patch inside the Ready button. A single pixel is not safe
+  // here: localized labels (for example German "Ich bin bereit!") can cover
+  // the nominal sample point with beige text/antialiasing even though the
+  // surrounding button is red or green.
   const transform = designTransform(width, height);
-  const { x, y } = transformDesignPoint(1500, designY, transform);
-  const rgb = readWindowRgb(window, x, y);
-  if (!rgb) return { state: "unknown", detail: `PIXEL_READ_FAILED|${describePixelRead(window)}` };
-  const [red, green, blue] = rgb;
-  const state = green > red * 2
+  const sampleDesignPoints = [
+    [1300, designY - 15], [1500, designY - 15], [1640, designY - 15],
+    [1300, designY], [1500, designY], [1640, designY],
+    [1300, designY + 15], [1500, designY + 15], [1640, designY + 15]
+  ] as const;
+  const samples = sampleDesignPoints.map(([designX, sampleDesignY]) => {
+    const point = transformDesignPoint(designX, sampleDesignY, transform);
+    return { ...point, rgb: readWindowRgb(window, point.x, point.y) };
+  });
+  const readableSamples = samples.filter((sample): sample is typeof sample & { rgb: [number, number, number] } => Boolean(sample.rgb));
+  if (readableSamples.length === 0) {
+    return { state: "unknown", detail: `PIXEL_READ_FAILED|${describePixelRead(window)}` };
+  }
+  const redVotes = readableSamples.filter(({ rgb: [red, green] }) => red > green * 2).length;
+  const greenVotes = readableSamples.filter(({ rgb: [red, green] }) => green > red * 2).length;
+  const state = greenVotes > redVotes && greenVotes >= 2
     ? "ready"
-    : red > green * 2
+    : redVotes > greenVotes && redVotes >= 2
       ? "not-ready"
       : "unknown";
+  const center = samples[4];
   return {
     state,
     detail: [
       `State=${state}`,
       `Window=${String(window)}`,
       `Viewport=${formatViewport(transform)}`,
-      `ClientPoint=${x},${y}`,
-      `RGB=${red},${green},${blue}`,
+      `ClientPoint=${center.x},${center.y}`,
+      `RGB=${center.rgb?.join(",") ?? "unavailable"}`,
+      `ReadyVotes=${greenVotes}`,
+      `NotReadyVotes=${redVotes}`,
+      `Samples=${readableSamples.map(({ x, y, rgb }) => `${x},${y}:${rgb.join(".")}`).join(";")}`,
       describePixelRead(window)
     ].join("|")
   };
