@@ -1,6 +1,6 @@
 {
   "name": "empire-league",
-  "version": "0.1.27",
+  "version": "0.1.28",
   "description": "Electron prototype for an AoE2 DE community 1v1 matchmaking client.",
   "author": "Empire League Prototype",
   "main": "dist/main/main.js",

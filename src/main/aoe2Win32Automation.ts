@@ -1,5 +1,6 @@
 import koffi from "koffi";
 import { aoe2PhysicalClickSettleMs } from "../shared/runtimeConfig.js";
+import { describeAoe2WindowCapture, readAoe2CapturedClientPixel } from "./aoe2WindowCapture.js";
 
 const user32 = process.platform === "win32" ? koffi.load("user32.dll") : null;
 const kernel32 = process.platform === "win32" ? koffi.load("kernel32.dll") : null;
@@ -83,6 +84,7 @@ type DesignTransform = {
 
 const aoe2DesignWidth = 3840;
 const aoe2DesignHeight = 2160;
+let lastPixelSource: "WindowCapture" | "GDI" | "Unavailable" = "Unavailable";
 
 export interface NativeInputResult {
   sent: boolean;
@@ -379,6 +381,7 @@ export async function postAoe2DesignClick(
       `ClientRect=${rect.left},${rect.top},${rect.right},${rect.bottom}`,
       `WindowRect=${hasWindowRect ? `${windowRect.left},${windowRect.top},${windowRect.right},${windowRect.bottom}` : "FAILED"}`,
       `TargetRGB=${formatRgb(pixelBefore)},${formatRgb(pixelAfterMove)},${formatRgb(pixelAfterDown)},${formatRgb(pixelAfterUp)}`,
+      describePixelRead(window),
       `Prime=${prime?.dispatched ?? "skipped"}`,
       `PrimeMs=${prime?.elapsedMs ?? 0}`,
       `PrimeResult=${prime?.result ?? "skipped"}`,
@@ -653,19 +656,9 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
   // selected and red when unselected in both host and guest lobby layouts.
   const transform = designTransform(width, height);
   const { x, y } = transformDesignPoint(1500, designY, transform);
-  const dc = GetDC!(window) as NativeHandle;
-  if (!dc) return { state: "unknown", detail: "WINDOW_DC_FAILED" };
-  let color: number;
-  try {
-    color = Number(GetPixel!(dc, x, y));
-  } finally {
-    ReleaseDC!(window, dc);
-  }
-  if (color === 0xffffffff) return { state: "unknown", detail: "PIXEL_READ_FAILED" };
-
-  const red = color & 0xff;
-  const green = (color >> 8) & 0xff;
-  const blue = (color >> 16) & 0xff;
+  const rgb = readWindowRgb(window, x, y);
+  if (!rgb) return { state: "unknown", detail: `PIXEL_READ_FAILED|${describePixelRead(window)}` };
+  const [red, green, blue] = rgb;
   const state = green > red * 2
     ? "ready"
     : red > green * 2
@@ -678,7 +671,8 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
       `Window=${String(window)}`,
       `Viewport=${formatViewport(transform)}`,
       `ClientPoint=${x},${y}`,
-      `RGB=${red},${green},${blue}`
+      `RGB=${red},${green},${blue}`,
+      describePixelRead(window)
     ].join("|")
   };
 }
@@ -697,16 +691,8 @@ export function readAoe2CivilizationPickerState(processId: number): NativeCivili
   const transform = designTransform(width, height);
   const searchPoint = transformDesignPoint(375, 300, transform);
   const filteredTilePoint = transformDesignPoint(1259, 515, transform);
-  const dc = GetDC!(window) as NativeHandle;
-  if (!dc) return { state: "unknown", detail: "WINDOW_DC_FAILED" };
-  let search: [number, number, number] | null;
-  let filteredTile: [number, number, number] | null;
-  try {
-    search = readRgb(dc, searchPoint.x, searchPoint.y);
-    filteredTile = readRgb(dc, filteredTilePoint.x, filteredTilePoint.y);
-  } finally {
-    ReleaseDC!(window, dc);
-  }
+  const search = readWindowRgb(window, searchPoint.x, searchPoint.y);
+  const filteredTile = readWindowRgb(window, filteredTilePoint.x, filteredTilePoint.y);
   if (!search || !filteredTile) return { state: "unknown", detail: "PIXEL_READ_FAILED" };
 
   const searchIsBlack = Math.max(...search) <= 25;
@@ -721,7 +707,8 @@ export function readAoe2CivilizationPickerState(processId: number): NativeCivili
       `Viewport=${formatViewport(transform)}`,
       `SearchRGB=${search.join(",")}`,
       `FilteredTileRGB=${filteredTile.join(",")}`,
-      `FilteredTileChroma=${tileChroma}`
+      `FilteredTileChroma=${tileChroma}`,
+      describePixelRead(window)
     ].join("|")
   };
 }
@@ -740,8 +727,6 @@ export function readAoe2HostSetupState(
   const height = rect.bottom - rect.top;
   if (width <= 0 || height <= 0) return { state: "unknown", detail: "INVALID_CLIENT_SIZE" };
 
-  const dc = GetDC!(window) as NativeHandle;
-  if (!dc) return { state: "unknown", detail: "WINDOW_DC_FAILED" };
   const transform = designTransform(width, height);
   const upperLeftPoint = transformDesignPoint(825, 383, transform);
   const upperCenterPoint = transformDesignPoint(1920, 495, transform);
@@ -756,22 +741,12 @@ export function readAoe2HostSetupState(
     transformDesignPoint(375, 2030, transform),
     transformDesignPoint(1050, 2030, transform)
   ];
-  let upperLeft: [number, number, number] | null;
-  let upperCenter: [number, number, number] | null;
-  let multiplayerPanel: [number, number, number] | null;
-  let lowerButton: [number, number, number] | null;
-  let guestReadyButton: [number, number, number] | null;
-  let mainMenuButtons: Array<[number, number, number] | null>;
-  try {
-    upperLeft = readRgb(dc, upperLeftPoint.x, upperLeftPoint.y);
-    upperCenter = readRgb(dc, upperCenterPoint.x, upperCenterPoint.y);
-    multiplayerPanel = readRgb(dc, multiplayerPanelPoint.x, multiplayerPanelPoint.y);
-    lowerButton = readRgb(dc, lowerButtonPoint.x, lowerButtonPoint.y);
-    guestReadyButton = readRgb(dc, guestReadyButtonPoint.x, guestReadyButtonPoint.y);
-    mainMenuButtons = mainMenuButtonPoints.map((point) => readRgb(dc, point.x, point.y));
-  } finally {
-    ReleaseDC!(window, dc);
-  }
+  const upperLeft = readWindowRgb(window, upperLeftPoint.x, upperLeftPoint.y);
+  const upperCenter = readWindowRgb(window, upperCenterPoint.x, upperCenterPoint.y);
+  const multiplayerPanel = readWindowRgb(window, multiplayerPanelPoint.x, multiplayerPanelPoint.y);
+  const lowerButton = readWindowRgb(window, lowerButtonPoint.x, lowerButtonPoint.y);
+  const guestReadyButton = readWindowRgb(window, guestReadyButtonPoint.x, guestReadyButtonPoint.y);
+  const mainMenuButtons = mainMenuButtonPoints.map((point) => readWindowRgb(window, point.x, point.y));
   if (!upperLeft || !upperCenter || !multiplayerPanel || !lowerButton || !guestReadyButton
     || mainMenuButtons.some((sample) => !sample)) {
     return { state: "unknown", detail: "PIXEL_READ_FAILED" };
@@ -868,7 +843,8 @@ export function readAoe2HostSetupState(
       `LowerButtonRGB=${lowerButton.join(",")}`,
       `GuestReadyButtonRGB=${guestReadyButton.join(",")}`,
       `MainMenuRedMatches=${mainMenuRedMatches}/6`,
-      `MainMenuButtonsRGB=${mainMenuButtons.map((sample) => sample?.join(",") ?? "FAILED").join(";")}`
+      `MainMenuButtonsRGB=${mainMenuButtons.map((sample) => sample?.join(",") ?? "FAILED").join(";")}`,
+      describePixelRead(window)
     ].join("|")
   };
 }
@@ -880,13 +856,30 @@ function readRgb(dc: NativeHandle, x: number, y: number): [number, number, numbe
 }
 
 function readWindowRgb(window: NativeHandle, x: number, y: number): [number, number, number] | null {
+  const windowRect = {} as Rect;
+  const clientOrigin = { x: 0, y: 0 };
+  if (GetWindowRect!(window, windowRect) && ClientToScreen!(window, clientOrigin)) {
+    const captured = readAoe2CapturedClientPixel(String(window), x, y, windowRect, clientOrigin);
+    if (captured) {
+      lastPixelSource = "WindowCapture";
+      return captured.rgb;
+    }
+  }
   const dc = GetDC!(window) as NativeHandle;
-  if (!dc) return null;
+  if (!dc) {
+    lastPixelSource = "Unavailable";
+    return null;
+  }
   try {
+    lastPixelSource = "GDI";
     return readRgb(dc, x, y);
   } finally {
     ReleaseDC!(window, dc);
   }
+}
+
+function describePixelRead(window: NativeHandle): string {
+  return `PixelSource=${lastPixelSource}|${describeAoe2WindowCapture(String(window))}`;
 }
 
 function formatRgb(rgb: [number, number, number] | null): string {

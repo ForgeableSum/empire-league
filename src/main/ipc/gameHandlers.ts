@@ -6,6 +6,7 @@ import { basename, dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
+import { startAoe2WindowCapture, stopAoe2WindowCapture } from "../aoe2WindowCapture.js";
 import { empireLeagueMapsModName, ensureEmpireLeagueMapsEnabled } from "../aoe2MapInstaller.js";
 import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings } from "../../shared/contracts/customLobby.js";
@@ -729,6 +730,7 @@ Write-Output "CURSOR|Released=$released"
 
 function moveAoe2WindowOffscreen(): void {
   if (process.platform !== "win32") return;
+  startAoe2WindowCapture();
   offscreenWindowProcess?.kill();
   if (aoe2WindowMonitor) clearInterval(aoe2WindowMonitor);
   aoe2WindowMonitor = undefined;
@@ -816,6 +818,7 @@ while ($true) {
 
 function restoreAoe2Window(focus = false, maximize = false): void {
   if (process.platform !== "win32") return;
+  stopAoe2WindowCapture();
   offscreenWindowProcess?.kill();
   offscreenWindowProcess = undefined;
   if (aoe2WindowMonitor) clearInterval(aoe2WindowMonitor);
