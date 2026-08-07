@@ -968,7 +968,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             roomSetupMilestone: "Opponent ready. Starting game..."
           }));
           void (async () => {
-            const startConfirmation = waitForAoe2StartSignal();
+            // Arm listeners before input so a fast loading transition cannot
+            // be missed, but do not spend the confirmation timeout on the
+            // pre-click settling period or the main-process verification/retry.
+            const startConfirmation = waitForAoe2StartSignal(20_000, 8_000);
             try {
               log("Guest reported ready; waiting for the Start button state to settle");
               await delayForLobbyInput(lobbySetupTiming.hostReadyToStartMs);
@@ -1457,7 +1460,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((previous) => ({ ...previous, mockConfig: { ...previous.mockConfig, ...patch } }));
   }
 
-  function waitForAoe2StartSignal(timeoutMs = 20_000): Promise<boolean> {
+  function waitForAoe2StartSignal(timeoutMs = 20_000, timeoutDelayMs = 0): Promise<boolean> {
     if (!window.electronApi) return Promise.resolve(false);
     if (gameStartSignalInFlightRef.current) return gameStartSignalInFlightRef.current;
     gameStartSignalInFlightRef.current = new Promise<boolean>((resolve) => {
@@ -1472,7 +1475,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
       const stopLoadingScreenListener = window.electronApi!.onLoadingScreen(() => finish(true));
       const stopReplayStartedListener = window.electronApi!.onReplayStarted(() => finish(true));
-      const timeout = window.setTimeout(() => finish(false), timeoutMs);
+      const timeout = window.setTimeout(() => finish(false), timeoutDelayMs + timeoutMs);
       void window.electronApi!.startLoadingScreenWatch().catch(() => undefined);
       void window.electronApi!.startReplayEndDetection().catch(() => undefined);
     }).finally(() => {

@@ -3163,6 +3163,35 @@ export function registerGameHandlers(): void {
       if (target === "start" && result.sent) startLoadingScreenWatch(process.pid, event.sender);
 
       if (result.detail !== "SKIPPED_ALREADY_READY") await delay(action.settleMs);
+      if (target === "start" && result.sent) {
+        let startState = readAoe2HostSetupState(process.pid);
+        const emitStartVerification = (attempt: number) => {
+          const verificationMessage = `START_VERIFY|Attempt=${attempt}|${startState.detail}`;
+          console.info(`[AoE2 automation] ${verificationMessage}`);
+          if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", verificationMessage);
+        };
+        emitStartVerification(1);
+        // A dispatched window message only proves that Windows accepted it. If
+        // AoE2 is positively still showing the lobby, retry once after the
+        // first settle period. Never retry on an unknown/loading state because
+        // that may already be the transition into the match.
+        if (startState.state === "lobby-room") {
+          result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
+            hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
+            holdMs: "holdMs" in action ? action.holdMs : undefined,
+            synchronous: true
+          });
+          const retryMessage = `START_RETRY|Reason=StillInLobby|${result.detail}`;
+          console.info(`[AoE2 automation] ${retryMessage}`);
+          if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", retryMessage);
+          if (result.sent) {
+            startLoadingScreenWatch(process.pid, event.sender);
+            await delay(action.settleMs);
+            startState = readAoe2HostSetupState(process.pid);
+            emitStartVerification(2);
+          }
+        }
+      }
       if (verifiesReady) {
         readyState = readAoe2ReadyState(process.pid, action.point[1]);
         emitVerification("1", readyState.detail);
