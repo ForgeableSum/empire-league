@@ -3846,12 +3846,36 @@ export function registerGameHandlers(): void {
     if (!game.running || !game.pid || !game.windowReady) {
       return { opened: false };
     }
+    const gameWindow = getAoe2NativeWindowHandle(game.pid);
+    if (!gameWindow) return { opened: false };
+    const captureReady = await waitForFreshAoe2WindowCapture(gameWindow);
+    console.info(
+      `[AoE2 automation] WINDOW_CAPTURE_WAIT|Context=GuestOpenLobby|Ready=${captureReady}`
+      + `|${describeAoe2WindowCapture(gameWindow)}`
+    );
+    if (!captureReady) return { opened: false };
     const inputGuardStarted = await startInputGuard(appWindow);
     console.info(`[AoE2 automation] INPUT_LOCK|Requested=True|Guard=${inputGuardStarted}|Source=GuestOpenLobby`);
-    await shell.openExternal(lobbyId);
-    // Steam hands the URI to AoE2 asynchronously. Give the game time to
-    // navigate to and finish joining the lobby before Ready automation.
-    await delay(lobbySetupTiming.guestJoinMs);
+    // Steam activates AoE2 asynchronously while handing off the lobby URI.
+    // Keep reasserting the non-activating bottom z-order throughout that handoff
+    // so the game cannot escape above the Electron automation cover.
+    const keepGameBehind = setInterval(() => {
+      if (isAoe2NativeWindowForeground(game.pid!)) {
+        keepAoe2NativeWindowBehind(game.pid!);
+        if (appWindow && !appWindow.isDestroyed()) showMainWindowAsGameCover(appWindow);
+      }
+    }, 25);
+    keepGameBehind.unref();
+    try {
+      await shell.openExternal(lobbyId);
+      keepAoe2NativeWindowBehind(game.pid);
+      // Give the game time to navigate to and finish joining the lobby before
+      // Ready automation while preserving the background-only interaction.
+      await delay(lobbySetupTiming.guestJoinMs);
+    } finally {
+      clearInterval(keepGameBehind);
+      keepAoe2NativeWindowBehind(game.pid);
+    }
     return { opened: true };
   });
 }
