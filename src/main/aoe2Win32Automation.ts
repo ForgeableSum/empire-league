@@ -750,7 +750,14 @@ export function readAoe2CivilizationPickerState(processId: number): NativeCivili
   const searchIsBlack = Math.max(...search) <= 25;
   const tileChroma = Math.max(...filteredTile) - Math.min(...filteredTile);
   const hasFilteredTile = Math.max(...filteredTile) >= 60 && tileChroma >= 35;
-  const state = searchIsBlack && hasFilteredTile ? "open" : "closed";
+  // The search field is part of the picker chrome and remains black whether
+  // the filter resolves to an owned civilization, a dimmed DLC civilization,
+  // or no usable result. Do not require a colorful result tile here: locked
+  // civilizations are intentionally dark, and doing so misclassified the
+  // still-open picker as closed after Enter. Callers could then report either
+  // the requested civilization or the Random fallback as selected when AoE2
+  // had not actually returned to the lobby.
+  const state = searchIsBlack ? "open" : "closed";
   return {
     state,
     detail: [
@@ -760,6 +767,7 @@ export function readAoe2CivilizationPickerState(processId: number): NativeCivili
       `SearchRGB=${search.join(",")}`,
       `FilteredTileRGB=${filteredTile.join(",")}`,
       `FilteredTileChroma=${tileChroma}`,
+      `HasFilteredTile=${hasFilteredTile}`,
       describePixelRead(window)
     ].join("|")
   };

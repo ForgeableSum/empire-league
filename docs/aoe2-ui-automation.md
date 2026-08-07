@@ -115,4 +115,15 @@ Message delivery only proves Windows queued the input. Each destructive transiti
   after input. Green is already Ready; red permits one conditional retry;
   an ambiguous state fails safely without notifying the host.
 - Start: matchmaker acknowledgements and replay/game-state detection.
-- Civilization: development screenshot verification; production state verification can be added when a machine-readable lobby-state source is available.
+- Civilization: tile outlines verify selection while the picker is open. The
+  picker's search-control chrome verifies that it actually closed; filtered
+  tile color is diagnostic only because unowned DLC civilizations are dimmed.
+  Replay result agreement does not compare civilization IDs: an unowned DLC
+  selection may legitimately fall back to Random without invalidating the
+  players, outcome, teams, or ranked game settings.
+
+A replay containing `PostGame` is terminal even when its parsed team summary is
+internally inconsistent. That client reports the parse failure and enters result
+verification; the matchmaker waits for another participant's usable replay. It
+only resolves the result as contested when every participant reports an
+unusable replay.

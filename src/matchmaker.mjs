@@ -689,10 +689,16 @@ function replayReportsAgree(left, right) {
     .map((player) => ({
       profileId: player.profileId,
       playerNumber: player.playerNumber,
-      civilizationId: player.civilizationId,
       resigned: player.resigned
     }))
     .sort((a, b) => a.profileId - b.profileId);
+
+  // Civilization choice is not a result-integrity property. A client may
+  // legitimately fall back to Random when it does not own the assigned DLC,
+  // and clients on different automation revisions can therefore enter the
+  // same match with civilizations that differ from the matchmaking roll.
+  // The replay's players, outcome, duration, teams, and ranked settings still
+  // have to agree; civilization metadata is retained for history only.
 
   return JSON.stringify(normalizePlayers(left.players)) === JSON.stringify(normalizePlayers(right.players));
 }
@@ -1933,19 +1939,23 @@ async function handleRequest(request, response) {
       if (match.resultResolved) return send(response, 200, { accepted: true, resolved: true });
       if (typeof body.error === "string" && body.error.trim()) {
         const replayError = body.error.trim().slice(0, 500);
-        if (match.teamSize === 1) {
+        match.resultReportErrors ??= new Map();
+        match.resultReportErrors.set(body.ticketId, replayError);
+        if (match.resultReportErrors.size === matchTickets(match).length) {
+          const reports = Object.fromEntries(
+            [...match.resultReportErrors].map(([ticketId, error]) => [ticketId, { error }])
+          );
           await resolveContestedResult(match, {
-            reason: "a client could not parse its replay",
-            reportingTicketId: body.ticketId,
-            error: replayError
-          }, [body.ticketId], { [body.ticketId]: { error: replayError } });
+            reason: "no client could parse a usable terminal replay",
+            reports
+          }, [...match.resultReportErrors.keys()], reports);
           return send(response, 200, { accepted: true, resolved: true, contested: true });
         }
         console.warn(
-          `[matchmaker] ${match.id}: ignored replay error from ${body.ticketId}:`
-          + ` ${replayError}`
+          `[matchmaker] ${match.id}: replay error from ${body.ticketId};`
+          + ` waiting for another participant's report: ${replayError}`
         );
-        return send(response, 202, { accepted: false, resolved: false });
+        return send(response, 202, { accepted: true, resolved: false });
       }
       try {
         await reconcileReplayPlayerLinks(match, actingTicket, body.replay);
