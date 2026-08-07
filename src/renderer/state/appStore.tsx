@@ -825,6 +825,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }));
           log("Both players accepted");
           if (event.role === "host" && window.electronApi) {
+            void services.matchmaking.reportLobbySetupEstimate(
+              acceptedSession.id,
+              estimateLobbySetupMs(acceptedSession)
+            ).catch((error: unknown) => {
+              log(`Could not synchronize lobby countdown: ${error instanceof Error ? error.message : "unknown error"}`);
+            });
             log("Assigned as host; waiting for AoE2 lobby automation to settle");
             lobbyAutomationRef.current = delayForLobbyInput(lobbySetupTiming.hostLobbyAutomationSettleMs)
               .then(() => {
@@ -839,6 +845,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               });
             void prepareLobby(acceptedSession);
           }
+        }
+        if (event.type === "lobby_setup_estimate") {
+          if (event.matchId !== matchedSessionRef.current?.id) return;
+          setState((previous) => ({ ...previous, roomSetupEstimateMs: event.estimateMs }));
+          log(`Synchronized lobby countdown with host estimate: ${Math.ceil(event.estimateMs / 1000)} seconds`);
         }
         if (event.type === "lobby_ready") {
           startRoomSetupWatchdog();

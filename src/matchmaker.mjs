@@ -1780,6 +1780,23 @@ async function handleRequest(request, response) {
       return send(response, 200, { published: true });
     }
 
+    const setupEstimateMatch = url.pathname.match(/^\/matches\/([^/]+)\/setup-estimate$/);
+    if (request.method === "POST" && setupEstimateMatch) {
+      const match = matches.get(decodeURIComponent(setupEstimateMatch[1]));
+      const body = await readJson(request);
+      const estimateMs = Number(body.estimateMs);
+      if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only the host may publish a lobby setup estimate" });
+      }
+      if (!Number.isFinite(estimateMs) || estimateMs < 10_000 || estimateMs > 180_000) {
+        return send(response, 400, { error: "invalid lobby setup estimate" });
+      }
+      for (const guestTicket of matchGuests(match)) {
+        emit(guestTicket, { type: "lobby_setup_estimate", matchId: match.id, estimateMs: Math.round(estimateMs) });
+      }
+      return send(response, 200, { published: true });
+    }
+
     const guestJoinedMatch = url.pathname.match(/^\/matches\/([^/]+)\/guest-joined$/);
     if (request.method === "POST" && guestJoinedMatch) {
       const match = matches.get(decodeURIComponent(guestJoinedMatch[1]));
