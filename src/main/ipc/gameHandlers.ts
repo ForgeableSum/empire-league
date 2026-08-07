@@ -1378,30 +1378,65 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
     "-NoProfile", "-STA", "-OutputFormat", "Text", "-Command", bootstrap
   ], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
   inputGuardProcess = child;
+  const stdin = child.stdin;
+  let heartbeatTimer: NodeJS.Timeout | undefined;
+  let pipeFailed = false;
+  const stopHeartbeat = () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    if (inputGuardHeartbeatTimer === heartbeatTimer) inputGuardHeartbeatTimer = undefined;
+  };
+  const failGuardPipe = (error: Error) => {
+    if (pipeFailed) return;
+    pipeFailed = true;
+    stopHeartbeat();
+    if (inputGuardProcess === child) inputGuardProcess = undefined;
+    console.error(`[AoE2 automation] INPUT_GUARD_PIPE_ERROR|Code=${"code" in error ? String(error.code) : "unknown"}|${error.message}`);
+    if (!child.killed) child.kill();
+  };
+  // Child-process errors and stdin errors are emitted by different streams.
+  // Without this listener, a closed PowerShell pipe raises an uncaught EPIPE
+  // from the heartbeat timer and terminates Electron's main process.
+  stdin?.on("error", failGuardPipe);
   const sendHeartbeat = () => {
-    if (child.killed || child.stdin?.destroyed) return;
-    child.stdin?.write("PING\n", () => undefined);
+    if (pipeFailed || child.killed || !stdin || stdin.destroyed || stdin.writableEnded || !stdin.writable) {
+      stopHeartbeat();
+      return;
+    }
+    try {
+      stdin.write("PING\n", (error) => {
+        if (error) failGuardPipe(error);
+      });
+    } catch (error) {
+      failGuardPipe(error instanceof Error ? error : new Error(String(error)));
+    }
   };
   // Keep the large guard source off the Windows command line. The bootstrap
   // consumes this first line, then the running guard consumes heartbeat lines.
-  child.stdin?.write(`${encodedScript}\n`, sendHeartbeat);
-  const heartbeatTimer = setInterval(sendHeartbeat, 500);
-  heartbeatTimer.unref();
-  inputGuardHeartbeatTimer = heartbeatTimer;
+  try {
+    stdin?.write(`${encodedScript}\n`, (error) => {
+      if (error) failGuardPipe(error);
+      else sendHeartbeat();
+    });
+  } catch (error) {
+    failGuardPipe(error instanceof Error ? error : new Error(String(error)));
+  }
+  if (!pipeFailed) {
+    heartbeatTimer = setInterval(sendHeartbeat, 500);
+    heartbeatTimer.unref();
+    inputGuardHeartbeatTimer = heartbeatTimer;
+  }
   child.once("error", (error) => {
-    clearInterval(heartbeatTimer);
+    stopHeartbeat();
     if (inputGuardProcess === child) inputGuardProcess = undefined;
-    if (inputGuardHeartbeatTimer === heartbeatTimer) inputGuardHeartbeatTimer = undefined;
     console.error(`[AoE2 automation] INPUT_GUARD_SPAWN_ERROR|${error.message}`);
   });
   child.stderr?.on("data", (chunk: Buffer) => {
     console.error(`[AoE2 automation] INPUT_GUARD_ERROR|${chunk.toString().trim()}`);
   });
   child.once("exit", (code) => {
-    clearInterval(heartbeatTimer);
+    stopHeartbeat();
     if (inputGuardProcess === child) {
       inputGuardProcess = undefined;
-      if (inputGuardHeartbeatTimer === heartbeatTimer) inputGuardHeartbeatTimer = undefined;
     }
     console.info(`[AoE2 automation] INPUT_GUARD_EXIT|Code=${code ?? "null"}`);
   });
@@ -1413,7 +1448,9 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
       settled = true;
       resolve(ready);
     };
+    if (pipeFailed) finish(false);
     child.once("error", () => finish(false));
+    stdin?.once("error", () => finish(false));
     child.once("exit", () => finish(false));
     child.stdout?.on("data", (chunk: Buffer) => {
       stdoutBuffer += chunk.toString();
