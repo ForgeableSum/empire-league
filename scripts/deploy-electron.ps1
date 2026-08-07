@@ -8,20 +8,66 @@ param(
     [string]$UpdateRoot = "/var/www/empire-league/updates/windows",
     [string]$PublicUpdateUrl = "https://empireleague.gg/updates/windows",
     [string]$IdentityFile,
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$VerifyOnly
 )
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $releaseDir = Join-Path $repoRoot "release"
 $remoteStage = "/tmp/empire-league-electron-$Version"
-$sshArgs = @("-o", "StrictHostKeyChecking=accept-new")
+$sshArgs = @(
+    "-o", "StrictHostKeyChecking=accept-new",
+    "-o", "ConnectTimeout=10",
+    "-o", "ConnectionAttempts=1",
+    "-o", "ServerAliveInterval=10",
+    "-o", "ServerAliveCountMax=2",
+    "-o", "NumberOfPasswordPrompts=1"
+)
 if ($IdentityFile) {
     $sshArgs += @("-i", (Resolve-Path -LiteralPath $IdentityFile).Path)
 }
 
+$askPassPath = $null
+$previousAskPass = $env:SSH_ASKPASS
+$previousAskPassRequirement = $env:SSH_ASKPASS_REQUIRE
+$previousDisplay = $env:DISPLAY
+$previousDeployPassword = $env:EMPIRE_DEPLOY_PASSWORD
+$deployPassword = $env:EMPIRE_DEPLOY_PASSWORD
+$secretsFile = Join-Path $repoRoot ".deploy-secrets.ps1"
+if ([string]::IsNullOrWhiteSpace($deployPassword) -and (Test-Path -LiteralPath $secretsFile)) {
+    . $secretsFile
+    $savedPassword = Get-Variable -Name EmpireWebPassword -ValueOnly -ErrorAction SilentlyContinue
+    if ($savedPassword) { $deployPassword = [string]$savedPassword }
+}
+
+if ([string]::IsNullOrWhiteSpace($deployPassword)) {
+    # Never fall back to an invisible interactive password prompt.
+    $sshArgs += @("-o", "BatchMode=yes")
+} else {
+    $askPassPath = Join-Path ([System.IO.Path]::GetTempPath()) ("empire-deploy-askpass-{0}.cmd" -f [guid]::NewGuid())
+    [System.IO.File]::WriteAllLines($askPassPath, @(
+        "@echo off",
+        'powershell.exe -NoLogo -NoProfile -NonInteractive -Command "[Console]::Out.Write($env:EMPIRE_DEPLOY_PASSWORD)"'
+    ), [System.Text.Encoding]::ASCII)
+    $env:EMPIRE_DEPLOY_PASSWORD = $deployPassword
+    $env:SSH_ASKPASS = $askPassPath
+    $env:SSH_ASKPASS_REQUIRE = "force"
+    $env:DISPLAY = "empire-deploy"
+}
+
 Push-Location $repoRoot
 try {
+    Write-Host "Verifying non-interactive production SSH access..."
+    & ssh @sshArgs "${User}@${Server}" "printf DEPLOY_SSH_OK"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Production SSH authentication failed. Build and publish were not started."
+    }
+    if ($VerifyOnly) {
+        Write-Host "Production SSH verification succeeded; no build or publish was performed."
+        return
+    }
+
     if (-not $SkipBuild) {
         Write-Host "Setting package version to $Version..."
         & npm.cmd version $Version --no-git-tag-version --allow-same-version
@@ -77,4 +123,11 @@ test -s '$UpdateRoot/latest.yml'
 }
 finally {
     Pop-Location
+    if ($askPassPath -and (Test-Path -LiteralPath $askPassPath)) {
+        Remove-Item -LiteralPath $askPassPath -Force
+    }
+    if ($null -eq $previousAskPass) { Remove-Item Env:SSH_ASKPASS -ErrorAction SilentlyContinue } else { $env:SSH_ASKPASS = $previousAskPass }
+    if ($null -eq $previousAskPassRequirement) { Remove-Item Env:SSH_ASKPASS_REQUIRE -ErrorAction SilentlyContinue } else { $env:SSH_ASKPASS_REQUIRE = $previousAskPassRequirement }
+    if ($null -eq $previousDisplay) { Remove-Item Env:DISPLAY -ErrorAction SilentlyContinue } else { $env:DISPLAY = $previousDisplay }
+    if ($null -eq $previousDeployPassword) { Remove-Item Env:EMPIRE_DEPLOY_PASSWORD -ErrorAction SilentlyContinue } else { $env:EMPIRE_DEPLOY_PASSWORD = $previousDeployPassword }
 }
