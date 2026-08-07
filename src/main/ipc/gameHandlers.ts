@@ -512,13 +512,24 @@ function clearReplayFocusTimers(): void {
   replayFocusTimers = [];
 }
 
-function focusMainWindowAfterReplay(window: BrowserWindow): void {
+function focusMainWindowAfterReplay(window: BrowserWindow, manageRunningGame = false): void {
   clearReplayFocusTimers();
+  const manageGameWindow = (): void => {
+    if (!manageRunningGame) return;
+    const game = detectAoe2NativeProcess();
+    if (!game.pid || !game.windowReady) return;
+    keepAoe2NativeWindowBehind(game.pid);
+    console.info(`[AoE2 replay] WINDOW_MANAGED|Pid=${game.pid}|Taskbar=False|AltTab=False`);
+  };
+  manageGameWindow();
   focusMainWindow(window);
   for (const delayMs of [250, 1000]) {
     const timer = setTimeout(() => {
       replayFocusTimers = replayFocusTimers.filter((candidate) => candidate !== timer);
-      if (!window.isDestroyed()) focusMainWindow(window);
+      if (!window.isDestroyed()) {
+        manageGameWindow();
+        focusMainWindow(window);
+      }
     }, delayMs);
     timer.unref();
     replayFocusTimers.push(timer);
@@ -554,7 +565,7 @@ function startReturnToMenuWatch(window: BrowserWindow): void {
         : 0;
       if (consecutiveMainMenuReads >= 2) {
         stopReturnToMenuWatch();
-        focusMainWindowAfterReplay(window);
+        focusMainWindowAfterReplay(window, true);
         return;
       }
     }
@@ -627,7 +638,7 @@ async function startReplayEndDetection(
           : 0;
         if (consecutiveMainMenuReads >= 2) {
           recoveredFromMainMenu = true;
-          focusMainWindowAfterReplay(window);
+          focusMainWindowAfterReplay(window, true);
           console.info("[AoE2 replay] RECOVER|Reason=MainMenuFallback");
         }
       }
@@ -2572,6 +2583,11 @@ export function registerGameHandlers(): void {
     if (typeof matchId !== "string" || !matchId.trim()) {
       throw new Error("A match ID is required for the gameplay handoff.");
     }
+    // A new gameplay handoff supersedes every delayed post-game recovery.
+    // Prevent an older timer or menu watcher from pushing AoE2 behind the
+    // shell after its native styles have been restored for play.
+    clearReplayFocusTimers();
+    stopReturnToMenuWatch();
     restoreAoe2Window();
     const game = detectAoe2NativeProcess();
     if (!game.pid) return { focused: false };
