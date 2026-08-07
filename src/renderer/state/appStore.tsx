@@ -988,7 +988,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           void (async () => {
             try {
               log("Guest accepted custom content; waiting for the lobby state to settle");
-              await delayForLobbyInput(lobbySetupTiming.hostReadySettleMs);
+              await delayForLobbyInput(customContentHostRecoveryMs);
               const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready");
               if (!ready.sent) throw new Error(ready.message);
               log("Host Ready verified again after guest content acceptance");
