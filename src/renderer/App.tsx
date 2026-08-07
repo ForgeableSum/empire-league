@@ -216,7 +216,7 @@ export function App() {
         <WindowControls />
         <main className="auth-screen">
           <div className="auth-card">
-            <h1>Empire League</h1>
+            <img className="auth-logo" src={loadingScreenArtwork} alt="Empire League" />
             <p>Sign in with Steam to use matchmaking and keep your rating tied to your account.</p>
             {authError && <div className="auth-error">{authError}</div>}
             <button
