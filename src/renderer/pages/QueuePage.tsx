@@ -278,7 +278,10 @@ export function QueuePage() {
     return () => window.clearTimeout(timer);
   }, [civilization, civilizationBans, civilizationMode, enabledGroups, favoriteMaps, findAnyone, isSearching, preferRandom, selectedMaps, selectedQueue, selectedTeamSizes]);
 
-  if (["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus)) {
+  const gameplayHandoffPending = state.queueStatus === "in_game"
+    && state.roomSetupMilestone === "Switching to game";
+  if (["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus)
+    || gameplayHandoffPending) {
     return <LobbyPreparation />;
   }
   if (state.queueStatus === "in_game" || state.queueStatus === "verifying_result") {

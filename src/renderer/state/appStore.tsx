@@ -1516,7 +1516,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState((previous) => ({
         ...previous,
         queueStatus: "in_game",
-        roomSetupMilestone: null,
+        // Keep the preparation view mounted until the native foreground
+        // handoff settles. The match lifecycle is already in-game, but
+        // rendering ActiveMatch here causes it to flash before AoE2 appears.
+        roomSetupMilestone: "Switching to game",
         transitionInputLocked: false,
         activeMatch: previous.activeMatch ? { ...previous.activeMatch, status: "in_game" } : null
       }));
