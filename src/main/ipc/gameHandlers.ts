@@ -3314,6 +3314,120 @@ export function registerGameHandlers(): void {
       let civilizationX: number;
       let civilizationY: number;
       const usesFilteredPicker = selection in aoe2UiManifest.civilizationGrid.entries;
+      const confirmPoint = aoe2UiManifest.actions.confirmCivilization.point;
+      const selectRandomFallback = async (reason: "TileUnavailable" | "ConfirmationFailed") => {
+        const searchPoint = aoe2UiManifest.civilizationPicker.searchPoint;
+        const fallbackSearchFocus = await postAoe2DesignClick(
+          gameProcess.pid!,
+          searchPoint[0],
+          searchPoint[1],
+          { synchronous: true }
+        );
+        emitLog(
+          `CIV_SELECT|Step=FallbackSearchFocus|Selection=${selection}|Reason=${reason}`
+          + `|${fallbackSearchFocus.detail}`
+        );
+        if (!fallbackSearchFocus.sent) throw new Error("The civilization search could not be focused for fallback.");
+        const fallbackSearchClear = await clearAoe2TextField(gameProcess.pid!);
+        emitLog(
+          `CIV_SELECT|Step=FallbackSearchClear|Selection=${selection}|Reason=${reason}`
+          + `|${fallbackSearchClear.detail}`
+        );
+        if (!fallbackSearchClear.sent) throw new Error("The civilization search could not be cleared for fallback.");
+        await delay(aoe2UiManifest.civilizationPicker.searchSettleMs);
+
+        const [randomX, randomY] = civilizationDesignPoint("Random");
+        let randomSelected = false;
+        for (let attempt = 1; attempt <= 3 && !randomSelected; attempt += 1) {
+          const randomTile = await postAoe2DesignClick(
+            gameProcess.pid!,
+            randomX,
+            randomY,
+            {
+              synchronous: true,
+              hoverMs: aoe2UiManifest.civilizationGrid.hoverMs,
+              holdMs: aoe2UiManifest.civilizationGrid.holdMs
+            }
+          );
+          emitLog(
+            `CIV_SELECT|Step=FallbackRandom|FailedSelection=${selection}|Reason=${reason}|Attempt=${attempt}`
+            + `|DesignPoint=${randomX},${randomY}|${randomTile.detail}`
+          );
+          if (!randomTile.sent) continue;
+          await delay(aoe2UiManifest.civilizationPicker.selectionSettleMs);
+          let randomState = readAoe2CivilizationTileState(gameProcess.pid!, randomX, randomY);
+          emitLog(
+            `CIV_SELECT|Step=FallbackRandomVerify|FailedSelection=${selection}|Reason=${reason}`
+            + `|Attempt=${attempt}|${randomState.detail}`
+          );
+          randomSelected = randomState.state === "selected";
+          if (!randomSelected && randomState.state === "not-selected") {
+            const randomEnter = await sendAoe2Enter(gameProcess.pid!);
+            emitLog(
+              `CIV_SELECT|Step=FallbackRandomEnter|FailedSelection=${selection}|Reason=${reason}`
+              + `|Attempt=${attempt}|${randomEnter.detail}`
+            );
+            if (!randomEnter.sent) continue;
+            await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+            const enterPickerState = readAoe2CivilizationPickerState(gameProcess.pid!);
+            emitLog(
+              `CIV_SELECT|Step=FallbackRandomEnterVerify|FailedSelection=${selection}|Reason=${reason}`
+              + `|Attempt=${attempt}|${enterPickerState.detail}`
+            );
+            if (enterPickerState.state === "closed") {
+              emitLog(`CIV_SELECT|Complete=True|Selection=Random|FallbackFrom=${selection}|Slot=${slot}|Reason=${reason}`);
+              return {
+                sent: true,
+                message: `${selection} could not be selected; Random selected for AoE2 lobby slot ${slot}.`,
+                usedRandomCivilizationFallback: true
+              };
+            }
+            randomState = readAoe2CivilizationTileState(gameProcess.pid!, randomX, randomY);
+            randomSelected = randomState.state === "selected";
+          }
+        }
+        if (!randomSelected) {
+          throw new Error(`Random selection could not be verified after ${selection} failed.`);
+        }
+
+        const randomConfirm = await postAoe2DesignClick(
+          gameProcess.pid!,
+          confirmPoint[0],
+          confirmPoint[1],
+          { synchronous: true }
+        );
+        emitLog(
+          `CIV_SELECT|Step=FallbackConfirmClick|FailedSelection=${selection}|Reason=${reason}`
+          + `|${randomConfirm.detail}`
+        );
+        if (!randomConfirm.sent) throw new Error("Random civilization confirmation could not be clicked.");
+        await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+
+        let fallbackPickerState = readAoe2CivilizationPickerState(gameProcess.pid!);
+        emitLog(
+          `CIV_SELECT|Step=FallbackVerifyReturn|FailedSelection=${selection}|Reason=${reason}`
+          + `|${fallbackPickerState.detail}`
+        );
+        if (fallbackPickerState.state === "open") {
+          const randomEnter = await sendAoe2Enter(gameProcess.pid!);
+          emitLog(
+            `CIV_SELECT|Step=FallbackConfirmEnter|FailedSelection=${selection}|Reason=${reason}`
+            + `|${randomEnter.detail}`
+          );
+          if (!randomEnter.sent) throw new Error("Random civilization confirmation Enter could not be sent.");
+          await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+          fallbackPickerState = readAoe2CivilizationPickerState(gameProcess.pid!);
+        }
+        if (fallbackPickerState.state !== "closed") {
+          throw new Error(`Random selection did not close the civilization picker after ${selection} failed.`);
+        }
+        emitLog(`CIV_SELECT|Complete=True|Selection=Random|FallbackFrom=${selection}|Slot=${slot}|Reason=${reason}`);
+        return {
+          sent: true,
+          message: `${selection} could not be selected; Random selected for AoE2 lobby slot ${slot}.`,
+          usedRandomCivilizationFallback: true
+        };
+      };
       if (usesFilteredPicker) {
         const searchPoint = aoe2UiManifest.civilizationPicker.searchPoint;
         const searchFocus = await postAoe2DesignClick(
@@ -3390,9 +3504,11 @@ export function registerGameHandlers(): void {
           tileSelected = afterEnterTileState.state === "selected";
         }
       }
-      if (!tileSelected) throw new Error(`${selection} could not be visibly selected after 3 attempts.`);
+      if (!tileSelected) {
+        if (usesFilteredPicker) return await selectRandomFallback("TileUnavailable");
+        throw new Error(`${selection} could not be visibly selected after 3 attempts.`);
+      }
 
-      const confirmPoint = aoe2UiManifest.actions.confirmCivilization.point;
       const confirmClick = await postAoe2DesignClick(
         gameProcess.pid,
         confirmPoint[0],
@@ -3432,82 +3548,7 @@ export function registerGameHandlers(): void {
           return { sent: true, message: `${selection} selected for AoE2 lobby slot ${slot}.` };
         }
         if (enterPickerState?.state === "open" && usesFilteredPicker) {
-          const searchPoint = aoe2UiManifest.civilizationPicker.searchPoint;
-          const fallbackSearchFocus = await postAoe2DesignClick(
-            gameProcess.pid,
-            searchPoint[0],
-            searchPoint[1],
-            { synchronous: true }
-          );
-          emitLog(`CIV_SELECT|Step=FallbackSearchFocus|Selection=${selection}|${fallbackSearchFocus.detail}`);
-          if (!fallbackSearchFocus.sent) throw new Error("The civilization search could not be focused for fallback.");
-          const fallbackSearchClear = await clearAoe2TextField(gameProcess.pid);
-          emitLog(`CIV_SELECT|Step=FallbackSearchClear|Selection=${selection}|${fallbackSearchClear.detail}`);
-          if (!fallbackSearchClear.sent) throw new Error("The civilization search could not be cleared for fallback.");
-          await delay(aoe2UiManifest.civilizationPicker.searchSettleMs);
-
-          const [randomX, randomY] = civilizationDesignPoint("Random");
-          let randomSelected = false;
-          for (let attempt = 1; attempt <= 3 && !randomSelected; attempt += 1) {
-            const randomTile = await postAoe2DesignClick(
-              gameProcess.pid,
-              randomX,
-              randomY,
-              {
-                synchronous: true,
-                hoverMs: aoe2UiManifest.civilizationGrid.hoverMs,
-                holdMs: aoe2UiManifest.civilizationGrid.holdMs
-              }
-            );
-            emitLog(
-              `CIV_SELECT|Step=FallbackRandom|FailedSelection=${selection}|Attempt=${attempt}`
-              + `|DesignPoint=${randomX},${randomY}|${randomTile.detail}`
-            );
-            if (!randomTile.sent) continue;
-            await delay(aoe2UiManifest.civilizationPicker.selectionSettleMs);
-            const randomState = readAoe2CivilizationTileState(gameProcess.pid, randomX, randomY);
-            emitLog(
-              `CIV_SELECT|Step=FallbackRandomVerify|FailedSelection=${selection}`
-              + `|Attempt=${attempt}|${randomState.detail}`
-            );
-            randomSelected = randomState.state === "selected";
-          }
-          if (!randomSelected) {
-            throw new Error(`Random selection could not be verified after ${selection} failed.`);
-          }
-
-          const randomConfirm = await postAoe2DesignClick(
-            gameProcess.pid,
-            confirmPoint[0],
-            confirmPoint[1],
-            { synchronous: true }
-          );
-          emitLog(`CIV_SELECT|Step=FallbackConfirmClick|FailedSelection=${selection}|${randomConfirm.detail}`);
-          if (!randomConfirm.sent) throw new Error("Random civilization confirmation could not be clicked.");
-          await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
-
-          let fallbackPickerState = readAoe2CivilizationPickerState(gameProcess.pid);
-          emitLog(
-            `CIV_SELECT|Step=FallbackVerifyReturn|FailedSelection=${selection}|${fallbackPickerState.detail}`
-          );
-          if (fallbackPickerState.state === "open") {
-            const randomEnter = await sendAoe2Enter(gameProcess.pid);
-            emitLog(`CIV_SELECT|Step=FallbackConfirmEnter|FailedSelection=${selection}|${randomEnter.detail}`);
-            if (!randomEnter.sent) throw new Error("Random civilization confirmation Enter could not be sent.");
-            await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
-            fallbackPickerState = readAoe2CivilizationPickerState(gameProcess.pid);
-            emitLog(
-              `CIV_SELECT|Step=FallbackVerifyEnter|FailedSelection=${selection}|${fallbackPickerState.detail}`
-            );
-          }
-          if (fallbackPickerState.state === "closed") {
-            emitLog(`CIV_SELECT|Complete=True|Selection=Random|FallbackFrom=${selection}|Slot=${slot}`);
-            return {
-              sent: true,
-              message: `${selection} could not be confirmed; Random selected for AoE2 lobby slot ${slot}.`,
-              usedRandomCivilizationFallback: true
-            };
-          }
+          return await selectRandomFallback("ConfirmationFailed");
         }
         throw new Error(
           pickerState?.state === "unknown"
