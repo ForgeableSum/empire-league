@@ -1781,9 +1781,39 @@
 }
 
 .civilization-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  gap: 10px 24px;
+}
+
+.civilization-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.civilization-checkbox-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.civilization-checkbox-row input {
+  width: 18px;
+  min-height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.civilization-checkbox-row input:disabled,
+.civilization-checkbox-row input:disabled + span {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .civilization-mode {
@@ -4455,8 +4485,7 @@
     position: static;
   }
 
-  .civilization-modes,
-  .civilization-options {
+  .civilization-modes {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

@@ -1,5 +1,5 @@
-import { Clock, Copy, Search, Settings, Shuffle, Swords, Users, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CircleHelp, Clock, Copy, Search, Settings, Shuffle, Swords, Users, XCircle } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import type { CivilizationMode, MapGroupId } from "../../shared/contracts/matchmaking";
 import { classicCivilizations, civilizations } from "../../shared/civilizations";
 import { mapCatalog } from "../../shared/mapCatalog";
@@ -555,37 +555,37 @@ export function QueuePage() {
                     );
                   })}
                 </div>
-                  {selectedQueue.ranked && (
-                    <>
-                      <span className="eyebrow civilization-options-heading">Options</span>
-                      <div className="civilization-options">
-                      <label className={classicMode ? "civilization-toggle-option active" : "civilization-toggle-option"}>
-                        <input
-                          type="checkbox"
-                          checked={classicMode}
-                          disabled={preferencesLocked}
-                          onChange={(event) => setClassicModePreference(event.target.checked)}
-                        />
-                        <span>
-                          <strong>Classic Mode</strong>
-                          <small>Only civilizations through The Mountain Royals, excluding Chinese, Incas, Koreans, and Vietnamese. Also matches classic civ picks, Mirror, and compatible Random searches.</small>
-                        </span>
-                      </label>
-                      <label className={preferRandom ? "civilization-toggle-option active" : "civilization-toggle-option"}>
-                        <input
-                          type="checkbox"
-                          checked={preferRandom}
-                          disabled={preferencesLocked}
-                          onChange={(event) => setPreferRandomPreference(event.target.checked)}
-                        />
-                        <span>
-                          <strong>Prefer Random</strong>
-                          <small>If your opponent selects Random, you’ll also receive a random civilization. Otherwise, you’ll play your selected civilization.</small>
-                        </span>
-                      </label>
+                {selectedQueue.ranked && (
+                  <>
+                    <span className="eyebrow civilization-options-heading">Options</span>
+                    <div className="civilization-options">
+                      <div className="civilization-checkbox-row">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={classicMode}
+                            disabled={preferencesLocked}
+                            onChange={(event) => setClassicModePreference(event.target.checked)}
+                          />
+                          <span>Classic Mode</span>
+                        </label>
+                        <HelpTooltip text="Only civilizations through The Mountain Royals, excluding Chinese, Incas, Koreans, and Vietnamese. Also matches classic civ picks, Mirror, and compatible Random searches." />
                       </div>
-                    </>
-                  )}
+                      <div className="civilization-checkbox-row">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={preferRandom}
+                            disabled={preferencesLocked}
+                            onChange={(event) => setPreferRandomPreference(event.target.checked)}
+                          />
+                          <span>Prefer Random</span>
+                        </label>
+                        <HelpTooltip text="If your opponent selects Random, you'll also receive a random civilization. Otherwise, you'll play your selected civilization." />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="preference-section map-preference-section" id="map-pool">
                 <div className="preference-heading">
@@ -730,6 +730,26 @@ function CivilizationBanList({ title, selected, onToggle }: {
 
 function formatTime(seconds: number): string {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function HelpTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const tooltipId = useId();
+  return (
+    <span className="help-tooltip" data-open={open || undefined}>
+      <button
+        type="button"
+        className="help-tooltip-trigger"
+        aria-label="More information"
+        aria-describedby={tooltipId}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <CircleHelp size={16} aria-hidden="true" />
+      </button>
+      <span id={tooltipId} className="help-tooltip-content" role="tooltip">{text}</span>
+    </span>
+  );
 }
 
 function loadMapPreferences(): PersistedMapPreferences {
