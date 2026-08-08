@@ -10,15 +10,16 @@ export const civilizations = [
   "Spanish", "Tatars", "Teutons", "Tupi", "Turks", "Vietnamese", "Vikings", "Wei", "Wu"
 ] as const;
 
-/** Ranked civilizations released after The Mountain Royals. */
-export const postMountainRoyalsCivilizations = [
-  "Jurchens", "Khitans", "Mapuche", "Muisca", "Shu", "Tupi", "Wei", "Wu"
+/** Civilizations excluded from Empire League Classic Mode. */
+export const nonClassicCivilizations = [
+  "Chinese", "Jurchens", "Khitans", "Koreans", "Mapuche", "Muisca", "Shu", "Tupi",
+  "Vietnamese", "Wei", "Wu"
 ] as const;
 
-/** Civilizations available through The Mountain Royals. */
+/** The Empire League Classic Mode civilization pool. */
 export const classicCivilizations = civilizations.filter(
-  (civilization) => !postMountainRoyalsCivilizations.includes(
-    civilization as typeof postMountainRoyalsCivilizations[number]
+  (civilization) => !nonClassicCivilizations.includes(
+    civilization as typeof nonClassicCivilizations[number]
   )
 );
 

@@ -7,7 +7,7 @@ import {
   civilizations,
   effectiveCivilizationPreference,
   normalizeCivilizationPreference,
-  postMountainRoyalsCivilizations,
+  nonClassicCivilizations,
   rollCivilizationPreference
 } from "./civilization-roll.mjs";
 
@@ -16,7 +16,7 @@ test("classic matchmaking remains compatible with guaranteed classic choices", (
   assert.equal(classicQueuesAreCompatible(classic, { civilizationPreference: { mode: "pick", civilization: "Georgians" } }), true);
   assert.equal(classicQueuesAreCompatible(classic, { civilizationPreference: { mode: "mirror" } }), true);
   assert.equal(classicQueuesAreCompatible(classic, { civilizationPreference: { mode: "random" } }), false);
-  for (const civilization of postMountainRoyalsCivilizations) {
+  for (const civilization of nonClassicCivilizations) {
     assert.equal(
       classicQueuesAreCompatible(classic, { civilizationPreference: { mode: "pick", civilization } }),
       false,
@@ -25,7 +25,7 @@ test("classic matchmaking remains compatible with guaranteed classic choices", (
   }
 });
 
-test("classic random rolls exclude post-Mountain Royals civilizations", () => {
+test("classic random rolls use only the configured Classic Mode pool", () => {
   const rolled = rollCivilizationPreference(
     { mode: "random" },
     "land-open",
@@ -34,12 +34,13 @@ test("classic random rolls exclude post-Mountain Royals civilizations", () => {
     classicCivilizations
   );
   assert.equal(rolled.civilization, "Vikings");
-  assert.deepEqual(postMountainRoyalsCivilizations, [
-    "Jurchens", "Khitans", "Mapuche", "Muisca", "Shu", "Tupi", "Wei", "Wu"
+  assert.deepEqual(nonClassicCivilizations, [
+    "Chinese", "Jurchens", "Khitans", "Koreans", "Mapuche", "Muisca", "Shu", "Tupi",
+    "Vietnamese", "Wei", "Wu"
   ]);
   assert.equal(civilizations.length, 53);
-  assert.equal(classicCivilizations.length, 45);
-  assert.equal(postMountainRoyalsCivilizations.every((civilization) =>
+  assert.equal(classicCivilizations.length, 42);
+  assert.equal(nonClassicCivilizations.every((civilization) =>
     civilizations.includes(civilization) && !classicCivilizations.includes(civilization)), true);
 });
 

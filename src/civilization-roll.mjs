@@ -8,13 +8,14 @@ export const civilizations = [
   "Spanish", "Tatars", "Teutons", "Tupi", "Turks", "Vietnamese", "Vikings", "Wei", "Wu"
 ];
 
-export const postMountainRoyalsCivilizations = [
-  "Jurchens", "Khitans", "Mapuche", "Muisca", "Shu", "Tupi", "Wei", "Wu"
+export const nonClassicCivilizations = [
+  "Chinese", "Jurchens", "Khitans", "Koreans", "Mapuche", "Muisca", "Shu", "Tupi",
+  "Vietnamese", "Wei", "Wu"
 ];
 
-// Every ranked civilization available through The Mountain Royals.
+// The Empire League Classic Mode civilization pool.
 export const classicCivilizations = civilizations.filter(
-  (civilization) => !postMountainRoyalsCivilizations.includes(civilization)
+  (civilization) => !nonClassicCivilizations.includes(civilization)
 );
 
 export function isClassicCivilization(civilization) {
