@@ -297,6 +297,16 @@
     ],
     "teamBonus": "Universities work +80% faster"
   },
+  "Mapuche": {
+    "bonuses": [
+      "Foragers drop off +25% food",
+      "Settlements can train Spearman-line and Skirmishers",
+      "Infantry, Slingers and Skirmishers +5/10/15 HP in Feudal/Castle/Imperial Age",
+      "Mounted Units generate +3 gold when defeating military units",
+      "Enemy Castles are revealed on the map"
+    ],
+    "teamBonus": "Spearman-line and Skirmishers +2 line of sight"
+  },
   "Mayans": {
     "bonuses": [
       "Start with +1 Villager, but -50 food",
@@ -312,6 +322,16 @@
       "Scout Cavalry-line and Steppe Lancers +20/30% HP in Castle/Imperial Age"
     ],
     "teamBonus": "Scout Cavalry-line +2 line of sight"
+  },
+  "Muisca": {
+    "bonuses": [
+      "Advancing to the next Age costs -50% gold",
+      "Settlements cost -33% and heal nearby units",
+      "Champi Warriors and Archery Range Units +1/2/3 melee armor in Feudal/Castle/Imperial Age",
+      "Monks regain faith +50% faster",
+      "Caravan, Guilds free"
+    ],
+    "teamBonus": "Natural gold sources last +15% longer"
   },
   "Persians": {
     "bonuses": [
@@ -413,6 +433,15 @@
       "Murder Holes, Herbal Medicine free"
     ],
     "teamBonus": "Units more resistant to conversion"
+  },
+  "Tupi": {
+    "bonuses": [
+      "Start with +25 of each resource",
+      "Villagers can garrison in Settlements",
+      "Fallen units return 15% of their cost",
+      "Archery Range and Barracks upgrades cost -50% food"
+    ],
+    "teamBonus": "Towers and Castles provide +10 population space"
   },
   "Turks": {
     "bonuses": [

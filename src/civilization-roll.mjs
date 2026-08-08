@@ -3,15 +3,18 @@ export const civilizations = [
   "Burgundians", "Burmese", "Byzantines", "Celts", "Chinese", "Cumans", "Dravidians",
   "Ethiopians", "Franks", "Georgians", "Goths", "Gurjaras", "Hindustanis", "Huns",
   "Incas", "Italians", "Japanese", "Jurchens", "Khitans", "Khmer", "Koreans",
-  "Lithuanians", "Magyars", "Malay", "Malians", "Mayans", "Mongols", "Persians",
-  "Poles", "Portuguese", "Romans", "Saracens", "Sicilians", "Slavs", "Spanish",
-  "Tatars", "Teutons", "Turks", "Vietnamese", "Vikings"
+  "Lithuanians", "Magyars", "Malay", "Malians", "Mapuche", "Mayans", "Mongols", "Muisca",
+  "Persians", "Poles", "Portuguese", "Romans", "Saracens", "Shu", "Sicilians", "Slavs",
+  "Spanish", "Tatars", "Teutons", "Tupi", "Turks", "Vietnamese", "Vikings", "Wei", "Wu"
 ];
 
-// Every civilization available through The Mountain Royals. The Three Kingdoms
-// civilizations and later releases are intentionally outside Classic Mode.
+export const postMountainRoyalsCivilizations = [
+  "Jurchens", "Khitans", "Mapuche", "Muisca", "Shu", "Tupi", "Wei", "Wu"
+];
+
+// Every ranked civilization available through The Mountain Royals.
 export const classicCivilizations = civilizations.filter(
-  (civilization) => civilization !== "Jurchens" && civilization !== "Khitans"
+  (civilization) => !postMountainRoyalsCivilizations.includes(civilization)
 );
 
 export function isClassicCivilization(civilization) {
@@ -31,7 +34,7 @@ export function classicQueuesAreCompatible(firstQueue, secondQueue) {
 const civilizationNamesById = new Map([
   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
   21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
-  39, 40, 41, 42, 43, 44, 45, 46, 47
+  39, 40, 41, 42, 43, 44, 45, 49, 50, 51, 52, 53, 57, 58, 59
 ].map((id, index) => [id, [
   "Britons", "Franks", "Goths", "Teutons", "Japanese", "Chinese", "Byzantines",
   "Persians", "Saracens", "Turks", "Vikings", "Mongols", "Celts", "Spanish",
@@ -39,7 +42,8 @@ const civilizationNamesById = new Map([
   "Magyars", "Slavs", "Portuguese", "Ethiopians", "Malians", "Berbers", "Khmer",
   "Malay", "Burmese", "Vietnamese", "Bulgarians", "Tatars", "Cumans",
   "Lithuanians", "Burgundians", "Sicilians", "Poles", "Bohemians", "Dravidians",
-  "Bengalis", "Gurjaras", "Romans", "Armenians", "Georgians", "Jurchens", "Khitans"
+  "Bengalis", "Gurjaras", "Romans", "Armenians", "Georgians", "Shu", "Wu", "Wei",
+  "Jurchens", "Khitans", "Muisca", "Mapuche", "Tupi"
 ][index]]));
 
 export function civilizationNameFromId(id) {

@@ -5,14 +5,21 @@ export const civilizations = [
   "Burgundians", "Burmese", "Byzantines", "Celts", "Chinese", "Cumans", "Dravidians",
   "Ethiopians", "Franks", "Georgians", "Goths", "Gurjaras", "Hindustanis", "Huns",
   "Incas", "Italians", "Japanese", "Jurchens", "Khitans", "Khmer", "Koreans",
-  "Lithuanians", "Magyars", "Malay", "Malians", "Mayans", "Mongols", "Persians",
-  "Poles", "Portuguese", "Romans", "Saracens", "Sicilians", "Slavs", "Spanish",
-  "Tatars", "Teutons", "Turks", "Vietnamese", "Vikings"
+  "Lithuanians", "Magyars", "Malay", "Malians", "Mapuche", "Mayans", "Mongols", "Muisca",
+  "Persians", "Poles", "Portuguese", "Romans", "Saracens", "Shu", "Sicilians", "Slavs",
+  "Spanish", "Tatars", "Teutons", "Tupi", "Turks", "Vietnamese", "Vikings", "Wei", "Wu"
 ] as const;
 
-/** Civilizations available through The Mountain Royals (before The Three Kingdoms). */
+/** Ranked civilizations released after The Mountain Royals. */
+export const postMountainRoyalsCivilizations = [
+  "Jurchens", "Khitans", "Mapuche", "Muisca", "Shu", "Tupi", "Wei", "Wu"
+] as const;
+
+/** Civilizations available through The Mountain Royals. */
 export const classicCivilizations = civilizations.filter(
-  (civilization) => civilization !== "Jurchens" && civilization !== "Khitans"
+  (civilization) => !postMountainRoyalsCivilizations.includes(
+    civilization as typeof postMountainRoyalsCivilizations[number]
+  )
 );
 
 export function rollCivilization(
