@@ -568,7 +568,7 @@ export function QueuePage() {
                         />
                         <span>
                           <strong>Classic Mode</strong>
-                          <small>Only civilizations through The Mountain Royals, excluding Chinese, Incas, Koreans, and Vietnamese. Still matches compatible classic picks or Mirror.</small>
+                          <small>Only civilizations through The Mountain Royals, excluding Chinese, Incas, Koreans, and Vietnamese. Also matches classic civ picks, Mirror, and compatible Random searches.</small>
                         </span>
                       </label>
                       <label className={preferRandom ? "civilization-toggle-option active" : "civilization-toggle-option"}>
