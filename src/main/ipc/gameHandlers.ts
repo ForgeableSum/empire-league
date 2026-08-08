@@ -51,6 +51,7 @@ import {
   focusAoe2NativeWindow,
   focusAoe2ForGameplayDetailed,
   getAoe2NativeWindowHandle,
+  releaseAoe2GameplayTopmost,
   setWindowsInputBlocked,
   isAoe2NativeWindowForeground,
   keepAoe2NativeWindowBehind,
@@ -2729,6 +2730,7 @@ export function registerGameHandlers(): void {
     const startedAt = Date.now();
     let focused = false;
     let lastPid: number | undefined;
+    let raisedPid: number | undefined;
     try {
       // A new gameplay handoff supersedes every delayed post-game recovery.
       // Do not stop replay detection: result monitoring is independent from
@@ -2743,7 +2745,7 @@ export function registerGameHandlers(): void {
         const game = detectAoe2NativeProcess();
         lastPid = game.pid;
         const native = game.pid
-          ? focusAoe2ForGameplayDetailed(game.pid)
+          ? focusAoe2ForGameplayDetailed(game.pid, false)
           : {
               focused: false,
               windowFound: false,
@@ -2752,6 +2754,7 @@ export function registerGameHandlers(): void {
               foregroundVerified: false,
               releasedTopmost: false
             };
+        if (game.pid && native.raised) raisedPid = game.pid;
         focused = native.focused;
         console.info(
           `[AoE2 automation] GAMEPLAY_HANDOFF|Match=${matchId}|Attempt=${index + 1}`
@@ -2769,9 +2772,18 @@ export function registerGameHandlers(): void {
           ...native
         });
       }
-      // Even after a foreground-policy rejection, remove the Electron cover so
-      // the running game is visible and the user can switch to it manually.
-      hideMainWindowGameCover();
+      if (raisedPid) {
+        // AoE2 remains topmost while Electron is removed underneath it, so
+        // neither the desktop nor another application is exposed between the
+        // cover and gameplay. Release topmost only after that atomic handoff.
+        hideMainWindowGameCover();
+        const releasedTopmost = releaseAoe2GameplayTopmost(raisedPid);
+        focused = focused && releasedTopmost;
+        console.info(
+          `[AoE2 automation] GAMEPLAY_HANDOFF_RELEASE|Match=${matchId}`
+          + `|Pid=${raisedPid}|ReleasedTopmost=${releasedTopmost}`
+        );
+      }
       return { focused };
     } catch (error) {
       await appendGameplayHandoffLog({
@@ -2781,7 +2793,10 @@ export function registerGameHandlers(): void {
         elapsedMs: Date.now() - startedAt,
         error: error instanceof Error ? error.stack ?? error.message : String(error)
       });
-      hideMainWindowGameCover();
+      if (raisedPid) {
+        hideMainWindowGameCover();
+        releaseAoe2GameplayTopmost(raisedPid);
+      }
       return { focused: false };
     } finally {
       releaseAllInputSuppression("GameplayHandoff");

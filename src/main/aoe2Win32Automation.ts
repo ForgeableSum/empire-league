@@ -217,7 +217,10 @@ export function focusAoe2ForGameplay(processId: number): boolean {
   return focusAoe2ForGameplayDetailed(processId).focused;
 }
 
-export function focusAoe2ForGameplayDetailed(processId: number): NativeGameplayFocusResult {
+export function focusAoe2ForGameplayDetailed(
+  processId: number,
+  releaseTopmost = true
+): NativeGameplayFocusResult {
   ensureWindowsBindings();
   const window = findRecoverableProcessWindow(processId);
   if (!window) {
@@ -240,9 +243,11 @@ export function focusAoe2ForGameplayDetailed(processId: number): NativeGameplayF
   const foregroundRequested = Boolean(SetForegroundWindow!(window));
   Sleep!(50);
   const foregroundVerified = sameHandle(GetForegroundWindow!(), window);
-  const releasedTopmost = Boolean(SetWindowPos!(window, -2n, 0, 0, 0, 0, 0x0003)); // HWND_NOTOPMOST
+  const releasedTopmost = releaseTopmost
+    ? Boolean(SetWindowPos!(window, -2n, 0, 0, 0, 0, 0x0003)) // HWND_NOTOPMOST
+    : false;
   return {
-    focused: raised && foregroundVerified && releasedTopmost,
+    focused: raised && foregroundVerified && (!releaseTopmost || releasedTopmost),
     windowFound: true,
     raised,
     foregroundRequested,
@@ -250,6 +255,12 @@ export function focusAoe2ForGameplayDetailed(processId: number): NativeGameplayF
     releasedTopmost,
     windowHandle: String(window)
   };
+}
+
+export function releaseAoe2GameplayTopmost(processId: number): boolean {
+  ensureWindowsBindings();
+  const window = findRecoverableProcessWindow(processId);
+  return Boolean(window) && Boolean(SetWindowPos!(window, -2n, 0, 0, 0, 0, 0x0003)); // HWND_NOTOPMOST
 }
 
 export function isAoe2NativeWindowForeground(processId: number): boolean {
