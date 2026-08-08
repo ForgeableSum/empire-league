@@ -8,6 +8,26 @@ export const civilizations = [
   "Tatars", "Teutons", "Turks", "Vietnamese", "Vikings"
 ];
 
+// Every civilization available through The Mountain Royals. The Three Kingdoms
+// civilizations and later releases are intentionally outside Classic Mode.
+export const classicCivilizations = civilizations.filter(
+  (civilization) => civilization !== "Jurchens" && civilization !== "Khitans"
+);
+
+export function isClassicCivilization(civilization) {
+  return classicCivilizations.includes(civilization);
+}
+
+export function classicQueuesAreCompatible(firstQueue, secondQueue) {
+  if (firstQueue?.classicMode !== true && secondQueue?.classicMode !== true) return true;
+  return [firstQueue, secondQueue].every((queue) => {
+    if (queue?.classicMode === true) return true;
+    const preference = queue?.civilizationPreference;
+    return preference?.mode === "mirror"
+      || (preference?.mode === "pick" && isClassicCivilization(preference.civilization));
+  });
+}
+
 const civilizationNamesById = new Map([
   1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
   21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38,
@@ -47,14 +67,15 @@ export function rollCivilizationPreference(
   preference,
   mapGroupId,
   additionalBans = [],
-  random = Math.random
+  random = Math.random,
+  allowedCivilizations = civilizations
 ) {
   if (preference?.mode !== "random") return preference;
   const banned = new Set([
     ...civilizationBansForMapGroup(preference, mapGroupId),
     ...(Array.isArray(additionalBans) ? additionalBans : [])
   ]);
-  const available = civilizations.filter((civilization) => !banned.has(civilization));
+  const available = allowedCivilizations.filter((civilization) => !banned.has(civilization));
   return {
     mode: "pick",
     civilization: available[Math.floor(random() * available.length)]

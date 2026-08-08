@@ -133,6 +133,7 @@ export interface QueueDefinition {
   mapCatalogVersion?: number;
   favoriteMapId?: string;
   civilizationPreference?: CivilizationPreference;
+  classicMode?: boolean;
   ranked: boolean;
   estimatedWaitSeconds: number;
   playersSearching: number;

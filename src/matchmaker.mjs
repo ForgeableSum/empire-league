@@ -26,6 +26,8 @@ import { replaySettingsAgree, validateRankedReplaySettings } from "./replayRules
 import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
 import { normalizeQueueMapPreferences, publicMapCatalog, selectMapForMatch } from "./map-catalog.mjs";
 import {
+  classicCivilizations,
+  classicQueuesAreCompatible,
   civilizationBansForMapGroup,
   effectiveCivilizationPreference,
   normalizeCivilizationPreference,
@@ -962,6 +964,7 @@ async function tryMatch(ticket) {
       && ratingsAreInRange(ticket, candidate)
       && allowsOpponentRating(ticket, candidate)
       && allowsOpponentRating(candidate, ticket)
+      && classicQueuesAreCompatible(candidate.queue, ticket.queue)
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
   ).sort((left, right) => compareOpponentPreference(ticket, left, right));
   const possibleSizes = ticket.queue.format === "team"
@@ -975,6 +978,7 @@ async function tryMatch(ticket) {
     for (const candidate of candidates) {
       if (ticket.queue.format === "team" && !candidate.queue.teamSizes?.includes(size)) continue;
       if (!compatible.every((participant) => ratingsAreInRange(participant, candidate))) continue;
+      if (!compatible.every((participant) => classicQueuesAreCompatible(participant.queue, candidate.queue))) continue;
       compatible.push(candidate);
       if (compatible.length === required) break;
     }
@@ -1014,6 +1018,7 @@ async function tryMatch(ticket) {
   }));
   const sharedCivilizationBans = participants.flatMap((participant) =>
     civilizationBansForMapGroup(effectivePreferences.get(participant.id), mapGroupId));
+  const classicMatch = participants.some((participant) => participant.queue.classicMode === true);
   const [teamOne, teamTwo] = balancedTeamAssignments(participants, host, teamSize);
   const ordered = [...teamOne, ...teamTwo];
   const assignments = new Map(ordered.map((participant, index) => [
@@ -1042,7 +1047,13 @@ async function tryMatch(ticket) {
     mapGroupId,
     civilizationPreferences: new Map(participants.map((participant) => [
       participant.id,
-      rollCivilizationPreference(effectivePreferences.get(participant.id), mapGroupId, sharedCivilizationBans)
+      rollCivilizationPreference(
+        effectivePreferences.get(participant.id),
+        mapGroupId,
+        sharedCivilizationBans,
+        Math.random,
+        classicMatch ? classicCivilizations : undefined
+      )
     ]))
   };
   for (const participant of participants) {
@@ -1607,6 +1618,7 @@ async function handleRequest(request, response) {
       let ignoredMapIds = [];
       try {
         body.queue = normalizeQueueMapPreferences(body.queue);
+        body.queue.classicMode = body.queue.ranked === true && body.queue.classicMode === true;
         ignoredMapIds = body.queue.ignoredMapIds;
         delete body.queue.ignoredMapIds;
         body.queue.civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
@@ -1681,6 +1693,7 @@ async function handleRequest(request, response) {
       }
       try {
         body.queue = normalizeQueueMapPreferences(body.queue);
+        body.queue.classicMode = body.queue.ranked === true && body.queue.classicMode === true;
         delete body.queue.ignoredMapIds;
         body.queue.civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
       } catch (error) {

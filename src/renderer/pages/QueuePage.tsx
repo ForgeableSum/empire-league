@@ -1,7 +1,7 @@
 import { Clock, Copy, Search, Settings, Shuffle, Swords, Users, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CivilizationMode, MapGroupId } from "../../shared/contracts/matchmaking";
-import { civilizations } from "../../shared/civilizations";
+import { classicCivilizations, civilizations } from "../../shared/civilizations";
 import { mapCatalog } from "../../shared/mapCatalog";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { LobbyPreparation } from "../components/match/LobbyPreparation";
@@ -97,6 +97,13 @@ export function QueuePage() {
       return false;
     }
   });
+  const [classicMode, setClassicMode] = useState(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(civilizationPreferenceKey) ?? "{}").classicMode === true;
+    } catch {
+      return false;
+    }
+  });
   const [civilizationBans, setCivilizationBans] = useState<{ open: string[]; closed: string[] }>(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(civilizationPreferenceKey) ?? "{}");
@@ -121,6 +128,7 @@ export function QueuePage() {
       mode,
       civilization: selectedCivilization,
       preferRandom,
+      classicMode,
       openLandBans: bans.open,
       closedLandBans: bans.closed
     }));
@@ -141,6 +149,30 @@ export function QueuePage() {
   const selectCivilization = (value: string) => {
     setCivilization(value);
     saveCivilizationPreference(civilizationMode, value);
+  };
+
+  const setClassicModePreference = (enabled: boolean) => {
+    setClassicMode(enabled);
+    if (enabled && !classicCivilizations.includes(civilization as typeof classicCivilizations[number])) {
+      setCivilization("Byzantines");
+      window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({
+        mode: civilizationMode,
+        civilization: "Byzantines",
+        preferRandom,
+        classicMode: enabled,
+        openLandBans: civilizationBans.open,
+        closedLandBans: civilizationBans.closed
+      }));
+      return;
+    }
+    window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({
+      mode: civilizationMode,
+      civilization,
+      preferRandom,
+      classicMode: enabled,
+      openLandBans: civilizationBans.open,
+      closedLandBans: civilizationBans.closed
+    }));
   };
 
   const toggleCivilizationBan = (terrain: "open" | "closed", name: string) => {
@@ -259,6 +291,7 @@ export function QueuePage() {
     const timer = window.setTimeout(() => {
       void updateActiveQueue({
         ...selectedQueue,
+        classicMode,
         findAnyone,
         teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
         mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
@@ -276,7 +309,7 @@ export function QueuePage() {
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [civilization, civilizationBans, civilizationMode, enabledGroups, favoriteMaps, findAnyone, isSearching, preferRandom, selectedMaps, selectedQueue, selectedTeamSizes]);
+  }, [civilization, civilizationBans, civilizationMode, classicMode, enabledGroups, favoriteMaps, findAnyone, isSearching, preferRandom, selectedMaps, selectedQueue, selectedTeamSizes]);
 
   const gameplayHandoffPending = state.queueStatus === "in_game"
     && state.roomSetupMilestone === "Switching to game";
@@ -334,6 +367,7 @@ export function QueuePage() {
                 </div>
                 <div className="queue-summary">
                   <div><span>Civilization</span><strong>{civilizationSummary}</strong></div>
+                  <div><span>Classic Mode</span><strong>{classicMode ? "On" : "Off"}</strong></div>
                   {civilizationMode !== "mirror" && (
                     <div><span>Prefer Random</span><strong>{preferRandom ? "Yes" : "No"}</strong></div>
                   )}
@@ -354,6 +388,7 @@ export function QueuePage() {
                   disabled={!canStartQueue || activeMapIds.length === 0}
                   onClick={() => void startQueue({
                     ...selectedQueue,
+                    classicMode,
                     findAnyone,
                     teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
                     mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
@@ -477,7 +512,7 @@ export function QueuePage() {
                             <ThemedSelect
                               className="civilization-select"
                               label="Civilization"
-                              options={civilizations.map((name) => ({ value: name, label: name }))}
+                              options={(classicMode ? classicCivilizations : civilizations).map((name) => ({ value: name, label: name }))}
                               value={civilization}
                               onChange={selectCivilization}
                               disabled={preferencesLocked || civilizationMode !== "pick"}
@@ -516,6 +551,20 @@ export function QueuePage() {
                       </div>
                     );
                   })}
+                  {selectedQueue.ranked && (
+                    <label className={classicMode ? "classic-mode-option active" : "classic-mode-option"}>
+                      <input
+                        type="checkbox"
+                        checked={classicMode}
+                        disabled={preferencesLocked}
+                        onChange={(event) => setClassicModePreference(event.target.checked)}
+                      />
+                      <span>
+                        <strong>Classic Mode</strong>
+                        <small>Only civilizations through The Mountain Royals. Still matches compatible players using a classic civ or Mirror.</small>
+                      </span>
+                    </label>
+                  )}
                 </div>
               </div>
               <div className="preference-section map-preference-section" id="map-pool">
@@ -562,6 +611,7 @@ export function QueuePage() {
                   disabled={!canStartQueue || activeMapIds.length === 0}
                   onClick={() => void startQueue({
                     ...selectedQueue,
+                    classicMode,
                     teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
                     mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
                     mapPreferences: {
@@ -643,6 +693,7 @@ export function QueuePage() {
                     mode: nextMode,
                     civilization,
                     preferRandom: next,
+                    classicMode,
                     openLandBans: civilizationBans.open,
                     closedLandBans: civilizationBans.closed
                   }));

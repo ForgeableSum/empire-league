@@ -10,6 +10,11 @@ export const civilizations = [
   "Tatars", "Teutons", "Turks", "Vietnamese", "Vikings"
 ] as const;
 
+/** Civilizations available through The Mountain Royals (before The Three Kingdoms). */
+export const classicCivilizations = civilizations.filter(
+  (civilization) => civilization !== "Jurchens" && civilization !== "Khitans"
+);
+
 export function rollCivilization(
   preference: CivilizationPreference | undefined,
   mapGroupId: MapGroupId | undefined,

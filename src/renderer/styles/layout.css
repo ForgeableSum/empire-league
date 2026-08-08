@@ -1884,6 +1884,50 @@
   cursor: pointer;
 }
 
+.classic-mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 108px;
+  padding: 12px;
+  border: 1px solid rgba(140, 100, 46, 0.38);
+  border-radius: var(--radius);
+  background: #171614;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+.classic-mode-option:hover {
+  border-color: rgba(197, 141, 69, 0.58);
+  background: #1b1916;
+}
+
+.classic-mode-option.active {
+  border-color: rgba(197, 141, 69, 0.72);
+  background: rgba(197, 141, 69, 0.055);
+}
+
+.classic-mode-option input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.classic-mode-option span {
+  display: block;
+}
+
+.classic-mode-option strong {
+  color: var(--text);
+}
+
+.classic-mode-option small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
 .prefer-random-option input {
   flex: 0 0 auto;
   margin-top: 3px;
@@ -2074,6 +2118,7 @@
 .civilization-option-card small {
   margin-top: 4px;
   color: var(--muted);
+  font-size: 13px;
   line-height: 1.25;
 }
 

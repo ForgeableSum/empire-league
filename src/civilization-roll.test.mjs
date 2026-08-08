@@ -1,12 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  classicCivilizations,
+  classicQueuesAreCompatible,
   civilizationNameFromId,
   civilizations,
   effectiveCivilizationPreference,
   normalizeCivilizationPreference,
   rollCivilizationPreference
 } from "./civilization-roll.mjs";
+
+test("classic matchmaking remains compatible with guaranteed classic choices", () => {
+  const classic = { classicMode: true, civilizationPreference: { mode: "random" } };
+  assert.equal(classicQueuesAreCompatible(classic, { civilizationPreference: { mode: "pick", civilization: "Georgians" } }), true);
+  assert.equal(classicQueuesAreCompatible(classic, { civilizationPreference: { mode: "mirror" } }), true);
+  assert.equal(classicQueuesAreCompatible(classic, { civilizationPreference: { mode: "random" } }), false);
+  assert.equal(classicQueuesAreCompatible(classic, { civilizationPreference: { mode: "pick", civilization: "Khitans" } }), false);
+});
+
+test("classic random rolls exclude post-Mountain Royals civilizations", () => {
+  const rolled = rollCivilizationPreference(
+    { mode: "random" },
+    "land-open",
+    [],
+    () => 0.999999,
+    classicCivilizations
+  );
+  assert.equal(rolled.civilization, "Vikings");
+  assert.equal(classicCivilizations.includes("Jurchens"), false);
+  assert.equal(classicCivilizations.includes("Khitans"), false);
+});
 
 test("replay civilization ids resolve to display names", () => {
   assert.equal(civilizationNameFromId(19), "Italians");
