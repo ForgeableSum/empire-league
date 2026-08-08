@@ -10,6 +10,7 @@ import {
   describeAoe2WindowCapture,
   hasFreshAoe2WindowCapture,
   startAoe2WindowCapture,
+  stopAoe2WindowCapture,
   waitForFreshAoe2WindowCapture
 } from "../aoe2WindowCapture.js";
 import { empireLeagueMapsModName, ensureEmpireLeagueMapsEnabled } from "../aoe2MapInstaller.js";
@@ -508,6 +509,7 @@ function stopReplayEndDetection(): void {
   replayDetectionGeneration += 1;
   if (replayEndPoller) clearTimeout(replayEndPoller);
   replayEndPoller = undefined;
+  stopAoe2WindowCapture();
 }
 
 function clearReplayFocusTimers(): void {
@@ -671,7 +673,10 @@ async function startReplayEndDetection(
         if (!window.webContents.isDestroyed()) window.webContents.send("game:process-exited");
         console.info("[AoE2 replay] RECOVER|Reason=ProcessExited");
       }
-      if (game.pid && game.windowReady && !recoveredFromMainMenu) {
+      // Once the replay is growing, file activity is the source of truth for the
+      // active match. Do not keep capturing the game window throughout gameplay;
+      // the return-to-menu watcher is armed after replay completion.
+      if (!observedGrowth && game.pid && game.windowReady && !recoveredFromMainMenu) {
         const screen = readAoe2HostSetupState(game.pid);
         if (screen.state === "unknown" || screen.state === "loading-screen") observedInGameScreen = true;
         consecutiveMainMenuReads = observedInGameScreen && screen.state === "main-menu"

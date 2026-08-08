@@ -245,6 +245,8 @@ class MatchmakerTransport {
 
   private disconnect(reason: string): void {
     this.deliberatelyClosed = true;
+    if (this.reconnectTimer !== null) window.clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
     this.socket?.close(1000, reason);
     this.socket = null;
     this.setConnectionStatus("disconnected");
