@@ -116,7 +116,6 @@ export function QueuePage() {
     }
   });
   const [banEditorOpen, setBanEditorOpen] = useState(false);
-  const [chooseCivilizationSettingsOpen, setChooseCivilizationSettingsOpen] = useState(false);
   const [banTerrain, setBanTerrain] = useState<"open" | "closed">("open");
 
   const saveCivilizationPreference = (
@@ -170,6 +169,19 @@ export function QueuePage() {
       civilization,
       preferRandom,
       classicMode: enabled,
+      openLandBans: civilizationBans.open,
+      closedLandBans: civilizationBans.closed
+    }));
+  };
+
+  const setPreferRandomPreference = (enabled: boolean) => {
+    setPreferRandom(enabled);
+    if (enabled) setCivilizationMode("pick");
+    window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({
+      mode: enabled ? "pick" : civilizationMode,
+      civilization,
+      preferRandom: enabled,
+      classicMode,
       openLandBans: civilizationBans.open,
       closedLandBans: civilizationBans.closed
     }));
@@ -526,15 +538,6 @@ export function QueuePage() {
                               disabled={preferencesLocked}
                               onClick={() => selectCivilizationMode("pick")}
                             />
-                            <button
-                              className="civilization-card-settings"
-                              type="button"
-                              aria-label="Configure chosen civilization behavior"
-                              disabled={preferencesLocked}
-                              onClick={() => setChooseCivilizationSettingsOpen(true)}
-                            >
-                              <Settings size={17} />
-                            </button>
                           </>
                         )}
                         {mode.id === "random" && (
@@ -551,21 +554,38 @@ export function QueuePage() {
                       </div>
                     );
                   })}
-                  {selectedQueue.ranked && (
-                    <label className={classicMode ? "classic-mode-option active" : "classic-mode-option"}>
-                      <input
-                        type="checkbox"
-                        checked={classicMode}
-                        disabled={preferencesLocked}
-                        onChange={(event) => setClassicModePreference(event.target.checked)}
-                      />
-                      <span>
-                        <strong>Classic Mode</strong>
-                        <small>Only civilizations through The Mountain Royals. Still matches compatible players using a classic civ or Mirror.</small>
-                      </span>
-                    </label>
-                  )}
                 </div>
+                  {selectedQueue.ranked && (
+                    <>
+                      <span className="eyebrow civilization-options-heading">Options</span>
+                      <div className="civilization-options">
+                      <label className={classicMode ? "civilization-toggle-option active" : "civilization-toggle-option"}>
+                        <input
+                          type="checkbox"
+                          checked={classicMode}
+                          disabled={preferencesLocked}
+                          onChange={(event) => setClassicModePreference(event.target.checked)}
+                        />
+                        <span>
+                          <strong>Classic Mode</strong>
+                          <small>Only civilizations through The Mountain Royals. Still matches compatible players using a classic civ or Mirror.</small>
+                        </span>
+                      </label>
+                      <label className={preferRandom ? "civilization-toggle-option active" : "civilization-toggle-option"}>
+                        <input
+                          type="checkbox"
+                          checked={preferRandom}
+                          disabled={preferencesLocked}
+                          onChange={(event) => setPreferRandomPreference(event.target.checked)}
+                        />
+                        <span>
+                          <strong>Prefer Random</strong>
+                          <small>If your opponent selects Random, you’ll also receive a random civilization. Otherwise, you’ll play your selected civilization.</small>
+                        </span>
+                      </label>
+                      </div>
+                    </>
+                  )}
               </div>
               <div className="preference-section map-preference-section" id="map-pool">
                 <div className="preference-heading">
@@ -670,41 +690,6 @@ export function QueuePage() {
               }}>Clear bans</button>
               <button className="primary" type="button" onClick={() => setBanEditorOpen(false)}>Done</button>
             </div>
-          </div>
-        </div>
-      )}
-      {chooseCivilizationSettingsOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="prefer-random-title" onMouseDown={() => setChooseCivilizationSettingsOpen(false)}>
-          <div className="match-modal prefer-random-modal" onMouseDown={(event) => event.stopPropagation()}>
-            <div>
-              <span className="eyebrow">Choose Civ settings</span>
-              <h2 id="prefer-random-title">Civilization preference</h2>
-            </div>
-            <label className="prefer-random-option">
-              <input
-                type="checkbox"
-                checked={preferRandom}
-                onChange={(event) => {
-                  const next = event.target.checked;
-                  const nextMode = next ? "pick" : civilizationMode;
-                  setPreferRandom(next);
-                  if (next) setCivilizationMode("pick");
-                  window.localStorage.setItem(civilizationPreferenceKey, JSON.stringify({
-                    mode: nextMode,
-                    civilization,
-                    preferRandom: next,
-                    classicMode,
-                    openLandBans: civilizationBans.open,
-                    closedLandBans: civilizationBans.closed
-                  }));
-                }}
-              />
-              <span>
-                <strong>Prefer random</strong>
-                <small>If your opponent selects Random, you’ll also receive a random civilization. Otherwise, you’ll play your selected civilization.</small>
-              </span>
-            </label>
-            <button className="primary" type="button" onClick={() => setChooseCivilizationSettingsOpen(false)}>Done</button>
           </div>
         </div>
       )}

@@ -1774,6 +1774,18 @@
   gap: 8px;
 }
 
+.civilization-options-heading {
+  display: block;
+  margin-top: 18px;
+  margin-bottom: 8px;
+}
+
+.civilization-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .civilization-mode {
   min-height: 86px;
   display: flex;
@@ -1860,31 +1872,7 @@
   background: rgba(197, 141, 69, 0.12);
 }
 
-.prefer-random-modal {
-  width: min(520px, calc(100vw - 40px));
-}
-
-.prefer-random-modal h2 {
-  margin-top: 4px;
-}
-
-.prefer-random-modal > button {
-  width: calc(50% - 5px);
-  justify-self: end;
-}
-
-.prefer-random-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #171614;
-  cursor: pointer;
-}
-
-.classic-mode-option {
+.civilization-toggle-option {
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -1897,56 +1885,35 @@
   font-size: inherit;
 }
 
-.classic-mode-option:hover {
+.civilization-toggle-option:hover {
   border-color: rgba(197, 141, 69, 0.58);
   background: #1b1916;
 }
 
-.classic-mode-option.active {
+.civilization-toggle-option.active {
   border-color: rgba(197, 141, 69, 0.72);
   background: rgba(197, 141, 69, 0.055);
 }
 
-.classic-mode-option input {
+.civilization-toggle-option input {
   flex: 0 0 auto;
   margin-top: 2px;
 }
 
-.classic-mode-option span {
+.civilization-toggle-option span {
   display: block;
 }
 
-.classic-mode-option strong {
+.civilization-toggle-option strong {
   color: var(--text);
 }
 
-.classic-mode-option small {
+.civilization-toggle-option small {
   display: block;
   margin-top: 4px;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.25;
-}
-
-.prefer-random-option input {
-  flex: 0 0 auto;
-  margin-top: 3px;
-}
-
-.prefer-random-option span,
-.prefer-random-option small {
-  display: block;
-}
-
-.prefer-random-option strong {
-  font-size: 16px;
-}
-
-.prefer-random-option small {
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.4;
 }
 
 .civilization-option-card .civilization-select {
@@ -4488,7 +4455,8 @@
     position: static;
   }
 
-  .civilization-modes {
+  .civilization-modes,
+  .civilization-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
