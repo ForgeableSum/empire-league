@@ -89,6 +89,7 @@ let inputGuardFramesReceived = 0;
 let inputGuardFramesSent = 0;
 let inputGuardFramesDiscarded = 0;
 let inputGuardLastAcknowledgedAt = 0;
+const guardedModifiers = new Set<"shift" | "control" | "alt">();
 const guardedSenders = new WeakSet<object>();
 const loadingScreenWatchers = new WeakSet<WebContents>();
 let offscreenWindowProcess: ChildProcess | undefined;
@@ -1377,6 +1378,7 @@ exit $exitCode
 `;
 
 function stopInputGuard(): void {
+  guardedModifiers.clear();
   if (inputGuardHeartbeatTimer) clearInterval(inputGuardHeartbeatTimer);
   inputGuardHeartbeatTimer = undefined;
   if (inputGuardStopTimer) clearTimeout(inputGuardStopTimer);
@@ -1528,12 +1530,24 @@ function forwardGuardedInput(message: string): void {
   if (!window || window.isDestroyed()) return;
   const parts = message.split("|");
   if (parts[0] === "KEY") {
-    const keyCode = electronKeyCode(Number(parts[2]));
+    const action = parts[1];
+    const virtualKey = Number(parts[2]);
+    const modifier = guardedModifier(virtualKey);
+    if (action === "DOWN" && modifier) guardedModifiers.add(modifier);
+    const keyCode = electronKeyCode(virtualKey);
     if (!keyCode) return;
     window.webContents.sendInputEvent({
-      type: parts[1] === "UP" ? "keyUp" : "keyDown",
-      keyCode
+      type: action === "UP" ? "keyUp" : "keyDown",
+      keyCode,
+      modifiers: [...guardedModifiers]
     });
+    if (action === "DOWN") {
+      const character = guardedCharacter(virtualKey, guardedModifiers.has("shift"));
+      if (character && !guardedModifiers.has("control") && !guardedModifiers.has("alt")) {
+        window.webContents.sendInputEvent({ type: "char", keyCode: character });
+      }
+    }
+    if (action === "UP" && modifier) guardedModifiers.delete(modifier);
     return;
   }
   if (parts[0] !== "MOUSE") return;
@@ -1573,6 +1587,33 @@ function forwardGuardedInput(message: string): void {
   }
 }
 
+function guardedModifier(virtualKey: number): "shift" | "control" | "alt" | undefined {
+  if (virtualKey === 0x10 || virtualKey === 0xa0 || virtualKey === 0xa1) return "shift";
+  if (virtualKey === 0x11 || virtualKey === 0xa2 || virtualKey === 0xa3) return "control";
+  if (virtualKey === 0x12 || virtualKey === 0xa4 || virtualKey === 0xa5) return "alt";
+  return undefined;
+}
+
+function guardedCharacter(virtualKey: number, shifted: boolean): string | undefined {
+  // Chromium expects the character phase of a native Return sequence before
+  // applying the focused form control's default submit behavior.
+  if (virtualKey === 0x0d) return "\r";
+  if (virtualKey >= 0x41 && virtualKey <= 0x5a) {
+    const letter = String.fromCharCode(virtualKey);
+    return shifted ? letter : letter.toLowerCase();
+  }
+  if (virtualKey >= 0x30 && virtualKey <= 0x39) {
+    return shifted ? ")!@#$%^&*("[virtualKey - 0x30] : String.fromCharCode(virtualKey);
+  }
+  if (virtualKey === 0x20) return " ";
+  const pair = ({
+    0xba: [";", ":"], 0xbb: ["=", "+"], 0xbc: [",", "<"], 0xbd: ["-", "_"],
+    0xbe: [".", ">"], 0xbf: ["/", "?"], 0xc0: ["`", "~"], 0xdb: ["[", "{"],
+    0xdc: ["\\", "|"], 0xdd: ["]", "}"], 0xde: ["'", "\""]
+  } as Record<number, [string, string]>)[virtualKey];
+  return pair?.[shifted ? 1 : 0];
+}
+
 function electronKeyCode(virtualKey: number): string | undefined {
   if (virtualKey >= 0x41 && virtualKey <= 0x5a) return String.fromCharCode(virtualKey);
   if (virtualKey >= 0x30 && virtualKey <= 0x39) return String.fromCharCode(virtualKey);
@@ -1593,7 +1634,12 @@ function electronKeyCode(virtualKey: number): string | undefined {
     0x26: "Up",
     0x27: "Right",
     0x28: "Down",
-    0x2e: "Delete"
+    0x2e: "Delete",
+    0x60: "num0", 0x61: "num1", 0x62: "num2", 0x63: "num3", 0x64: "num4",
+    0x65: "num5", 0x66: "num6", 0x67: "num7", 0x68: "num8", 0x69: "num9",
+    0x6a: "*", 0x6b: "+", 0x6d: "-", 0x6e: ".", 0x6f: "/",
+    0xba: ";", 0xbb: "=", 0xbc: ",", 0xbd: "-", 0xbe: ".", 0xbf: "/",
+    0xc0: "`", 0xdb: "[", 0xdc: "\\", 0xdd: "]", 0xde: "'"
   };
   return keys[virtualKey];
 }
@@ -2479,7 +2525,9 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:disable-enabled-ui-mods", disableEnabledUiMods);
   ipcMain.handle("game:set-lobby-input-lock", async (event, locked: boolean) => {
     const requested = locked === true;
-    const applied = setWindowsInputBlocked(requested);
+    // The hook remains able to observe and selectively route physical input;
+    // BlockInput would also make the Electron chat surface unusable.
+    const applied = requested ? false : setWindowsInputBlocked(false);
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     const guardApplied = requested ? await startInputGuard(appWindow) : (scheduleInputGuardStop(), false);
     console.info(`[AoE2 automation] INPUT_LOCK|Requested=${requested}|BlockInput=${applied}|Guard=${guardApplied}|Source=Renderer`);
@@ -2947,7 +2995,9 @@ export function registerGameHandlers(): void {
       const captureReady = await waitForFreshAoe2WindowCapture(gameWindow);
       emitLog(`WINDOW_CAPTURE_WAIT|Ready=${captureReady}|${describeAoe2WindowCapture(gameWindow)}`);
       if (!captureReady) throw new Error("A fresh AoE2 window capture was not available.");
-      const inputBlocked = setWindowsInputBlocked(true);
+      // The swallowing low-level guard protects AoE2 while approved physical
+      // keyboard events remain available to Electron chat.
+      const inputBlocked = false;
       if (isCustomAutomation) {
         sequenceSafetyTimer = setTimeout(() => {
           sequenceExpired = true;
