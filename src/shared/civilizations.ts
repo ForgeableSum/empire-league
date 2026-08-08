@@ -12,7 +12,7 @@ export const civilizations = [
 
 /** Civilizations excluded from Empire League Classic Mode. */
 export const nonClassicCivilizations = [
-  "Chinese", "Jurchens", "Khitans", "Koreans", "Mapuche", "Muisca", "Shu", "Tupi",
+  "Chinese", "Incas", "Jurchens", "Khitans", "Koreans", "Mapuche", "Muisca", "Shu", "Tupi",
   "Vietnamese", "Wei", "Wu"
 ] as const;
 

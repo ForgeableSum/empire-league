@@ -9,7 +9,7 @@ export const civilizations = [
 ];
 
 export const nonClassicCivilizations = [
-  "Chinese", "Jurchens", "Khitans", "Koreans", "Mapuche", "Muisca", "Shu", "Tupi",
+  "Chinese", "Incas", "Jurchens", "Khitans", "Koreans", "Mapuche", "Muisca", "Shu", "Tupi",
   "Vietnamese", "Wei", "Wu"
 ];
 

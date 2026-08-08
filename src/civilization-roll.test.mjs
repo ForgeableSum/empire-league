@@ -35,11 +35,11 @@ test("classic random rolls use only the configured Classic Mode pool", () => {
   );
   assert.equal(rolled.civilization, "Vikings");
   assert.deepEqual(nonClassicCivilizations, [
-    "Chinese", "Jurchens", "Khitans", "Koreans", "Mapuche", "Muisca", "Shu", "Tupi",
+    "Chinese", "Incas", "Jurchens", "Khitans", "Koreans", "Mapuche", "Muisca", "Shu", "Tupi",
     "Vietnamese", "Wei", "Wu"
   ]);
   assert.equal(civilizations.length, 53);
-  assert.equal(classicCivilizations.length, 42);
+  assert.equal(classicCivilizations.length, 41);
   assert.equal(nonClassicCivilizations.every((civilization) =>
     civilizations.includes(civilization) && !classicCivilizations.includes(civilization)), true);
 });
