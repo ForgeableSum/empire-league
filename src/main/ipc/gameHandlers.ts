@@ -1411,7 +1411,21 @@ function scheduleInputGuardStop(): void {
 async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> {
   if (inputGuardStopTimer) clearTimeout(inputGuardStopTimer);
   inputGuardStopTimer = undefined;
-  if (window && !window.isDestroyed()) inputGuardWindow = window;
+  if (window && !window.isDestroyed()) {
+    // Never swallow global physical input while another application owns the
+    // foreground. Reassert the automation cover and give Windows a few event
+    // turns to complete activation before starting (or reusing) the guard.
+    for (let attempt = 1; !window.isFocused() && attempt <= 4; attempt += 1) {
+      showMainWindowAsGameCover(window);
+      await delay(50);
+    }
+    if (!window.isFocused()) {
+      console.error("[AoE2 automation] INPUT_GUARD|FOREGROUND_REQUIRED|ElectronFocused=false");
+      stopInputGuard();
+      return false;
+    }
+    inputGuardWindow = window;
+  }
   if (inputGuardProcess && !inputGuardProcess.killed) return true;
   inputGuardFrameSequence = 0;
   inputGuardLastAcknowledgedFrame = 0;

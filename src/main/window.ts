@@ -246,7 +246,14 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
     window.setOpacity(reducedOpacityEnabled ? 0.8 : 1);
     window.setFullScreen(true);
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    window.showInactive();
+    // Automation blocks physical input while this cover is visible. The cover
+    // must therefore own the foreground window; showInactive leaves whatever
+    // application the player was using (for example Discord) focused while the
+    // input guard swallows its keyboard input.
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.moveTop();
+    window.focus();
     if (mouseCoordinateOverlayEnabled) {
       showMouseTestOverlay();
     } else {
@@ -265,7 +272,12 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
     return;
   }
   window.setIgnoreMouseEvents(false);
-  if (mainCoverManuallyVisible && !window.isVisible() && taskbarMinimizedWindow !== window) window.showInactive();
+  if (mainCoverManuallyVisible && taskbarMinimizedWindow !== window) {
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.moveTop();
+    window.focus();
+  }
 }
 
 export function restoreMainWindowFromGameCover(): void {

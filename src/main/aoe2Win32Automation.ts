@@ -826,7 +826,12 @@ export function readAoe2ContentWarningState(processId: number): NativeContentWar
   const goldVotes = borderSamples.filter(({ rgb }) => rgb
     && rgb[0] > 220 && rgb[1] >= 120 && rgb[1] <= 210 && rgb[2] < 45).length;
   const darkVotes = interiorSamples.filter(({ rgb }) => rgb && Math.max(...rgb) < 35).length;
-  const state = goldVotes >= 3 && darkVotes >= 2 ? "visible" : "absent";
+  // On ultrawide viewports the warning's right and lower frame samples land
+  // inside dark panel chrome, while the two left-frame samples remain the
+  // exact warning gold. Requiring three gold votes therefore rejects the real
+  // dialog and leaves the guest waiting forever. All three dark interior
+  // samples keep the two-gold signature specific enough for safe key input.
+  const state = goldVotes >= 2 && darkVotes === interiorSamples.length ? "visible" : "absent";
   return {
     state,
     detail: [
