@@ -87,6 +87,7 @@ const electronApi: ElectronGameApi = {
   createRanked1v1Lobby: (request) => ipcRenderer.invoke("game:create-ranked-1v1-lobby", request),
   openAoe2Lobby: (lobbyId) => ipcRenderer.invoke("game:open-lobby", lobbyId),
   openSteamLogin: (url) => ipcRenderer.invoke("auth:open-steam-login", url),
+  completeSteamLogin: () => ipcRenderer.invoke("auth:complete-steam-login"),
   loadAuthToken: () => ipcRenderer.invoke("auth:load-token"),
   storeAuthToken: (token) => ipcRenderer.invoke("auth:store-token", token),
   clearAuthToken: () => ipcRenderer.invoke("auth:clear-token"),

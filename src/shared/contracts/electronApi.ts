@@ -88,6 +88,7 @@ export interface ElectronGameApi {
   createRanked1v1Lobby(request: CreateLobbyRequest): Promise<CreateLobbyResult>;
   openAoe2Lobby(lobbyId: string): Promise<OpenLobbyResult>;
   openSteamLogin(url: string): Promise<void>;
+  completeSteamLogin(): Promise<void>;
   loadAuthToken(): Promise<string | null>;
   storeAuthToken(token: string): Promise<void>;
   clearAuthToken(): Promise<void>;

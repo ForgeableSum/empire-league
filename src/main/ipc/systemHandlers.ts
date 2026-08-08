@@ -5,6 +5,7 @@ import { focusMainWindow, minimizeMainWindowToTaskbar } from "../window.js";
 import { getPendingUpdate, installDownloadedUpdate, retryPendingUpdate, setAutoUpdateChecksPaused } from "../autoUpdate.js";
 
 const windowsInstallerUrl = "https://empireleague.gg/updates/windows/Empire-League-Setup.exe";
+let steamLoginParent: BrowserWindow | null = null;
 
 export function registerSystemHandlers(): void {
   ipcMain.handle("system:ping", async () => ({ ok: true, at: new Date().toISOString() }));
@@ -83,10 +84,18 @@ export function registerSystemHandlers(): void {
     app.relaunch();
     app.quit();
   });
-  ipcMain.handle("auth:open-steam-login", async (_event, value: string) => {
+  ipcMain.handle("auth:open-steam-login", async (event, value: string) => {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.hostname !== "steamcommunity.com") throw new Error("Invalid Steam login URL.");
+    const parent = BrowserWindow.fromWebContents(event.sender);
     await shell.openExternal(url.toString());
+    steamLoginParent = parent;
+    if (parent) minimizeMainWindowToTaskbar(parent);
+  });
+  ipcMain.handle("auth:complete-steam-login", async () => {
+    const parent = steamLoginParent;
+    steamLoginParent = null;
+    if (parent && !parent.isDestroyed()) focusMainWindow(parent);
   });
   ipcMain.handle("auth:load-token", async () => {
     try {
