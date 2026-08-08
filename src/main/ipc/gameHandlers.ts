@@ -58,6 +58,7 @@ import {
   postAoe2DesignClick,
   readAoe2CivilizationPickerState,
   readAoe2CivilizationTileState,
+  readAoe2ContentWarningState,
   readAoe2HostSetupState,
   readAoe2ReadyState,
   sendAoe2End,
@@ -3391,13 +3392,25 @@ export function registerGameHandlers(): void {
           ? { sent: false, detail: "READY_STATE_UNKNOWN_BEFORE_INPUT" }
           : target === "content-confirm"
             ? await (async () => {
+                const warningBefore = readAoe2ContentWarningState(process.pid as number);
+                const detectionMessage = `UGC_CONFIRM|Step=Detect|${warningBefore.detail}`;
+                console.info(`[AoE2 automation] ${detectionMessage}`);
+                if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", detectionMessage);
+                if (warningBefore.state !== "visible") {
+                  return {
+                    sent: false,
+                    detail: `SKIPPED_WARNING_${warningBefore.state.toUpperCase()}|${warningBefore.detail}`
+                  };
+                }
                 const tab = await sendAoe2Tab(process.pid as number);
                 if (!tab.sent) return tab;
                 await delay(contentConfirmationKeyDelayMs);
                 const enter = await sendAoe2Enter(process.pid as number);
+                await delay(action.settleMs);
+                const warningAfter = readAoe2ContentWarningState(process.pid as number);
                 return {
-                  sent: enter.sent,
-                  detail: `Mode=WindowMessageTabEnter|Tab=${tab.detail}|Enter=${enter.detail}`
+                  sent: enter.sent && warningAfter.state !== "visible",
+                  detail: `Mode=WindowMessageTabEnter|Tab=${tab.detail}|Enter=${enter.detail}|After=${warningAfter.detail}`
                 };
               })()
             : await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {

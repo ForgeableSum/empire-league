@@ -122,6 +122,11 @@ export interface NativeInputResult {
   detail: string;
 }
 
+export interface NativeContentWarningStateResult {
+  state: "visible" | "absent" | "unknown";
+  detail: string;
+}
+
 export interface NativeProcessStatus {
   running: boolean;
   pid?: number;
@@ -769,6 +774,58 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
       `ReadyVotes=${greenVotes}`,
       `NotReadyVotes=${redVotes}`,
       `Samples=${readableSamples.map(({ x, y, rgb }) => `${x},${y}:${rgb.join(".")}`).join(";")}`,
+      describePixelRead(window)
+    ].join("|")
+  };
+}
+
+export function readAoe2ContentWarningState(processId: number): NativeContentWarningStateResult {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { state: "unknown", detail: "WINDOW_NOT_FOUND" };
+
+  const rect = {} as Rect;
+  if (!GetClientRect!(window, rect)) return { state: "unknown", detail: "CLIENT_RECT_FAILED" };
+  const width = rect.right - rect.left;
+  const height = rect.bottom - rect.top;
+  if (width <= 0 || height <= 0) return { state: "unknown", detail: "INVALID_CLIENT_SIZE" };
+
+  // The optional UGC warning has a large black panel with a bright gold frame.
+  // These samples deliberately avoid all warning text and controls so the
+  // signature remains stable across content names and localized clients.
+  const transform = designTransform(width, height);
+  const borderDesignPoints = [
+    [1219, 938], [1219, 1313], [1500, 609], [1688, 1548]
+  ] as const;
+  const interiorDesignPoints = [
+    [1313, 1313], [2532, 1313], [1875, 1275]
+  ] as const;
+  const sample = ([designX, designY]: readonly [number, number]) => {
+    const point = transformDesignPoint(designX, designY, transform);
+    return { ...point, rgb: readWindowRgb(window, point.x, point.y) };
+  };
+  const borderSamples = borderDesignPoints.map(sample);
+  const interiorSamples = interiorDesignPoints.map(sample);
+  const readable = [...borderSamples, ...interiorSamples]
+    .filter((entry): entry is typeof entry & { rgb: [number, number, number] } => Boolean(entry.rgb));
+  if (readable.length < 5) {
+    return { state: "unknown", detail: `PIXEL_READ_FAILED|${describePixelRead(window)}` };
+  }
+
+  const goldVotes = borderSamples.filter(({ rgb }) => rgb
+    && rgb[0] > 220 && rgb[1] >= 120 && rgb[1] <= 210 && rgb[2] < 45).length;
+  const darkVotes = interiorSamples.filter(({ rgb }) => rgb && Math.max(...rgb) < 35).length;
+  const state = goldVotes >= 3 && darkVotes >= 2 ? "visible" : "absent";
+  return {
+    state,
+    detail: [
+      `State=${state}`,
+      `Window=${String(window)}`,
+      `Viewport=${formatViewport(transform)}`,
+      `GoldVotes=${goldVotes}/${borderSamples.length}`,
+      `DarkVotes=${darkVotes}/${interiorSamples.length}`,
+      `BorderSamples=${borderSamples.map(({ x, y, rgb }) => `${x},${y}:${formatRgb(rgb)}`).join(";")}`,
+      `InteriorSamples=${interiorSamples.map(({ x, y, rgb }) => `${x},${y}:${formatRgb(rgb)}`).join(";")}`,
       describePixelRead(window)
     ].join("|")
   };

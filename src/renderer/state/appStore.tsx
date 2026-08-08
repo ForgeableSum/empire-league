@@ -962,6 +962,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 }
               } while (!ready.sent && Date.now() < deadline);
               if (!ready.sent) throw new Error("The guest Ready button remained unavailable after the file-transfer timeout.");
+              if (customContentFlow && !contentAcceptanceReported) {
+                // With the AoE2 UGC warning disabled, download acceptance is
+                // implicit and there is no dialog action to report. Reaching a
+                // verified Ready state proves the transfer completed. Notify
+                // the host so it can restore the Ready state that AoE2 clears
+                // during every custom-content transfer.
+                await services.matchmaking.reportGuestContentAccepted(event.matchId);
+                contentAcceptanceReported = true;
+                log(`Content transfer completed without a confirmation dialog; allowing ${customContentHostRecoveryMs} ms for the host to restore Ready`);
+                await delayForLobbyInput(customContentHostRecoveryMs);
+                ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready");
+                if (!ready.sent) throw new Error("Guest Ready did not remain available after host transfer recovery.");
+              }
               log("Guest Ready verified; reporting readiness to the host");
               await services.matchmaking.reportGuestLobbyReady(event.matchId);
               clearRoomSetupWatchdog();
