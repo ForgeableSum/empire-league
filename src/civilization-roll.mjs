@@ -22,6 +22,12 @@ export function isClassicCivilization(civilization) {
   return classicCivilizations.includes(civilization);
 }
 
+export function rollRandomCivilizationPool(random = Math.random) {
+  return random() < classicCivilizations.length / civilizations.length
+    ? "classic"
+    : "non-classic";
+}
+
 export function classicQueuesAreCompatible(firstQueue, secondQueue) {
   if (firstQueue?.classicMode !== true && secondQueue?.classicMode !== true) return true;
   return [firstQueue, secondQueue].every((queue) => {

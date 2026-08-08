@@ -8,8 +8,20 @@ import {
   effectiveCivilizationPreference,
   normalizeCivilizationPreference,
   nonClassicCivilizations,
-  rollCivilizationPreference
+  rollCivilizationPreference,
+  rollRandomCivilizationPool
 } from "./civilization-roll.mjs";
+
+test("unrestricted random tickets are weighted into stable civilization pools", () => {
+  assert.equal(rollRandomCivilizationPool(() => 0), "classic");
+  assert.equal(rollRandomCivilizationPool(() => (classicCivilizations.length - 0.5) / civilizations.length), "classic");
+  assert.equal(rollRandomCivilizationPool(() => classicCivilizations.length / civilizations.length), "non-classic");
+  assert.equal(rollRandomCivilizationPool(() => 0.999999), "non-classic");
+  assert.equal(
+    rollCivilizationPreference({ mode: "random" }, "land-open", [], () => 0, nonClassicCivilizations).civilization,
+    "Chinese"
+  );
+});
 
 test("classic matchmaking remains compatible with guaranteed classic choices", () => {
   const classic = { classicMode: true, civilizationPreference: { mode: "random" } };

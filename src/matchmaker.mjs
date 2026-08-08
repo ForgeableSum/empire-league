@@ -31,6 +31,8 @@ import {
   civilizationBansForMapGroup,
   effectiveCivilizationPreference,
   normalizeCivilizationPreference,
+  nonClassicCivilizations,
+  rollRandomCivilizationPool,
   rollCivilizationPreference
 } from "./civilization-roll.mjs";
 import { currentWeeklyMode as weeklyModeAt, weeklyRotation } from "./weekly-rotation.mjs";
@@ -877,6 +879,27 @@ function allowsOpponentRating(ticket, candidate) {
       >= playerRatingForQueue(ticket.player, ticket.queueId) - maximumGap;
 }
 
+function ticketUsesClassicCivilizationPool(ticket) {
+  return ticket.queue.classicMode === true || ticket.randomCivilizationPool === "classic";
+}
+
+function ticketsAreClassicCompatible(firstTicket, secondTicket) {
+  if (firstTicket.queue.classicMode !== true && secondTicket.queue.classicMode !== true) return true;
+  return classicQueuesAreCompatible(
+    { ...firstTicket.queue, classicMode: ticketUsesClassicCivilizationPool(firstTicket) },
+    { ...secondTicket.queue, classicMode: ticketUsesClassicCivilizationPool(secondTicket) }
+  );
+}
+
+function refreshRandomCivilizationPool(ticket, previousMode) {
+  const nextMode = ticket.queue.civilizationPreference?.mode;
+  if (nextMode !== "random" || ticket.queue.classicMode === true) {
+    ticket.randomCivilizationPool = undefined;
+  } else if (previousMode !== "random" || !ticket.randomCivilizationPool) {
+    ticket.randomCivilizationPool = rollRandomCivilizationPool();
+  }
+}
+
 function balancedTeamAssignments(participants, host, teamSize) {
   const ranked = [...participants].sort((left, right) =>
     playerRatingForQueue(right.player, right.queueId) - playerRatingForQueue(left.player, left.queueId));
@@ -964,7 +987,7 @@ async function tryMatch(ticket) {
       && ratingsAreInRange(ticket, candidate)
       && allowsOpponentRating(ticket, candidate)
       && allowsOpponentRating(candidate, ticket)
-      && classicQueuesAreCompatible(candidate.queue, ticket.queue)
+      && ticketsAreClassicCompatible(candidate, ticket)
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
   ).sort((left, right) => compareOpponentPreference(ticket, left, right));
   const possibleSizes = ticket.queue.format === "team"
@@ -978,7 +1001,7 @@ async function tryMatch(ticket) {
     for (const candidate of candidates) {
       if (ticket.queue.format === "team" && !candidate.queue.teamSizes?.includes(size)) continue;
       if (!compatible.every((participant) => ratingsAreInRange(participant, candidate))) continue;
-      if (!compatible.every((participant) => classicQueuesAreCompatible(participant.queue, candidate.queue))) continue;
+      if (!compatible.every((participant) => ticketsAreClassicCompatible(participant, candidate))) continue;
       compatible.push(candidate);
       if (compatible.length === required) break;
     }
@@ -1052,7 +1075,11 @@ async function tryMatch(ticket) {
         mapGroupId,
         sharedCivilizationBans,
         Math.random,
-        classicMatch ? classicCivilizations : undefined
+        classicMatch || participant.randomCivilizationPool === "classic"
+          ? classicCivilizations
+          : participant.randomCivilizationPool === "non-classic"
+            ? nonClassicCivilizations
+            : undefined
       )
     ]))
   };
@@ -1657,6 +1684,7 @@ async function handleRequest(request, response) {
         matchId: null,
         events: []
       };
+      refreshRandomCivilizationPool(ticket);
       tickets.set(ticket.id, ticket);
       scheduleRatingRanges(ticket);
       ticket.matchSearchTimer = setTimeout(() => {
@@ -1699,7 +1727,9 @@ async function handleRequest(request, response) {
       } catch (error) {
         return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });
       }
+      const previousCivilizationMode = ticket.queue.civilizationPreference?.mode;
       ticket.queue = body.queue;
+      refreshRandomCivilizationPool(ticket, previousCivilizationMode);
       await tryMatch(ticket);
       return send(response, 200, { ok: true });
     }
