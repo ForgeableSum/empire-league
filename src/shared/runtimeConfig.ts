@@ -3,6 +3,10 @@ export const aoe2PhysicalClickSettleMs = 500;
 export const contentConfirmationKeyDelayMs = 150;
 export const customContentHostRecoveryMs = 4000;
 
+// When enabled, successful lobby setups calibrate future countdowns using
+// locally stored timing history. Keep disabled for deterministic countdowns.
+export const adaptiveLobbyTimingEnabled = false;
+
 export const lobbySetupTiming = {
   hostLobbyAutomationSettleMs: 2000,
   multiplayerMenuMs: 1000,

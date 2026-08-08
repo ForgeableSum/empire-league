@@ -1,6 +1,7 @@
 import { aoe2UiManifest, type Aoe2UiAction } from "../../shared/aoe2UiManifest";
 import type { CivilizationPreference, MatchSession } from "../../shared/contracts/matchmaking";
 import {
+  adaptiveLobbyTimingEnabled,
   contentConfirmationKeyDelayMs,
   lobbySetupTiming
 } from "../../shared/runtimeConfig";
@@ -18,12 +19,14 @@ type TimingHistory = Record<FlowKind, number[]>;
 
 export function estimateLobbySetupMs(match: MatchSession): number {
   const baseline = calculateLobbySetupBaselineMs(match);
+  if (!adaptiveLobbyTimingEnabled) return baseline;
   const residuals = loadHistory()[flowKind(match)];
   if (!residuals.length) return baseline;
   return Math.max(10_000, baseline + median(residuals));
 }
 
 export function recordLobbySetupDuration(match: MatchSession, actualDurationMs: number): void {
+  if (!adaptiveLobbyTimingEnabled) return;
   if (!Number.isFinite(actualDurationMs) || actualDurationMs < 10_000 || actualDurationMs > 180_000) return;
   const kind = flowKind(match);
   const history = loadHistory();
