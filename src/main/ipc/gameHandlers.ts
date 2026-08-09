@@ -2565,7 +2565,7 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:get-localization", async () => {
     const installation = await detectAoe2Installation();
     if (!installation.installed || !installation.path) {
-      return { languageId: null, languageCode: "en", languageName: "English", names: {} };
+      return { languageId: null, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
     }
     return loadAoe2Localization(installation.path);
   });

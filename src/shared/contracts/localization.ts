@@ -3,4 +3,9 @@ export interface Aoe2Localization {
   languageCode: string;
   languageName: string;
   names: Record<string, string>;
+  mapDescriptions: Record<string, string>;
+  civilizationBonuses: Record<string, {
+    bonuses: string[];
+    teamBonus: string;
+  }>;
 }

@@ -96,10 +96,13 @@ AoE2 `MainLog.txt`. The index follows the Game Language dropdown order and maps
 to the matching `resources/<language>/strings/key-value/key-value-strings-utf8.txt`
 file. The English file is reverse-indexed to obtain stable string keys for
 canonical map and civilization names; those same keys resolve the active
-language. Canonical names remain in matchmaking and storage, while localized
-names are used for display and AoE2 picker searches. Custom map and scenario
-filenames are never translated. Missing logs, files, or strings fall back to
-English.
+language. Official map descriptions and the civilization bonus/team-bonus
+sections are resolved from the same stable keys and cleaned of AoE2 markup for
+display. Canonical names remain in matchmaking and storage, while localized
+names are used for display and AoE2 picker searches. Custom map descriptions,
+custom map filenames, and scenario filenames are never translated. Missing
+logs, files, parsed sections, or strings fall back to the checked-in English
+content.
 
 ## Civilization grid
 

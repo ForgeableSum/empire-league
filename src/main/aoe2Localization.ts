@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { civilizations } from "../shared/civilizations.js";
 import { enabledMapCatalogEntries } from "../shared/mapCatalog.js";
 import type { Aoe2Localization } from "../shared/contracts/localization.js";
+import civBonuses from "../shared/civBonuses.json" with { type: "json" };
 
 // This is the zero-based order used by AoE2's Game Language dropdown.
 const languages = [
@@ -19,7 +20,7 @@ function parseStrings(text: string): Map<string, string> {
   const result = new Map<string, string>();
   for (const rawLine of text.split(/\r?\n/)) {
     const match = rawLine.trim().match(/^(\d+|[A-Z][A-Z0-9_]*)\s+"(.*)"\s*(?:\/\/.*)?$/);
-    if (match) result.set(match[1], match[2].replace(/\\"/g, '"').replace(/\\n/g, " ").trim());
+    if (match) result.set(match[1], match[2].replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\r/g, "").replace(/\\t/g, " ").trim());
   }
   return result;
 }
@@ -81,8 +82,42 @@ export async function loadAoe2Localization(gamePath: string): Promise<Aoe2Locali
       const key = keyByEnglish.get(lookupName) ?? [...english].find(([, value]) => value === lookupName)?.[0];
       names[canonical] = (key && localized.get(key)) || canonical;
     }
-    return { languageId, languageCode: language[0], languageName: language[1], names };
+    const mapDescriptions: Record<string, string> = {};
+    for (const map of enabledMapCatalogEntries.filter((entry) => !entry.isCustomMap)) {
+      const englishPrefix = `${map.gameMapName} - `;
+      const descriptionEntry = [...english].find(([, value]) => value.startsWith(englishPrefix));
+      const translated = descriptionEntry ? localized.get(descriptionEntry[0]) : undefined;
+      const separator = translated?.match(/\s[-–—]\s/);
+      if (translated && separator?.index !== undefined) {
+        mapDescriptions[map.name] = translated.slice(separator.index + separator[0].length).trim();
+      }
+    }
+
+    const normalize = (value: string) => value.replace(/\s+/g, " ").trim();
+    const civilizationBonuses: Aoe2Localization["civilizationBonuses"] = {};
+    for (const [civilization, fallback] of Object.entries(civBonuses)) {
+      const firstBonus = normalize(fallback.bonuses[0] ?? "");
+      const teamBonus = normalize(fallback.teamBonus);
+      const englishEntry = [...english].find(([key, value]) =>
+        /^120\d+$/.test(key)
+        && normalize(value).includes(firstBonus)
+        && normalize(value).includes(teamBonus)
+      );
+      const translated = englishEntry ? localized.get(englishEntry[0]) : undefined;
+      if (!translated) continue;
+      const firstSection = translated.split(/\n\s*\n<b>/)[0];
+      const bonuses = firstSection.split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("•"))
+        .map((line) => line.slice(1).trim());
+      const lastTag = translated.lastIndexOf("<b>");
+      const localizedTeamBonus = lastTag >= 0 ? translated.slice(lastTag + 3).trim() : "";
+      if (bonuses.length && localizedTeamBonus) {
+        civilizationBonuses[civilization] = { bonuses, teamBonus: localizedTeamBonus };
+      }
+    }
+    return { languageId, languageCode: language[0], languageName: language[1], names, mapDescriptions, civilizationBonuses };
   } catch {
-    return { languageId, languageCode: "en", languageName: "English", names: {} };
+    return { languageId, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
   }
 }

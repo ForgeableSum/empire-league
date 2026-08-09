@@ -10,13 +10,16 @@ import { MatchmakingBrand } from "./MatchmakingBrand";
 type CivilizationName = keyof typeof civBonuses;
 
 export function LobbyPreparation() {
-  const { state, prepareLobby, localizeAoe2Name } = useAppStore();
+  const { state, prepareLobby, localizeAoe2Name, localizeAoe2MapDescription } = useAppStore();
   const inputLocked = !state.error;
   const match = state.activeMatch;
   const countdownMs = state.roomSetupEstimateMs ?? 60_000;
   const [remaining, setRemaining] = useState(() => getRemaining(state.roomSetupStartedAt, countdownMs));
   const selectedMap = maps.find((map) => map.id === match?.selectedMap?.id) ?? match?.selectedMap;
-  const mapDescription = selectedMap ? getCatalogMap(selectedMap.id)?.description : undefined;
+  const canonicalMapDescription = selectedMap ? getCatalogMap(selectedMap.id)?.description : undefined;
+  const mapDescription = selectedMap && canonicalMapDescription
+    ? localizeAoe2MapDescription(selectedMap.name, canonicalMapDescription)
+    : canonicalMapDescription;
   const playerCivilization = resolveCivilization(
     match?.queue.civilizationPreference,
     match?.opponentCivilizationPreference
@@ -85,8 +88,10 @@ function CivilizationBonuses({
   civilization: CivilizationName | null;
   side: "player" | "opponent";
 }) {
-  const { localizeAoe2Name } = useAppStore();
-  const details = civilization ? civBonuses[civilization] : null;
+  const { localizeAoe2Name, getLocalizedAoe2CivilizationBonuses } = useAppStore();
+  const details = civilization
+    ? getLocalizedAoe2CivilizationBonuses(civilization) ?? civBonuses[civilization]
+    : null;
   return (
     <article className={`civ-bonus-card ${side}`}>
       <span className="eyebrow">{side === "player" ? "Your civilization" : "Opponent civilization"}</span>

@@ -6,6 +6,7 @@ import type { GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MapDefinition, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
 import type { PlayerProfile } from "../../shared/contracts/players";
+import type { Aoe2Localization } from "../../shared/contracts/localization";
 import { getCatalogMap, mapCatalog } from "../../shared/mapCatalog";
 import { maps, currentUser } from "../mocks/mockPlayers";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
@@ -48,6 +49,8 @@ interface AppContextValue {
   queues: QueueDefinition[];
   aoe2Language: string;
   localizeAoe2Name: (canonicalName: string) => string;
+  localizeAoe2MapDescription: (canonicalName: string, fallback: string) => string;
+  getLocalizedAoe2CivilizationBonuses: (canonicalName: string) => Aoe2Localization["civilizationBonuses"][string] | undefined;
   ensureAoe2Ready: (purpose?: "matchmaking" | "custom") => Promise<boolean>;
   startQueue: (queue: QueueDefinition) => Promise<void>;
   updateActiveQueue: (queue: QueueDefinition) => Promise<void>;
@@ -134,7 +137,14 @@ export const queueDefinitions: QueueDefinition[] = [
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [aoe2Localization, setAoe2Localization] = useState<{ languageName: string; names: Record<string, string> }>({ languageName: "English", names: {} });
+  const [aoe2Localization, setAoe2Localization] = useState<Aoe2Localization>({
+    languageId: null,
+    languageCode: "en",
+    languageName: "English",
+    names: {},
+    mapDescriptions: {},
+    civilizationBonuses: {}
+  });
   const [lobbyAutomationActive, setLobbyAutomationActive] = useState(false);
   const [customLobbyAutomationActive, setCustomLobbyAutomationActive] = useState(false);
   const [weeklyQueueActive, setWeeklyQueueActive] = useState(false);
@@ -1713,6 +1723,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     queues: queueDefinitions,
     aoe2Language: aoe2Localization.languageName,
     localizeAoe2Name: (canonicalName) => aoe2Localization.names[canonicalName] ?? canonicalName,
+    localizeAoe2MapDescription: (canonicalName, fallback) => aoe2Localization.mapDescriptions[canonicalName] ?? fallback,
+    getLocalizedAoe2CivilizationBonuses: (canonicalName) => aoe2Localization.civilizationBonuses[canonicalName],
     ensureAoe2Ready,
     startQueue,
     updateActiveQueue,
