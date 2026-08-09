@@ -199,7 +199,7 @@ export function ProfilePage({
             : user.displayName.slice(0, 2).toUpperCase()}
         </div>
         <div className="profile-card-identity">
-          <h2>{user.displayName}</h2>
+          <h2 data-ui-translation="off">{user.displayName}</h2>
           <span>{user.steamId ? `Steam ID ${user.steamId}` : "Steam account"}</span>
         </div>
         <div className="profile-card-status">

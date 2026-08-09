@@ -190,7 +190,7 @@ export function SettingsPage() {
               : state.currentUser.displayName.slice(0, 2).toUpperCase()}
           </div>
           <div>
-            <strong>{state.currentUser.displayName}</strong>
+            <strong data-ui-translation="off">{state.currentUser.displayName}</strong>
             <span>Authenticated through Steam</span>
           </div>
         </div>

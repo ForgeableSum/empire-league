@@ -49,6 +49,7 @@ interface AppContextValue {
   returnFromPlayerProfile: () => void;
   queues: QueueDefinition[];
   aoe2Language: string;
+  aoe2LanguageCode: string;
   aoe2LanguageId: number | null;
   localizeAoe2Name: (canonicalName: string) => string;
   localizeAoe2MapDescription: (canonicalName: string, fallback: string) => string;
@@ -1834,6 +1835,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     queues: queueDefinitions,
     aoe2Language: aoe2Localization.languageName,
+    aoe2LanguageCode: aoe2Localization.languageCode,
     aoe2LanguageId: aoe2Localization.languageId,
     localizeAoe2Name: (canonicalName) => aoe2Localization.names[canonicalName] ?? canonicalName,
     localizeAoe2MapDescription: (canonicalName, fallback) => aoe2Localization.mapDescriptions[canonicalName] ?? fallback,

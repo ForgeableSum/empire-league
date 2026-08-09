@@ -117,7 +117,7 @@ export function LeaderboardPage() {
             <div className={player.id === state.currentUser.id ? "leader-row current" : "leader-row"} key={player.id}>
               <strong>#{player.rank}</strong>
               <button className="player-link" type="button" onClick={() => openPlayerProfile(player.id)}>
-                {player.displayName}
+                <span data-ui-translation="off">{player.displayName}</span>
               </button>
               <span>{countryFlag(player.countryCode)}</span>
               <span>{player.rating}</span>

@@ -246,7 +246,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
               : state.currentUser.displayName.slice(0, 2).toUpperCase()}
           </div>
           <div>
-            <strong>{state.currentUser.displayName}</strong>
+            <strong data-ui-translation="off">{state.currentUser.displayName}</strong>
             <span>{state.currentUser.rating} Elo · {record}</span>
           </div>
           <button className="icon-button" type="button" aria-label="Sign out" title="Sign out" onClick={() => void signOut()}>

@@ -26,7 +26,7 @@ export function ChatDock({
     <div className="chat-dock" aria-label="Open conversations">
       {chats.map((chat) => chat.minimized
         ? <button className="chat-minimized" type="button" key={chat.friend.id} onClick={() => { onToggle(chat.friend.id); onActivate(chat.friend.id); }}>
-            <MessageCircle size={17} /><span>{chat.friend.name}</span><span className={`presence-dot ${chat.friend.presence}`} />
+            <MessageCircle size={17} /><span data-ui-translation="off">{chat.friend.name}</span><span className={`presence-dot ${chat.friend.presence}`} />
           </button>
         : <ChatWindow key={chat.friend.id} chat={chat} onToggle={onToggle} onClose={onClose} onSend={onSend} onActivate={onActivate} />)}
     </div>
@@ -56,7 +56,7 @@ function ChatWindow({ chat, onToggle, onClose, onSend, onActivate }: {
       <header className="chat-header">
         <button className="chat-person" type="button" onClick={() => onToggle(chat.friend.id)}>
           <span className="social-avatar compact">{chat.friend.initials}<span className={`presence-dot ${chat.friend.presence}`} /></span>
-          <span><strong>{chat.friend.name}</strong><small>{presenceLabel(chat.friend.presence)}</small></span>
+          <span><strong data-ui-translation="off">{chat.friend.name}</strong><small>{presenceLabel(chat.friend.presence)}</small></span>
         </button>
         <div>
           <button type="button" aria-label="Minimize chat" onClick={() => onToggle(chat.friend.id)}><Minus size={16} /></button>
@@ -67,7 +67,7 @@ function ChatWindow({ chat, onToggle, onClose, onSend, onActivate }: {
         <div className="chat-day">Today</div>
         {chat.messages.map((message) => (
           <div className={`chat-message ${message.from}`} key={message.id}>
-            <span>{message.text}</span><small>{message.time}</small>
+            <span data-ui-translation="off">{message.text}</span><small>{message.time}</small>
           </div>
         ))}
         <div ref={endRef} />

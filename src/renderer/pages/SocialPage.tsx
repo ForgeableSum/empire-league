@@ -109,7 +109,7 @@ export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, 
                   <span className={`presence-dot ${friend.presence}`} title={presenceLabel(friend.presence)} />
                 </div>
                 <div className="friend-identity">
-                  <strong>{friend.name}</strong>
+                  <strong data-ui-translation="off">{friend.name}</strong>
                   <span>{friend.rating} Elo{friend.mutualFriends ? ` · ${friend.mutualFriends} mutual` : ""}</span>
                 </div>
                 <div className={`friend-activity ${friend.presence}`}>
@@ -159,7 +159,7 @@ export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, 
               <article className="request-row" key={request.id}>
                 <div className="social-avatar compact">{request.avatarUrl ? <img src={request.avatarUrl} alt="" /> : request.initials}</div>
                 <div>
-                  <strong>{request.name}</strong>
+                  <strong data-ui-translation="off">{request.name}</strong>
                   <span>{request.rating} Elo · {request.mutualFriends} mutual</span>
                 </div>
                 <div className="request-actions">
@@ -178,7 +178,7 @@ export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, 
             <div className="social-confirm-icon"><UserMinus size={24} /></div>
             <div>
               <span className="eyebrow">Remove friend</span>
-              <h2 id="unfriend-title">Unfriend {pendingUnfriend.name}?</h2>
+              <h2 id="unfriend-title">Unfriend <span data-ui-translation="off">{pendingUnfriend.name}</span>?</h2>
             </div>
             <p>They’ll be removed from your friends list and your current chat history will be cleared.</p>
             <div className="social-confirm-actions">

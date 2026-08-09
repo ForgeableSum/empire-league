@@ -174,7 +174,7 @@ export function CustomPage() {
           <div className="custom-room-list-header"><span>Room</span><span>Content</span><span>Players</span><span>Status</span><span /></div>
           {customRooms.map((room) => (
             <article className="custom-room-row" key={room.id}>
-              <div><strong>{room.name}</strong><small>{room.demo ? "Demo room · " : ""}Hosted by {room.players.find((player) => player.host)?.displayName ?? "Unknown"}</small></div>
+              <div><strong data-ui-translation="off">{room.name}</strong><small>{room.demo ? "Demo room · " : ""}Hosted by <span data-ui-translation="off">{room.players.find((player) => player.host)?.displayName ?? "Unknown"}</span></small></div>
               <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
               <div className="room-player-count"><Users size={16} /> {room.players.length}/{room.maxPlayers}</div>
               <span className={`custom-room-status ${room.status}`}>{customRoomStatusLabel(room.status)}</span>
@@ -482,7 +482,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   return (
     <section className="custom-lobby">
       <div className="custom-lobby-heading">
-        <div><span className="eyebrow">Live custom lobby</span><h2>{room.name}</h2><p>{room.players.length}/{room.maxPlayers} players · {room.map?.name ?? "Standard map"} · {room.dataMod?.name ?? "No data mod"}</p></div>
+        <div><span className="eyebrow">Live custom lobby</span><h2 data-ui-translation="off">{room.name}</h2><p>{room.players.length}/{room.maxPlayers} players · {room.map?.name ?? "Standard map"} · {room.dataMod?.name ?? "No data mod"}</p></div>
         <button className="secondary" type="button" onClick={() => act(customLobbyService.leave(room.id))}><X size={16} /> Leave lobby</button>
       </div>
       <div className="custom-lobby-layout">
@@ -491,7 +491,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           <div className="lobby-roster-header"><strong>Players</strong><span>Team</span><span>Civilization</span><span>Status</span></div>
           {slots.map((player, index) => (
             <div className={player ? "lobby-player-row occupied" : "lobby-player-row"} key={index}>
-              <div className="lobby-player-name"><span className="lobby-slot-number">{index + 1}</span>{player ? <><Shield size={17} /><strong>{player.displayName}</strong>{player.host && <Crown size={15} />} {isHost && !player.host && !room.locked && <button className="lobby-kick" aria-label={`Remove ${player.displayName}`} onClick={() => act(customLobbyService.kick(room.id, player.id))}><X size={13} /></button>}</> : <span>Open slot</span>}</div>
+              <div className="lobby-player-name"><span className="lobby-slot-number">{index + 1}</span>{player ? <><Shield size={17} /><strong data-ui-translation="off">{player.displayName}</strong>{player.host && <Crown size={15} />} {isHost && !player.host && !room.locked && <button className="lobby-kick" aria-label={`Remove ${player.displayName}`} onClick={() => act(customLobbyService.kick(room.id, player.id))}><X size={13} /></button>}</> : <span>Open slot</span>}</div>
               {player && room.map?.kind === "scenario" ? <><span>Scenario</span><span>Scenario-defined</span>{player.id === currentPlayerId
                 ? <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
                 : <span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span>}</> : player && (player.id === currentPlayerId ? <>
@@ -504,7 +504,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
         </article>
         <aside className="panel lobby-chat">
           <div className="lobby-chat-title"><MessageSquare size={18} /><strong>Lobby chat</strong></div>
-          <div className="lobby-chat-messages" aria-live="polite">{room.messages.map((message) => <p className={message.system ? "system" : ""} key={message.id}><strong>{message.author}</strong><span>{message.text}</span></p>)}</div>
+          <div className="lobby-chat-messages" aria-live="polite">{room.messages.map((message) => <p className={message.system ? "system" : ""} data-ui-translation={message.system ? undefined : "off"} key={message.id}><strong>{message.author}</strong><span>{message.text}</span></p>)}</div>
           <form onSubmit={submitChat}><input placeholder="Message lobby…" value={draft} onChange={(event) => setDraft(event.target.value)} /><button className="primary" aria-label="Send"><Send size={17} /></button></form>
         </aside>
       </div>
