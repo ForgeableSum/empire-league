@@ -45,6 +45,7 @@ import {
   showReturnToMenuOverlay
 } from "../window.js";
 import { setObsCaptureMode } from "../obsIntegration.js";
+import { loadAoe2Localization } from "../aoe2Localization.js";
 import {
   closeAoe2NativeWindow,
   clearAoe2TextField,
@@ -2561,6 +2562,13 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 }
 
 export function registerGameHandlers(): void {
+  ipcMain.handle("game:get-localization", async () => {
+    const installation = await detectAoe2Installation();
+    if (!installation.installed || !installation.path) {
+      return { languageId: null, languageCode: "en", languageName: "English", names: {} };
+    }
+    return loadAoe2Localization(installation.path);
+  });
   ipcMain.handle("game:scan-local-custom-content", scanLocalCustomContent);
   ipcMain.handle("game:detect-enabled-ui-mods", detectEnabledUiMods);
   ipcMain.handle("game:disable-enabled-ui-mods", disableEnabledUiMods);
@@ -3016,6 +3024,11 @@ export function registerGameHandlers(): void {
     if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 8) {
       return { sent: false, message: "The lobby must contain between 2 and 8 players." };
     }
+    const installation = await detectAoe2Installation();
+    const localization = installation.installed && installation.path
+      ? await loadAoe2Localization(installation.path)
+      : { languageCode: "en", names: {} as Record<string, string> };
+    const localizedMapName = localization.names[normalizedMapName] ?? normalizedMapName;
 
     const sequenceId = ++createLobbySequenceCounter;
     if (activeCreateLobbySequence) {
@@ -3332,8 +3345,9 @@ export function registerGameHandlers(): void {
         await clickStep(`Select ${mapStyle} Map Style`, mapStylePoint[0], mapStylePoint[1], { synchronous: true });
         await delay(mapPicker.styleSelectionSettleMs);
         await clickStep("Focus Map Search", mapPicker.searchPoint[0], mapPicker.searchPoint[1], { synchronous: true });
-        const mapSearch = await sendAoe2Text(process.pid, normalizedMapName);
-        emitLog(`MAP_SELECT|Step=Search|Map=${normalizedMapName}|${mapSearch.detail}`);
+        const mapSearchText = isCustomMap ? normalizedMapName : localizedMapName;
+        const mapSearch = await sendAoe2Text(process.pid, mapSearchText);
+        emitLog(`MAP_SELECT|Step=Search|Map=${normalizedMapName}|Localized=${mapSearchText}|Language=${localization.languageCode}|${mapSearch.detail}`);
         if (!mapSearch.sent) throw new Error(`${normalizedMapName} could not be entered in the map search.`);
         await delay(mapPicker.searchSettleMs);
         await clickStep(`Select ${normalizedMapName}`, mapPoint[0], mapPoint[1], { synchronous: true });
@@ -3589,6 +3603,11 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
+    const installation = await detectAoe2Installation();
+    const localization = installation.installed && installation.path
+      ? await loadAoe2Localization(installation.path)
+      : { languageCode: "en", names: {} as Record<string, string> };
+    const localizedSelection = localization.names[selection] ?? selection;
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
@@ -3733,8 +3752,8 @@ export function registerGameHandlers(): void {
         const clearSearch = await clearAoe2TextField(gameProcess.pid);
         emitLog(`CIV_SELECT|Step=SearchClear|Selection=${selection}|${clearSearch.detail}`);
         if (!clearSearch.sent) throw new Error("The civilization search field could not be cleared.");
-        const searchText = await sendAoe2Text(gameProcess.pid, selection);
-        emitLog(`CIV_SELECT|Step=SearchText|Selection=${selection}|${searchText.detail}`);
+        const searchText = await sendAoe2Text(gameProcess.pid, localizedSelection);
+        emitLog(`CIV_SELECT|Step=SearchText|Selection=${selection}|Localized=${localizedSelection}|Language=${localization.languageCode}|${searchText.detail}`);
         if (!searchText.sent) throw new Error(`${selection} could not be entered in the civilization search.`);
         await delay(aoe2UiManifest.civilizationPicker.searchSettleMs);
         [civilizationX, civilizationY] = aoe2UiManifest.civilizationPicker.filteredCivilizationPoint;

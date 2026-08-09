@@ -677,28 +677,33 @@ export async function sendAoe2Text(
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
-  if (!text || /[^\x20-\x7e]/.test(text)) {
+  if (!text || /[\u0000-\u001f\u007f]/.test(text)) {
     return { sent: false, detail: "TEXT_NOT_SUPPORTED" };
   }
 
   const results = [];
-  for (const character of text) {
+  // WM_CHAR carries UTF-16 code units. Index the string rather than iterating
+  // Unicode code points so surrogate pairs are dispatched as two messages and
+  // the completion count remains comparable to String.length.
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    const codeUnit = text.charCodeAt(index);
     if (options.triggerKeyEvents) {
-      const keyMapping = Number(VkKeyScanW!(character.charCodeAt(0)));
-      if (keyMapping === -1) return { sent: false, detail: `KEY_MAPPING_NOT_FOUND|Character=${character}` };
-      const virtualKey = keyMapping & 0xff;
-      const shiftRequired = (keyMapping & 0x0100) !== 0;
+      const keyMapping = Number(VkKeyScanW!(codeUnit));
+      const hasKeyMapping = keyMapping !== -1;
+      const virtualKey = hasKeyMapping ? keyMapping & 0xff : 0;
+      const shiftRequired = hasKeyMapping && (keyMapping & 0x0100) !== 0;
       if (shiftRequired) sendWindowMessage(window, 0x0100, 0x10, 1);
-      sendWindowMessage(window, 0x0100, virtualKey, 1);
-      const characterResult = sendWindowMessage(window, 0x0102, character.charCodeAt(0), 1);
-      sendWindowMessage(window, 0x0101, virtualKey, -2147483647);
+      if (hasKeyMapping) sendWindowMessage(window, 0x0100, virtualKey, 1);
+      const characterResult = sendWindowMessage(window, 0x0102, codeUnit, 1);
+      if (hasKeyMapping) sendWindowMessage(window, 0x0101, virtualKey, -2147483647);
       if (shiftRequired) sendWindowMessage(window, 0x0101, 0x10, -2147483647);
       results.push(characterResult);
       if (!characterResult.dispatched) break;
       await delay(15);
       continue;
     }
-    const result = sendWindowMessage(window, 0x0102, character.charCodeAt(0), 1);
+    const result = sendWindowMessage(window, 0x0102, codeUnit, 1);
     results.push(result);
     if (!result.dispatched) break;
     await delay(15);

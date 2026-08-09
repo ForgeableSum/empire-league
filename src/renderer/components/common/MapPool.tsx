@@ -1,5 +1,6 @@
 import { Star } from "lucide-react";
 import type { MapDefinition } from "../../../shared/contracts/matchmaking";
+import { useAppStore } from "../../state/appStore";
 
 interface MapPoolProps {
   maps: MapDefinition[];
@@ -12,17 +13,19 @@ interface MapPoolProps {
 }
 
 export function MapPool({ maps, limit, selectedMapIds, onToggle, favoriteMapId, onFavorite, disabled = false }: MapPoolProps) {
+  const { localizeAoe2Name } = useAppStore();
   const visibleMaps = limit === undefined ? maps : maps.slice(0, limit);
   const selectable = selectedMapIds !== undefined && onToggle !== undefined;
 
   return (
     <div className="map-pool">
       {visibleMaps.map((map) => {
+        const mapName = localizeAoe2Name(map.name);
         const selected = !selectable || selectedMapIds.includes(map.id);
         const content = (
           <>
             <img src={map.thumbnailUrl} alt="" />
-            <span className="map-name">{map.name}</span>
+            <span className="map-name">{mapName}</span>
           </>
         );
 
@@ -32,7 +35,7 @@ export function MapPool({ maps, limit, selectedMapIds, onToggle, favoriteMapId, 
               className={selected ? "map-thumbnail selected" : "map-thumbnail"}
               type="button"
               aria-pressed={selected}
-              aria-label={`${selected ? "Exclude" : "Include"} ${map.name}`}
+              aria-label={`${selected ? "Exclude" : "Include"} ${mapName}`}
               disabled={disabled}
               onClick={() => onToggle(map.id)}
             >
@@ -44,7 +47,7 @@ export function MapPool({ maps, limit, selectedMapIds, onToggle, favoriteMapId, 
                 type="button"
                 disabled={disabled}
                 aria-pressed={favoriteMapId === map.id}
-                aria-label={`${favoriteMapId === map.id ? "Remove" : "Favorite"} ${map.name}`}
+                aria-label={`${favoriteMapId === map.id ? "Remove" : "Favorite"} ${mapName}`}
                 title={favoriteMapId === map.id ? "Remove favorite" : "Set as favorite"}
                 onClick={() => onFavorite(map.id)}
               >

@@ -9,7 +9,7 @@ import { useAppStore } from "../state/appStore";
 import { AnimatedEllipsis, NetworkLobby } from "./CustomPage";
 
 export function WeeklyPage() {
-  const { state, ensureAoe2Ready, notify, setWeeklyQueueActive } = useAppStore();
+  const { state, ensureAoe2Ready, notify, setWeeklyQueueActive, localizeAoe2Name } = useAppStore();
   const [status, setStatus] = useState<WeeklyQueueStatus | null>(null);
   const [room, setRoom] = useState<CustomLobbyRoom>();
   const [civilization, setCivilization] = useState("Random");
@@ -101,7 +101,7 @@ export function WeeklyPage() {
         <div className="weekly-queue-card">
           <span>Just for fun</span>
           <strong>Unranked · Weekly rules</strong>
-          <ThemedSelect label="Civilization" value={civilization} onChange={setCivilization} disabled={Boolean(room) || status?.queued || pending} options={["Random", ...civilizations].map((value) => ({ value, label: value }))} />
+          <ThemedSelect label="Civilization" value={civilization} onChange={setCivilization} disabled={Boolean(room) || status?.queued || pending} options={["Random", ...civilizations].map((value) => ({ value, label: localizeAoe2Name(value) }))} />
           <button className={room || status?.queued ? "weekly-join queued" : "weekly-join"} aria-label={status?.queued && !room ? "Leave weekly queue" : undefined} disabled={Boolean(room) || !status || pending} type="button" onClick={() => void toggleQueue()}>
             {room || status?.queued ? <Check size={18} /> : <Swords size={18} />}
             {room ? <>Preparing game<AnimatedEllipsis /></> : pending ? "Updating..." : status?.queued ? <>Finding players<AnimatedEllipsis /></> : "Join weekly queue"}

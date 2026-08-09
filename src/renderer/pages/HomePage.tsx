@@ -13,7 +13,7 @@ import { matchmakerTransport } from "../services/matchmakerTransport";
 const openLandMaps = mapGroups.find((group) => group.id === "land-open")?.maps ?? [];
 
 export function HomePage() {
-  const { state, lobbyAutomationActive, weeklyQueueActive, notify } = useAppStore();
+  const { state, lobbyAutomationActive, weeklyQueueActive, notify, localizeAoe2Name } = useAppStore();
   const user = state.currentUser;
   const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
   const matchmakerStatus = useSyncExternalStore(
@@ -80,9 +80,9 @@ export function HomePage() {
             <div className="table-row" key={match.id}>
               <strong className={match.outcome}>{match.outcome === "win" ? "Victory" : match.outcome === "loss" ? "Defeat" : "No Contest"}</strong>
               <span>{match.opponent}</span>
-              <span>{match.map}</span>
+              <span>{localizeAoe2Name(match.map)}</span>
               <span>{match.civilization && match.opponentCivilization
-                ? `${match.civilization} vs. ${match.opponentCivilization}`
+                ? `${localizeAoe2Name(match.civilization)} vs. ${localizeAoe2Name(match.opponentCivilization)}`
                 : "Unknown civilizations"}</span>
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
               <span>{match.durationMinutes}m</span>

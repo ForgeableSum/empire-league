@@ -10,7 +10,7 @@ import { MatchmakingBrand } from "./MatchmakingBrand";
 type CivilizationName = keyof typeof civBonuses;
 
 export function LobbyPreparation() {
-  const { state, prepareLobby } = useAppStore();
+  const { state, prepareLobby, localizeAoe2Name } = useAppStore();
   const inputLocked = !state.error;
   const match = state.activeMatch;
   const countdownMs = state.roomSetupEstimateMs ?? 60_000;
@@ -55,7 +55,7 @@ export function LobbyPreparation() {
       <div className="civilization-matchup">
         <article className="upcoming-map-card">
           <span className="eyebrow">Map</span>
-          <h3>{selectedMap?.name ?? "Map pending"}</h3>
+          <h3>{selectedMap ? localizeAoe2Name(selectedMap.name) : "Map pending"}</h3>
           {selectedMap?.thumbnailUrl ? (
             <img src={selectedMap.thumbnailUrl} alt={`Preview of ${selectedMap.name}`} />
           ) : (
@@ -85,11 +85,12 @@ function CivilizationBonuses({
   civilization: CivilizationName | null;
   side: "player" | "opponent";
 }) {
+  const { localizeAoe2Name } = useAppStore();
   const details = civilization ? civBonuses[civilization] : null;
   return (
     <article className={`civ-bonus-card ${side}`}>
       <span className="eyebrow">{side === "player" ? "Your civilization" : "Opponent civilization"}</span>
-      <h3>{civilization ?? "Random civilization"}</h3>
+      <h3>{civilization ? localizeAoe2Name(civilization) : "Random civilization"}</h3>
       {details ? (
         <>
           <ul>{details.bonuses.map((bonus) => <li key={bonus}>{bonus}</li>)}</ul>

@@ -38,7 +38,7 @@ const civilizationModes: Array<{
 ];
 
 export function QueuePage() {
-  const { state, queues, startQueue, updateActiveQueue, cancelQueue } = useAppStore();
+  const { state, queues, startQueue, updateActiveQueue, cancelQueue, localizeAoe2Name } = useAppStore();
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (previewSection !== "map-pool") return;
@@ -524,7 +524,7 @@ export function QueuePage() {
                             <ThemedSelect
                               className="civilization-select"
                               label="Civilization"
-                              options={(classicMode ? classicCivilizations : civilizations).map((name) => ({ value: name, label: name }))}
+                              options={(classicMode ? classicCivilizations : civilizations).map((name) => ({ value: name, label: localizeAoe2Name(name) }))}
                               value={civilization}
                               onChange={selectCivilization}
                               disabled={preferencesLocked || civilizationMode !== "pick"}
@@ -702,6 +702,7 @@ function CivilizationBanList({ title, selected, onToggle }: {
   selected: string[];
   onToggle: (name: string) => void;
 }) {
+  const { localizeAoe2Name } = useAppStore();
   return (
     <section className="civilization-ban-group">
       <div className="civilization-ban-group-heading">
@@ -719,7 +720,7 @@ function CivilizationBanList({ title, selected, onToggle }: {
                 disabled={!checked && selected.length >= 5}
                 onChange={() => onToggle(name)}
               />
-              <span>{name}</span>
+              <span>{localizeAoe2Name(name)}</span>
             </label>
           );
         })}

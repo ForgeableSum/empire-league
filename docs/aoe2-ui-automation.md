@@ -89,6 +89,18 @@ seconds of file inactivity prompts a fallback recheck; afterward, three
 seconds does. A temporarily unparseable recording without a terminal operation
 remains under observation.
 
+## Localization
+
+Empire League reads the final `SetCurrentLanguage(<index>)` entry from the newest
+AoE2 `MainLog.txt`. The index follows the Game Language dropdown order and maps
+to the matching `resources/<language>/strings/key-value/key-value-strings-utf8.txt`
+file. The English file is reverse-indexed to obtain stable string keys for
+canonical map and civilization names; those same keys resolve the active
+language. Canonical names remain in matchmaking and storage, while localized
+names are used for display and AoE2 picker searches. Custom map and scenario
+filenames are never translated. Missing logs, files, or strings fall back to
+English.
+
 ## Civilization grid
 
 The manifest contains every currently visible Age of Empires II civilization in game build `101.103.48987.0`. Entries map names to grid column/row positions; grid centers are stored once. This avoids maintaining fifty independent pixel coordinates.

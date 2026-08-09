@@ -14,6 +14,7 @@ import type {
 } from "./gameIntegration.js";
 import type { Aoe2CivilizationSelection } from "../aoe2UiManifest.js";
 import type { DisableUiModsResult, EnabledUiModsResult, LocalCustomContentCatalog } from "./customLobby.js";
+import type { Aoe2Localization } from "./localization.js";
 
 export interface SteamFamilyProbeResult {
   status: "owned" | "family_shared" | "unknown";
@@ -72,6 +73,7 @@ export interface ObsOutputStatus {
 }
 
 export interface ElectronGameApi {
+  getAoe2Localization(): Promise<Aoe2Localization>;
   getObsStatus(password?: string): Promise<ObsIntegrationStatus>;
   setupObs(password?: string): Promise<ObsSetupResult>;
   getObsOutputStatus(): Promise<ObsOutputStatus>;

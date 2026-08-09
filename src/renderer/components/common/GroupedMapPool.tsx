@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { MapGroupId } from "../../../shared/contracts/matchmaking";
 import type { RenderedMapGroupDefinition } from "../../mocks/mockPlayers";
 import { isPreviewMode } from "../../previewMode";
+import { useAppStore } from "../../state/appStore";
 
 const mapGuidanceTargetId = "arena";
 const mapGuidanceSeenKey = "empire-league-map-guidance-seen";
@@ -37,6 +38,7 @@ export function GroupedMapPool({
   onFavorite,
   disabled = false
 }: GroupedMapPoolProps) {
+  const { localizeAoe2Name } = useAppStore();
   const [showMapGuidance, setShowMapGuidance] = useState(shouldShowMapGuidance);
 
   function dismissMapGuidance() {
@@ -74,6 +76,7 @@ export function GroupedMapPool({
             </header>
             <div className="map-group-grid">
               {group.maps.map((map, index) => {
+                const mapName = localizeAoe2Name(map.name);
                 const primary = map.id === group.primaryMapId;
                 const selected = groupEnabled && selectedMapIds.includes(map.id);
                 const favorite = favoriteMapIds[group.id] === map.id;
@@ -86,7 +89,7 @@ export function GroupedMapPool({
                       className="group-map-select"
                       type="button"
                       aria-pressed={selected}
-                      aria-label={`${selected ? "Exclude" : "Include"} ${map.name}`}
+                      aria-label={`${selected ? "Exclude" : "Include"} ${mapName}`}
                       disabled={disabled || !groupEnabled}
                       onClick={() => {
                         dismissMapGuidance();
@@ -96,7 +99,7 @@ export function GroupedMapPool({
                       <img src={map.thumbnailUrl} alt="" />
                       <span className="group-map-shade" />
                       <span className="group-map-name">
-                        <strong>{map.name}</strong>
+                        <strong>{mapName}</strong>
                         {primary && <small>Primary map</small>}
                       </span>
                       {!selected && <span className="map-off-label">{groupEnabled ? "Off" : "Group off"}</span>}
@@ -106,8 +109,8 @@ export function GroupedMapPool({
                       type="button"
                       disabled={disabled || !groupEnabled}
                       aria-pressed={favorite}
-                      aria-label={`${favorite ? "Remove" : "Favorite"} ${map.name}`}
-                      title={favorite ? "Remove favorite" : `Favorite ${map.name}`}
+                      aria-label={`${favorite ? "Remove" : "Favorite"} ${mapName}`}
+                      title={favorite ? "Remove favorite" : `Favorite ${mapName}`}
                       onClick={() => onFavorite(group.id, map.id)}
                     >
                       <Star size={index === 0 ? 18 : 15} fill={favorite ? "currentColor" : "none"} />

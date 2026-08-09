@@ -46,6 +46,8 @@ interface AppContextValue {
   openPlayerProfile: (playerId: string) => void;
   returnFromPlayerProfile: () => void;
   queues: QueueDefinition[];
+  aoe2Language: string;
+  localizeAoe2Name: (canonicalName: string) => string;
   ensureAoe2Ready: (purpose?: "matchmaking" | "custom") => Promise<boolean>;
   startQueue: (queue: QueueDefinition) => Promise<void>;
   updateActiveQueue: (queue: QueueDefinition) => Promise<void>;
@@ -132,6 +134,7 @@ export const queueDefinitions: QueueDefinition[] = [
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const [aoe2Localization, setAoe2Localization] = useState<{ languageName: string; names: Record<string, string> }>({ languageName: "English", names: {} });
   const [lobbyAutomationActive, setLobbyAutomationActive] = useState(false);
   const [customLobbyAutomationActive, setCustomLobbyAutomationActive] = useState(false);
   const [weeklyQueueActive, setWeeklyQueueActive] = useState(false);
@@ -169,6 +172,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     mockConfig: defaultMockServiceConfig,
     settings: loadSettings()
   }));
+
+  useEffect(() => {
+    if (!window.electronApi) return;
+    const refresh = () => void window.electronApi!.getAoe2Localization().then(setAoe2Localization).catch(() => undefined);
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, []);
 
   const configRef = useRef(state.mockConfig);
   configRef.current = state.mockConfig;
@@ -1700,6 +1711,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPage(profileReturnPage);
     },
     queues: queueDefinitions,
+    aoe2Language: aoe2Localization.languageName,
+    localizeAoe2Name: (canonicalName) => aoe2Localization.names[canonicalName] ?? canonicalName,
     ensureAoe2Ready,
     startQueue,
     updateActiveQueue,

@@ -4,19 +4,19 @@ import { ThemedSelect } from "../components/common/ThemedSelect";
 import { useAppStore } from "../state/appStore";
 
 export function MatchHistoryPage() {
-  const { state, openPlayerProfile } = useAppStore();
+  const { state, openPlayerProfile, localizeAoe2Name } = useAppStore();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const matches = useMemo(
     () =>
       state.recentMatches.filter((match) => {
-        const matchesQuery = `${match.opponent} ${match.map} ${match.civilization} ${match.opponentCivilization}`
+        const matchesQuery = `${match.opponent} ${match.map} ${localizeAoe2Name(match.map)} ${match.civilization} ${localizeAoe2Name(match.civilization)} ${match.opponentCivilization} ${localizeAoe2Name(match.opponentCivilization)}`
           .toLowerCase()
           .includes(query.toLowerCase());
         const matchesFilter = filter === "all" || match.outcome === filter;
         return matchesQuery && matchesFilter;
       }),
-    [filter, query, state.recentMatches]
+    [filter, query, state.recentMatches, localizeAoe2Name]
   );
 
   return (
@@ -56,9 +56,9 @@ export function MatchHistoryPage() {
               <button className="player-link" type="button" onClick={() => openPlayerProfile(match.opponentId)}>
                 {match.opponent} ({match.opponentRating})
               </button>
-              <span>{match.map}</span>
+              <span>{localizeAoe2Name(match.map)}</span>
               <span>{match.civilization && match.opponentCivilization
-                ? `${match.civilization} vs. ${match.opponentCivilization}`
+                ? `${localizeAoe2Name(match.civilization)} vs. ${localizeAoe2Name(match.opponentCivilization)}`
                 : "Unknown civilizations"}</span>
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
               <span>{match.durationMinutes}m</span>

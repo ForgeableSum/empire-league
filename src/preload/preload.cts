@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { ElectronGameApi } from "../shared/contracts/electronApi.js";
 
 const electronApi: ElectronGameApi = {
+  getAoe2Localization: () => ipcRenderer.invoke("game:get-localization"),
   getObsStatus: (password) => ipcRenderer.invoke("obs:get-status", password),
   setupObs: (password) => ipcRenderer.invoke("obs:setup", password),
   getObsOutputStatus: () => ipcRenderer.invoke("obs:get-output-status"),
