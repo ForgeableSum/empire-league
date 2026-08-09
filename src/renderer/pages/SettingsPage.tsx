@@ -203,7 +203,7 @@ export function SettingsPage() {
               <button
                 type="button"
                 className={`secondary ${obsOutput?.streaming ? "obs-action-stop" : "obs-action-go"}`}
-                disabled={obsOutputLoading || !obsOutput?.connected || (!obsOutput.captureReady && !obsOutput.streaming)}
+                disabled={obsOutputLoading || !obsOutput?.connected}
                 onClick={() => void changeObsOutput("stream", !obsOutput?.streaming)}
               >{obsOutput?.streaming ? "End Stream" : "Start Streaming"}</button>
             </div>
@@ -212,7 +212,7 @@ export function SettingsPage() {
               <button
                 type="button"
                 className={`secondary ${obsOutput?.recording ? "obs-action-stop" : "obs-action-go"}`}
-                disabled={obsOutputLoading || !obsOutput?.connected || (!obsOutput.captureReady && !obsOutput.recording)}
+                disabled={obsOutputLoading || !obsOutput?.connected}
                 onClick={() => void changeObsOutput("record", !obsOutput?.recording)}
               >{obsOutput?.recording ? "Stop Recording" : "Start Recording"}</button>
             </div>
