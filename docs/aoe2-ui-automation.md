@@ -92,9 +92,15 @@ remains under observation.
 ## Localization
 
 Empire League reads the final `SetCurrentLanguage(<index>)` entry from the newest
-AoE2 `MainLog.txt`. The index follows the Game Language dropdown order and maps
+usable AoE2 `MainLog.txt`. Language detection never blocks AoE2 startup or lobby
+automation. Fifteen seconds after the game window becomes ready, the renderer
+starts checking the current session in the background every five seconds for up
+to five minutes. It updates as soon as the second, profile-loaded language entry
+is available and remembers that confirmed language for future launches.
+The index follows the Game Language dropdown order and maps
 to the matching `resources/<language>/strings/key-value/key-value-strings-utf8.txt`
-file. The English file is reverse-indexed to obtain stable string keys for
+file. Polish is the final dropdown entry rather than being grouped before
+Russian. The English file is reverse-indexed to obtain stable string keys for
 canonical map and civilization names; those same keys resolve the active
 language. Official map descriptions and the civilization bonus/team-bonus
 sections are resolved from the same stable keys and cleaned of AoE2 markup for

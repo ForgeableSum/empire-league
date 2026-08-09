@@ -2562,12 +2562,12 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 }
 
 export function registerGameHandlers(): void {
-  ipcMain.handle("game:get-localization", async () => {
+  ipcMain.handle("game:get-localization", async (_event, currentSessionOnly = false) => {
     const installation = await detectAoe2Installation();
     if (!installation.installed || !installation.path) {
       return { languageId: null, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
     }
-    return loadAoe2Localization(installation.path);
+    return loadAoe2Localization(installation.path, currentSessionOnly === true);
   });
   ipcMain.handle("game:scan-local-custom-content", scanLocalCustomContent);
   ipcMain.handle("game:detect-enabled-ui-mods", detectEnabledUiMods);

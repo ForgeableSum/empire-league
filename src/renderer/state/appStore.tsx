@@ -80,6 +80,9 @@ interface AppContextValue {
 const settingsKey = "empire-league-settings";
 const aoe2PostWindowReadyDelayMs = 7000;
 const aoe2LaunchAttemptTimeoutMs = 30_000;
+const aoe2LanguageInitialRefreshDelayMs = 15_000;
+const aoe2LanguageRefreshIntervalMs = 5_000;
+const aoe2LanguageRefreshDurationMs = 5 * 60_000;
 const roomSetupTimeoutMs = 65_000;
 
 function isLobbyAutomationProgress(message: string): boolean {
@@ -183,12 +186,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     settings: loadSettings()
   }));
 
+  const aoe2LocalizationRefreshTimerRef = useRef<number | null>(null);
+  const aoe2LocalizationRefreshDeadlineRef = useRef<number | null>(null);
+
+  async function refreshAoe2Localization(currentSessionOnly = false, reportResult = false): Promise<boolean> {
+    if (!window.electronApi) return false;
+    const localization = await window.electronApi.getAoe2Localization(currentSessionOnly);
+    if (currentSessionOnly && localization.languageId === null) {
+      if (reportResult) log("AOE2_LANGUAGE|Detected=false|Source=current-session|Reason=authoritative-entry-not-available");
+      return false;
+    }
+    setAoe2Localization(localization);
+    if (reportResult) {
+      log(`AOE2_LANGUAGE|Detected=${localization.languageId !== null}|Source=${currentSessionOnly ? "current-session" : "retained-log"}|Id=${localization.languageId ?? "none"}|Code=${localization.languageCode}|Name=${localization.languageName}`);
+    }
+    return localization.languageId !== null;
+  }
+
+  function armAoe2LocalizationRefresh(delayMs: number): void {
+    aoe2LocalizationRefreshTimerRef.current = window.setTimeout(() => {
+      aoe2LocalizationRefreshTimerRef.current = null;
+      void refreshAoe2Localization(true, true).then((detected) => {
+        if (detected) {
+          aoe2LocalizationRefreshDeadlineRef.current = null;
+          log("AOE2_LANGUAGE|Polling=false|Reason=detected");
+          return;
+        }
+        const deadline = aoe2LocalizationRefreshDeadlineRef.current;
+        if (deadline !== null && Date.now() < deadline) {
+          armAoe2LocalizationRefresh(aoe2LanguageRefreshIntervalMs);
+          return;
+        }
+        aoe2LocalizationRefreshDeadlineRef.current = null;
+        log("AOE2_LANGUAGE|Polling=false|Reason=timeout");
+      }).catch((error: unknown) => {
+        log(`AOE2_LANGUAGE|Detected=false|Source=current-session|Error=${error instanceof Error ? error.message : "unknown"}`);
+        const deadline = aoe2LocalizationRefreshDeadlineRef.current;
+        if (deadline !== null && Date.now() < deadline) {
+          armAoe2LocalizationRefresh(aoe2LanguageRefreshIntervalMs);
+        } else {
+          aoe2LocalizationRefreshDeadlineRef.current = null;
+          log("AOE2_LANGUAGE|Polling=false|Reason=timeout");
+        }
+      });
+    }, delayMs);
+  }
+
+  function scheduleAoe2LocalizationRefresh(): void {
+    if (aoe2LocalizationRefreshDeadlineRef.current !== null) return;
+    aoe2LocalizationRefreshDeadlineRef.current = Date.now() + aoe2LanguageRefreshDurationMs;
+    log(`AOE2_LANGUAGE|Scheduled=true|InitialDelayMs=${aoe2LanguageInitialRefreshDelayMs}|RetryMs=${aoe2LanguageRefreshIntervalMs}|DurationMs=${aoe2LanguageRefreshDurationMs}`);
+    armAoe2LocalizationRefresh(aoe2LanguageInitialRefreshDelayMs);
+  }
+
   useEffect(() => {
     if (!window.electronApi) return;
-    const refresh = () => void window.electronApi!.getAoe2Localization().then(setAoe2Localization).catch(() => undefined);
-    refresh();
-    window.addEventListener("focus", refresh);
-    return () => window.removeEventListener("focus", refresh);
+    const refreshOnFocus = () => void refreshAoe2Localization().catch(() => undefined);
+    void refreshAoe2Localization(false, true).catch((error: unknown) => {
+      log(`AOE2_LANGUAGE|Detected=false|Source=retained-log|Error=${error instanceof Error ? error.message : "unknown"}`);
+    });
+    window.addEventListener("focus", refreshOnFocus);
+    return () => window.removeEventListener("focus", refreshOnFocus);
+  }, []);
+
+  useEffect(() => () => {
+    if (aoe2LocalizationRefreshTimerRef.current !== null) {
+      window.clearTimeout(aoe2LocalizationRefreshTimerRef.current);
+    }
+    aoe2LocalizationRefreshDeadlineRef.current = null;
   }, []);
 
   const configRef = useRef(state.mockConfig);
@@ -500,6 +565,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (loadingNotificationId) {
           updateNotification(loadingNotificationId, { detail: "Finishing game startup." });
         }
+        scheduleAoe2LocalizationRefresh();
         await delayForStartup(aoe2PostWindowReadyDelayMs);
 
         if (!cancelled) {
@@ -556,6 +622,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
         setState((previous) => ({ ...previous, gameStatus: "running" }));
+        scheduleAoe2LocalizationRefresh();
         return true;
       }
       if (existingProcess.running && !existingProcess.owned) {
@@ -582,6 +649,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!ready) throw new Error("AoE2 started, but its game window did not become ready in time.");
 
       updateNotification(loadingNotificationId, { detail: "Finishing game startup." });
+      scheduleAoe2LocalizationRefresh();
       await delayForStartup(aoe2PostWindowReadyDelayMs);
       setState((previous) => ({ ...previous, gameStatus: "running" }));
       updateNotification(loadingNotificationId, {
@@ -603,7 +671,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (isPreviewMode) return true;
     if (!window.electronApi) return true;
     const gameProcess = await window.electronApi.detectAoe2Process();
-    if (gameProcess.running && gameProcess.windowReady && gameProcess.owned) return true;
+    if (gameProcess.running && gameProcess.windowReady && gameProcess.owned) {
+      scheduleAoe2LocalizationRefresh();
+      return true;
+    }
     return launchAoe2ForActivity(purpose);
   }
 

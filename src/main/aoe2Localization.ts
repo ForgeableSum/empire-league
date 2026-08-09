@@ -1,6 +1,7 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { app } from "electron";
 import { civilizations } from "../shared/civilizations.js";
 import { enabledMapCatalogEntries } from "../shared/mapCatalog.js";
 import type { Aoe2Localization } from "../shared/contracts/localization.js";
@@ -11,10 +12,39 @@ const languages = [
   ["br", "Portuguese (Brazil)"], ["de", "German"], ["en", "English"],
   ["es", "Spanish"], ["fr", "French"], ["hi", "Hindi"], ["it", "Italian"],
   ["jp", "Japanese"], ["ko", "Korean"], ["ms", "Malay"],
-  ["mx", "Spanish (Latin America)"], ["pl", "Polish"], ["ru", "Russian"],
-  ["tr", "Turkish"], ["tw", "Chinese (Traditional)"], ["vi", "Vietnamese"],
-  ["zh", "Chinese (Simplified)"]
+  ["mx", "Spanish (Latin America)"], ["ru", "Russian"], ["tr", "Turkish"],
+  ["tw", "Chinese (Traditional)"], ["vi", "Vietnamese"],
+  ["zh", "Chinese (Simplified)"], ["pl", "Polish"]
 ] as const;
+
+let rememberedLanguageId: number | null | undefined;
+
+function validLanguageId(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) >= 0 && Number(value) < languages.length;
+}
+
+async function readRememberedLanguageId(): Promise<number | null> {
+  if (rememberedLanguageId !== undefined) return rememberedLanguageId;
+  try {
+    const stored = JSON.parse(await readFile(join(app.getPath("userData"), "aoe2-language.json"), "utf8")) as { languageId?: unknown };
+    rememberedLanguageId = validLanguageId(stored.languageId) ? stored.languageId : null;
+  } catch {
+    rememberedLanguageId = null;
+  }
+  return rememberedLanguageId;
+}
+
+async function rememberLanguageId(languageId: number): Promise<void> {
+  if (!validLanguageId(languageId) || rememberedLanguageId === languageId) return;
+  rememberedLanguageId = languageId;
+  try {
+    await writeFile(
+      join(app.getPath("userData"), "aoe2-language.json"),
+      `${JSON.stringify({ languageId })}\n`,
+      "utf8"
+    );
+  } catch { /* A read-only cache must never prevent localization or automation. */ }
+}
 
 function parseStrings(text: string): Map<string, string> {
   const result = new Map<string, string>();
@@ -25,37 +55,55 @@ function parseStrings(text: string): Map<string, string> {
   return result;
 }
 
-async function activeLanguageId(): Promise<number | null> {
-  const logsRoot = join(homedir(), "Games", "Age of Empires 2 DE", "logs");
+async function languageEntries(logPath: string): Promise<number[]> {
   try {
-    const folders = (await readdir(logsRoot, { withFileTypes: true }))
+    const log = await readFile(logPath, "utf8");
+    return [...log.matchAll(/Calling SetCurrentLanguage\((\d+)\)/g)].map((match) => Number(match[1]));
+  } catch {
+    return [];
+  }
+}
+
+async function sessionFolders(logsRoot: string): Promise<string[]> {
+  try {
+    return (await readdir(logsRoot, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory() && /^\d{4}\.\d{2}\.\d{2}-\d{4}\.\d{2}$/.test(entry.name))
       .map((entry) => entry.name)
       .sort()
       .reverse();
-    for (const [index, folder] of folders.entries()) {
-      try {
-        const logPath = join(logsRoot, folder, "MainLog.txt");
-        let log = await readFile(logPath, "utf8");
-        let matches = [...log.matchAll(/Calling SetCurrentLanguage\((\d+)\)/g)];
-        // A new session first logs an OS fallback, then the saved profile language.
-        // Give the newest actively-written log a bounded chance to reach that second phase.
-        if (index === 0 && matches.length === 1 && Date.now() - (await stat(logPath)).mtimeMs < 60_000) {
-          for (let attempt = 0; attempt < 10 && matches.length === 1; attempt += 1) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            log = await readFile(logPath, "utf8");
-            matches = [...log.matchAll(/Calling SetCurrentLanguage\((\d+)\)/g)];
-          }
-        }
-        if (matches.length) return Number(matches.at(-1)![1]);
-      } catch { /* Try the next retained session. */ }
-    }
-  } catch { /* AoE2 has not created logs for this Windows user yet. */ }
-  return null;
+  } catch {
+    return [];
+  }
 }
 
-export async function loadAoe2Localization(gamePath: string): Promise<Aoe2Localization> {
-  const languageId = await activeLanguageId();
+async function activeLanguageId(currentSessionOnly: boolean): Promise<number | null> {
+  const logsRoot = join(homedir(), "Games", "Age of Empires 2 DE", "logs");
+  if (currentSessionOnly) {
+    const newest = (await sessionFolders(logsRoot))[0];
+    if (!newest) return null;
+    const entries = await languageEntries(join(logsRoot, newest, "MainLog.txt"));
+    // Complete startups log an OS fallback first and the saved profile
+    // language after player-profile loading. Only the latter is authoritative.
+    const languageId = entries.length >= 2 ? entries.at(-1)! : null;
+    if (languageId !== null) await rememberLanguageId(languageId);
+    return languageId;
+  }
+
+  for (const folder of await sessionFolders(logsRoot)) {
+    const entries = await languageEntries(join(logsRoot, folder, "MainLog.txt"));
+    // A single entry is AoE2's startup fallback, not the player's saved setting.
+    // Skip incomplete sessions and retain the newest previously confirmed language.
+    if (entries.length >= 2) {
+      const languageId = entries.at(-1)!;
+      await rememberLanguageId(languageId);
+      return languageId;
+    }
+  }
+  return readRememberedLanguageId();
+}
+
+export async function loadAoe2Localization(gamePath: string, currentSessionOnly = false): Promise<Aoe2Localization> {
+  const languageId = await activeLanguageId(currentSessionOnly);
   const language = languages[languageId ?? 2] ?? languages[2];
   const stringsPath = (code: string) => join(gamePath, "resources", code, "strings", "key-value", "key-value-strings-utf8.txt");
   try {

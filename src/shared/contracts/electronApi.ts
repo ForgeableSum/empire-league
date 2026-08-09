@@ -73,7 +73,7 @@ export interface ObsOutputStatus {
 }
 
 export interface ElectronGameApi {
-  getAoe2Localization(): Promise<Aoe2Localization>;
+  getAoe2Localization(currentSessionOnly?: boolean): Promise<Aoe2Localization>;
   getObsStatus(password?: string): Promise<ObsIntegrationStatus>;
   setupObs(password?: string): Promise<ObsSetupResult>;
   getObsOutputStatus(): Promise<ObsOutputStatus>;
