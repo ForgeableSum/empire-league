@@ -791,6 +791,10 @@
   border-color: var(--line);
 }
 
+.history-table .table-row {
+  grid-template-columns: 72px 1.15fr 0.85fr 1.15fr 68px 64px 96px 82px 90px;
+}
+
 .leader-row {
   grid-template-columns: 70px 1.2fr 68px 78px 165px 62px 70px 80px 70px;
 }
@@ -1772,6 +1776,23 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.replay-link {
+  width: auto;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.replay-link:hover {
+  color: var(--text);
+}
+
+.replay-unavailable {
+  color: #77716a;
 }
 
 .civilization-options-heading {

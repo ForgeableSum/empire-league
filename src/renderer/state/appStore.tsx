@@ -350,6 +350,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await window.electronApi?.confirmReplayEnded();
         setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
         log(`Replay ended with terminal operation (${replay.reason}): ${filePath}`);
+        matchHistoryService.rememberReplay(match.id, filePath);
         try {
           await services.matchmaking.reportMatchResult({ matchId: match.id, replay });
           log("Replay result reported; waiting for opponent report");

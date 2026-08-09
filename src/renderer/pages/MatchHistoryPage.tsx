@@ -47,6 +47,7 @@ export function MatchHistoryPage() {
             <span>Duration</span>
             <span>Date</span>
             <span>Status</span>
+            <span>Replay</span>
           </div>
           {matches.map((match) => (
             <div className="table-row clickable" key={match.id}>
@@ -62,6 +63,15 @@ export function MatchHistoryPage() {
               <span>{match.durationMinutes}m</span>
               <span>{new Date(match.timestamp).toLocaleDateString()}</span>
               <span>{historyStatusLabel(match.verificationStatus, match.verified)}</span>
+              {match.replayPath ? (
+                <button
+                  className="replay-link"
+                  type="button"
+                  onClick={() => void window.electronApi?.openReplayFile(match.replayPath!)}
+                >
+                  Open replay
+                </button>
+              ) : <span className="replay-unavailable">Unavailable</span>}
             </div>
           ))}
           {matches.length === 0 && (

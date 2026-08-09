@@ -2890,6 +2890,15 @@ export function registerGameHandlers(): void {
     return new Uint8Array(await readFile(filePath));
   });
 
+  ipcMain.handle("game:open-replay-file", async (_event, filePath: string) => {
+    if (typeof filePath !== "string" || !filePath.toLowerCase().endsWith(".aoe2record")) {
+      throw new Error("A valid AoE2 replay path is required.");
+    }
+    await access(filePath);
+    const error = await shell.openPath(filePath);
+    if (error) throw new Error(error);
+  });
+
   ipcMain.handle("game:start-mouse-test-mode", async () => {
     setMouseCoordinateOverlayEnabled(true);
     return { focused: true };

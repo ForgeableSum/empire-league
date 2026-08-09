@@ -79,6 +79,8 @@ export interface MatchSummary {
   verified: boolean;
   verificationStatus?: "pending" | "verified" | "contested" | "no_contest" | "rejected";
   queueType: string;
+  /** Path to this client's recorded game. Available only on the machine that played it. */
+  replayPath?: string;
 }
 
 export interface MatchTrackingStatus {

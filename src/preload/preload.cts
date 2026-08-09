@@ -55,6 +55,7 @@ const electronApi: ElectronGameApi = {
     return () => ipcRenderer.removeListener("game:replay-detection-failed", handler);
   },
   readReplayFile: (filePath) => ipcRenderer.invoke("game:read-replay-file", filePath),
+  openReplayFile: (filePath) => ipcRenderer.invoke("game:open-replay-file", filePath),
   showAoe2FullscreenAfterDelay: () => ipcRenderer.invoke("game:show-fullscreen-after-delay"),
   startAoe2TabTest: () => ipcRenderer.invoke("game:start-tab-test"),
   stopAoe2TabTest: () => ipcRenderer.invoke("game:stop-tab-test"),

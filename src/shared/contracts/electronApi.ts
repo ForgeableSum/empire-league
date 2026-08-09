@@ -101,6 +101,7 @@ export interface ElectronGameApi {
   onAoe2ProcessExited(listener: () => void): () => void;
   onReplayDetectionFailed(listener: (message: string) => void): () => void;
   readReplayFile(filePath: string): Promise<Uint8Array>;
+  openReplayFile(filePath: string): Promise<void>;
   showAoe2FullscreenAfterDelay(): Promise<GameFocusResult>;
   startAoe2TabTest(): Promise<GameInputTestResult>;
   stopAoe2TabTest(): Promise<void>;
