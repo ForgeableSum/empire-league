@@ -44,7 +44,8 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
   const mapPicker = aoe2UiManifest.mapPicker;
   const actions = aoe2UiManifest.actions;
 
-  let total = lobbySetupTiming.hostLobbyAutomationSettleMs;
+  let total = lobbySetupTiming.hostLobbyAutomationSettleMs
+    + lobbySetupTiming.hostLobbyAutomationOverheadMs;
   total += (multiplayerTabCount * multiplayerTabDelayMs) + actions.multiplayer.settleMs;
   total += actionDuration(actions.hostGame) + clickEnterDelayMs;
   total += actionDuration(actions.createLobby);

@@ -9,6 +9,9 @@ export const adaptiveLobbyTimingEnabled = false;
 
 export const lobbySetupTiming = {
   hostLobbyAutomationSettleMs: 2000,
+  // Measured allowance for host-side lobby controls and verification waits
+  // that are not represented by the manifest's individual click timings.
+  hostLobbyAutomationOverheadMs: 9000,
   multiplayerMenuMs: 1000,
   hostGameMenuMs: 2000,
   lobbyCreationMs: 8000,
@@ -16,7 +19,7 @@ export const lobbySetupTiming = {
   resetConfirmationMs: 1000,
   clipboardReadMs: 800,
   lobbyMetadataMs: 700,
-  guestJoinMs: 10000,
+  guestJoinMs: 13000,
   guestReadySettleMs: 2000,
   customMapTransferPollMs: 1500,
   customMapTransferTimeoutMs: 60_000,

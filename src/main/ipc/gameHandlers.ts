@@ -3000,8 +3000,14 @@ export function registerGameHandlers(): void {
     }
     activeCreateLobbySequence = { id: sequenceId, context: automationContext };
 
+    const sequenceStartedAt = performance.now();
+    let previousLogAt = sequenceStartedAt;
     const emitLog = (message: string) => {
-      const sequencedMessage = `SEQUENCE|Id=${sequenceId}|Context=${automationContext}|${message}`;
+      const loggedAt = performance.now();
+      const elapsedMs = Math.round(loggedAt - sequenceStartedAt);
+      const sincePreviousMs = Math.round(loggedAt - previousLogAt);
+      previousLogAt = loggedAt;
+      const sequencedMessage = `SEQUENCE|Id=${sequenceId}|Context=${automationContext}|ElapsedMs=${elapsedMs}|SincePreviousMs=${sincePreviousMs}|${message}`;
       console.info(`[AoE2 automation] ${sequencedMessage}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", sequencedMessage);
     };
@@ -3077,7 +3083,11 @@ export function registerGameHandlers(): void {
         createLobby: "lobby-room"
       };
       const actionStep = async (actionName: Aoe2ActionName) => {
+        const actionStartedAt = performance.now();
         const action = aoe2UiManifest.actions[actionName];
+        const expectedActionMs = ("hoverMs" in action ? action.hoverMs : 100)
+          + ("holdMs" in action ? action.holdMs : 120)
+          + action.settleMs + (action.activation === "clickEnter" ? 500 : 0);
         const expectedState = expectedHostState[actionName];
         const performAction = async (attempt: number) => {
           await clickStep(action.label, action.point[0], action.point[1], {
@@ -3095,7 +3105,10 @@ export function registerGameHandlers(): void {
         };
 
         await performAction(1);
-        if (!expectedState) return;
+        if (!expectedState) {
+          emitLog(`STEP_TIMING|Action=${actionName}|DurationMs=${Math.round(performance.now() - actionStartedAt)}|ExpectedMs=${expectedActionMs}`);
+          return;
+        }
         let verification = readAoe2HostSetupState(process.pid as number);
         const verificationDeadline = Date.now() + 15_000;
         while (verification.state !== expectedState && Date.now() < verificationDeadline) {
@@ -3119,6 +3132,7 @@ export function registerGameHandlers(): void {
         if (verification.state !== expectedState) {
           throw new Error(`${action.label} did not reach ${expectedState}.`);
         }
+        emitLog(`STEP_TIMING|Action=${actionName}|DurationMs=${Math.round(performance.now() - actionStartedAt)}|ExpectedMs=${expectedActionMs}`);
       };
 
       // AoE2 can open its News panel automatically on top of the main menu

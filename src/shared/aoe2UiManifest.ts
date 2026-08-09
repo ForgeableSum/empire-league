@@ -118,8 +118,10 @@ export const aoe2UiManifest = {
   civilizationPicker: {
     searchPoint: [375, 300] as const,
     filteredCivilizationPoint: [1259, 515] as const,
-    searchSettleMs: 1_000,
-    selectionSettleMs: 750
+    // AoE2 takes several seconds to populate filtered civilization results,
+    // and selection includes pixel verification plus Enter fallback handling.
+    searchSettleMs: 4_500,
+    selectionSettleMs: 2_250
   },
   mapPicker: {
     openPoint: [3049, 725] as const,

@@ -76,6 +76,8 @@ AoE2's unverified-content modal is accepted with one window-local Tab followed b
 
 `lobbyTimingService.ts` is the countdown's source of truth. Its baseline follows the same manifest and runtime timing constants used by automation, including map-picker actions, optional civilization selection for both players, Ready ordering, WebSocket-delivered matchmaker events, custom-content confirmation, the second custom-map Host Ready, Start, and reveal.
 
+The baseline also includes measured allowances for AoE2 UI verification work that is not reducible to click/settle constants. August 2026 host and guest audits established a 9-second host setup allowance, a 13-second guest lobby-open allowance, and longer civilization search/verification settles. These apply before the guest-joined milestone for both standard and custom-map flows.
+
 Adaptive calibration is controlled by `adaptiveLobbyTimingEnabled` in `runtimeConfig.ts` and is disabled by default, so countdowns use the deterministic match-specific baseline. When enabled, the client stores the difference between a successful match's calculated baseline and its measured end-to-end duration. Standard and custom-map histories are kept separately, and future estimates add the rolling median of the latest successful residuals to the baseline.
 
 ## Replay completion

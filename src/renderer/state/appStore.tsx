@@ -185,6 +185,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const replayResultInFlightRef = useRef(false);
   const gameRevealInFlightRef = useRef<Promise<void> | null>(null);
   const gameStartSignalInFlightRef = useRef<Promise<boolean> | null>(null);
+  const lobbyTimingAuditRef = useRef<{ matchId: string; startedAt: number; previousAt: number; expectedMs: number; role: "host" | "guest" } | null>(null);
   const familySharingNoticeShownRef = useRef(false);
   const uiModWarningIdRef = useRef<string | null>(null);
 
@@ -588,6 +589,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((previous) => ({ ...previous, eventLog: [nowLog(message), ...previous.eventLog].slice(0, 1000) }));
   }
 
+  function startLobbyTimingAudit(match: MatchSession, role: "host" | "guest"): void {
+    const startedAt = performance.now();
+    const expectedMs = estimateLobbySetupMs(match);
+    lobbyTimingAuditRef.current = { matchId: match.id, startedAt, previousAt: startedAt, expectedMs, role };
+    log(`LOBBY_TIMING|Match=${match.id}|Role=${role}|Phase=setup-start|ElapsedMs=0|PhaseMs=0|ExpectedTotalMs=${expectedMs}|ExpectedRemainingMs=${expectedMs}`);
+  }
+
+  function auditLobbyPhase(phase: string, complete = false): void {
+    const audit = lobbyTimingAuditRef.current;
+    if (!audit) return;
+    const now = performance.now();
+    const elapsedMs = Math.round(now - audit.startedAt);
+    const phaseMs = Math.round(now - audit.previousAt);
+    const expectedRemainingMs = Math.max(0, audit.expectedMs - elapsedMs);
+    const suffix = complete ? `|DeltaMs=${elapsedMs - audit.expectedMs}` : "";
+    log(`LOBBY_TIMING|Match=${audit.matchId}|Role=${audit.role}|Phase=${phase}|ElapsedMs=${elapsedMs}|PhaseMs=${phaseMs}|ExpectedTotalMs=${audit.expectedMs}|ExpectedRemainingMs=${expectedRemainingMs}${suffix}`);
+    audit.previousAt = now;
+    if (complete) lobbyTimingAuditRef.current = null;
+  }
+
   useEffect(() => {
     return window.electronApi?.onAoe2AutomationLog((message) => {
       log(`[AoE2 automation] ${message}`);
@@ -635,6 +656,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   async function handleLobbySetupFailure(_queue: QueueDefinition, message: string): Promise<void> {
     if (lobbyRecoveryInFlightRef.current) return;
     lobbyRecoveryInFlightRef.current = true;
+    auditLobbyPhase(`failed:${message.replaceAll("|", "/")}`, true);
     void window.electronApi?.stopMatchFoundAlert();
     clearRoomSetupWatchdog();
     queueJoinInFlightRef.current = false;
@@ -813,6 +835,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             status: event.role === "host" ? "creating_lobby" as const : "waiting_for_opponent" as const
           };
           matchedSessionRef.current = acceptedSession;
+          startLobbyTimingAudit(acceptedSession, event.role === "host" ? "host" : "guest");
           setState((previous) => ({
             ...previous,
             queueStatus: event.role === "host" ? "creating_lobby" : "waiting_for_opponent",
@@ -848,10 +871,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         if (event.type === "lobby_setup_estimate") {
           if (event.matchId !== matchedSessionRef.current?.id) return;
+          if (lobbyTimingAuditRef.current?.matchId === event.matchId) {
+            lobbyTimingAuditRef.current.expectedMs = event.estimateMs;
+          }
+          auditLobbyPhase("countdown-synchronized");
           setState((previous) => ({ ...previous, roomSetupEstimateMs: event.estimateMs }));
           log(`Synchronized lobby countdown with host estimate: ${Math.ceil(event.estimateMs / 1000)} seconds`);
         }
         if (event.type === "lobby_ready") {
+          auditLobbyPhase("lobby-published");
           startRoomSetupWatchdog();
           setState((previous) => ({
             ...previous,
@@ -910,6 +938,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
         if (event.type === "guest_lobby_joined" && window.electronApi) {
+          auditLobbyPhase("guest-joined");
           setState((previous) => ({
             ...previous,
             roomSetupMilestone: "Opponent joined. Finalizing lobby files..."
@@ -935,6 +964,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })();
         }
         if (event.type === "host_lobby_ready" && window.electronApi) {
+          auditLobbyPhase("host-ready");
           const customContentFlow = isCustomLobbyMap(matchedSessionRef.current?.selectedMap);
           setState((previous) => ({
             ...previous,
@@ -994,6 +1024,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           && window.electronApi
           && isCustomLobbyMap(matchedSessionRef.current?.selectedMap)
         ) {
+          auditLobbyPhase("guest-content-accepted");
           setState((previous) => ({
             ...previous,
             roomSetupMilestone: "Opponent accepted lobby files. Confirming host readiness..."
@@ -1017,6 +1048,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })();
         }
         if (event.type === "guest_lobby_ready" && window.electronApi) {
+          auditLobbyPhase("guest-ready");
           setState((previous) => ({
             ...previous,
             roomSetupMilestone: "Opponent ready. Starting game..."
@@ -1055,6 +1087,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })();
         }
         if (event.type === "game_start_attempted") {
+          auditLobbyPhase("game-start-attempted");
           setState((previous) => ({ ...previous, roomSetupMilestone: "Confirming game start" }));
           log("Host clicked Start Game; watching AoE2 for the loading transition");
           void waitForAoe2StartSignal().then(async (confirmed) => {
@@ -1073,6 +1106,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           });
         }
         if (event.type === "game_started") {
+          auditLobbyPhase("game-started");
           clearRoomSetupWatchdog();
           setState((previous) => ({
             ...previous,
@@ -1544,6 +1578,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!matchId) return;
     if (gameRevealInFlightRef.current) return gameRevealInFlightRef.current;
     gameRevealInFlightRef.current = (async () => {
+      auditLobbyPhase("game-reveal-start", true);
       const completedState = stateRef.current;
       if (completedState.activeMatch && completedState.roomSetupStartedAt) {
         recordLobbySetupDuration(
