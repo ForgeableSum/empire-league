@@ -1779,12 +1779,13 @@
 }
 
 .replay-link {
+  display: inline-grid;
+  place-items: center;
+  justify-self: start;
   width: auto;
-  padding: 0;
+  padding: 5px;
   background: none;
   color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 .replay-link:hover {

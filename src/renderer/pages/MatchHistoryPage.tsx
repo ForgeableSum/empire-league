@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { File } from "lucide-react";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { useAppStore } from "../state/appStore";
 
@@ -67,11 +68,13 @@ export function MatchHistoryPage() {
                 <button
                   className="replay-link"
                   type="button"
-                  onClick={() => void window.electronApi?.openReplayFile(match.replayPath!)}
+                  aria-label="Show replay in File Explorer"
+                  title="Show replay in File Explorer"
+                  onClick={() => void window.electronApi?.revealReplayFile(match.replayPath!)}
                 >
-                  Open replay
+                  <File aria-hidden="true" size={18} />
                 </button>
-              ) : <span className="replay-unavailable">Unavailable</span>}
+              ) : <span className="replay-unavailable" title="Replay unavailable">—</span>}
             </div>
           ))}
           {matches.length === 0 && (
