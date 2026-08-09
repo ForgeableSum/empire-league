@@ -44,6 +44,7 @@ import {
   showMainWindowAsGameCover,
   showReturnToMenuOverlay
 } from "../window.js";
+import { setObsCaptureMode } from "../obsIntegration.js";
 import {
   closeAoe2NativeWindow,
   clearAoe2TextField,
@@ -520,6 +521,7 @@ function clearReplayFocusTimers(): void {
 }
 
 function focusMainWindowAfterReplay(window: BrowserWindow, manageRunningGame = false): void {
+  void setObsCaptureMode("app");
   clearReplayFocusTimers();
   const manageGameWindow = (): void => {
     if (!manageRunningGame) return;
@@ -2742,6 +2744,7 @@ export function registerGameHandlers(): void {
       throw new Error("A match ID is required for the gameplay handoff.");
     }
     const startedAt = Date.now();
+    void setObsCaptureMode("game");
     let focused = false;
     let lastPid: number | undefined;
     let raisedPid: number | undefined;

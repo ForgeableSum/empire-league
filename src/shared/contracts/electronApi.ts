@@ -43,7 +43,40 @@ export interface PendingAppUpdate {
   percent?: number;
 }
 
+export interface ObsIntegrationStatus {
+  state: "unavailable" | "auth_required" | "connected" | "configured" | "error";
+  message: string;
+  obsVersion?: string;
+  websocketVersion?: string;
+  sceneConfigured?: boolean;
+}
+
+export interface ObsSetupResult {
+  ok: boolean;
+  message: string;
+  obsVersion?: string;
+  websocketVersion?: string;
+}
+
+export interface ObsOutputStatus {
+  connected: boolean;
+  captureReady: boolean;
+  streaming: boolean;
+  recording: boolean;
+  streamTimecode?: string;
+  recordTimecode?: string;
+  outputWidth?: number;
+  outputHeight?: number;
+  fps?: number;
+  message?: string;
+}
+
 export interface ElectronGameApi {
+  getObsStatus(password?: string): Promise<ObsIntegrationStatus>;
+  setupObs(password?: string): Promise<ObsSetupResult>;
+  getObsOutputStatus(): Promise<ObsOutputStatus>;
+  setObsStreaming(active: boolean): Promise<ObsOutputStatus>;
+  setObsRecording(active: boolean): Promise<ObsOutputStatus>;
   scanLocalCustomContent(): Promise<LocalCustomContentCatalog>;
   detectEnabledUiMods(): Promise<EnabledUiModsResult>;
   disableEnabledUiMods(): Promise<DisableUiModsResult>;

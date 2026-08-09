@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { ElectronGameApi } from "../shared/contracts/electronApi.js";
 
 const electronApi: ElectronGameApi = {
+  getObsStatus: (password) => ipcRenderer.invoke("obs:get-status", password),
+  setupObs: (password) => ipcRenderer.invoke("obs:setup", password),
+  getObsOutputStatus: () => ipcRenderer.invoke("obs:get-output-status"),
+  setObsStreaming: (active) => ipcRenderer.invoke("obs:set-streaming", active),
+  setObsRecording: (active) => ipcRenderer.invoke("obs:set-recording", active),
   scanLocalCustomContent: () => ipcRenderer.invoke("game:scan-local-custom-content"),
   detectEnabledUiMods: () => ipcRenderer.invoke("game:detect-enabled-ui-mods"),
   disableEnabledUiMods: () => ipcRenderer.invoke("game:disable-enabled-ui-mods"),

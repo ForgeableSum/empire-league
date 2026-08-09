@@ -3364,6 +3364,66 @@
   cursor: pointer;
 }
 
+.obs-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.obs-status > svg { flex: 0 0 auto; margin-top: 2px; color: #9aa4b2; }
+.obs-status-connected > svg,
+.obs-status-configured > svg { color: #59d38c; }
+.obs-status-auth_required > svg { color: #e3b65c; }
+.obs-status-error > svg { color: #ef7474; }
+.obs-status div { display: grid; gap: 3px; }
+.obs-status span,
+.obs-status small,
+.settings-note { color: var(--muted); }
+.settings-note { margin: 0; font-size: 0.86rem; line-height: 1.45; }
+.obs-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.obs-actions button { min-width: 168px; }
+.obs-output-controls { display: grid; gap: 10px; padding-top: 4px; }
+.obs-video-quality { margin: 0; color: var(--muted); font-size: 0.86rem; }
+.obs-output-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.obs-output-row > div { display: grid; gap: 3px; }
+.obs-output-row span { color: var(--muted); font-size: 0.86rem; }
+.obs-output-row button { min-width: 140px; }
+.obs-output-row button.obs-action-go {
+  color: #83d9a8;
+  border: 1px solid rgba(89, 211, 140, 0.38);
+  background: #302b25;
+  box-shadow: inset 0 0 0 1px rgba(89, 211, 140, 0.05), 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+.obs-output-row button.obs-action-go:hover:not(:disabled) {
+  color: #a0e8bf;
+  border-color: rgba(89, 211, 140, 0.68);
+  background: #353129;
+  box-shadow: inset 0 0 0 1px rgba(89, 211, 140, 0.1), 0 2px 7px rgba(0, 0, 0, 0.42);
+}
+.obs-output-row button.obs-action-stop {
+  color: #e88b8b;
+  border: 1px solid rgba(218, 84, 84, 0.42);
+  background: #302725;
+  box-shadow: inset 0 0 0 1px rgba(218, 84, 84, 0.05), 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+.obs-output-row button.obs-action-stop:hover:not(:disabled) {
+  color: #f1a1a1;
+  border-color: rgba(218, 84, 84, 0.7);
+  background: #382a27;
+  box-shadow: inset 0 0 0 1px rgba(218, 84, 84, 0.1), 0 2px 7px rgba(0, 0, 0, 0.42);
+}
+.obs-output-row button.obs-action-go:disabled,
+.obs-output-row button.obs-action-stop:disabled {
+  filter: grayscale(0.65);
+  opacity: 0.48;
+}
+.obs-output-error { margin: 0; color: #ef8b8b; font-size: 0.86rem; }
+.obs-capture-waiting { margin: 0; padding: 10px 12px; border-radius: 8px; color: #e3b65c; background: rgba(227, 182, 92, 0.1); font-size: 0.86rem; }
+
 .setting-label {
   display: inline-flex;
   align-items: center;
