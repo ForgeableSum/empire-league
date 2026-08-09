@@ -3355,6 +3355,39 @@
   align-content: start;
 }
 
+.settings-group:has(.themed-select[open]) {
+  z-index: 30;
+}
+
+.settings-group .themed-select-field {
+  width: min(320px, 100%);
+}
+
+.settings-group .themed-select-options {
+  right: auto;
+  left: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+.settings-group .themed-select-options button {
+  white-space: normal;
+}
+
+.settings-language-backdrop {
+  z-index: 60;
+  backdrop-filter: blur(4px);
+}
+
+.settings-language-modal {
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.62);
+}
+
+.settings-language-modal h2,
+.settings-language-modal p {
+  margin: 0;
+}
+
 .settings-logout {
   width: auto;
   justify-self: start;

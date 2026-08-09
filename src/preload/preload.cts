@@ -3,6 +3,7 @@ import type { ElectronGameApi } from "../shared/contracts/electronApi.js";
 
 const electronApi: ElectronGameApi = {
   getAoe2Localization: (currentSessionOnly) => ipcRenderer.invoke("game:get-localization", currentSessionOnly),
+  setAoe2LanguageOverride: (languageId) => ipcRenderer.invoke("game:set-language-override", languageId),
   getObsStatus: (password) => ipcRenderer.invoke("obs:get-status", password),
   setupObs: (password) => ipcRenderer.invoke("obs:setup", password),
   getObsOutputStatus: () => ipcRenderer.invoke("obs:get-output-status"),

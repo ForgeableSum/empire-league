@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { aoe2UiManifest } from "../../shared/aoe2UiManifest";
+import { isAoe2LanguageId } from "../../shared/aoe2Languages";
 import type { MatchResult } from "../../shared/contracts/matches";
 import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runtimeConfig";
 import type { GameInputResult } from "../../shared/contracts/gameIntegration";
@@ -63,6 +64,7 @@ interface AppContextValue {
   returnToMatchmaking: () => Promise<void>;
   updateMockConfig: (patch: Partial<MockServiceConfig>) => void;
   updateSettings: (patch: Partial<UserSettings>) => void;
+  setAoe2LanguageOverride: (languageId: number | null) => Promise<void>;
   notify: (
     message: string,
     tone?: NotificationItem["tone"],
@@ -98,7 +100,8 @@ const defaultSettings: UserSettings = {
   launchAoe2OnStartup: false,
   matchNotifications: true,
   autoRejectFamilySharing: false,
-  maximumLowerOpponentRatingGap: 0
+  maximumLowerOpponentRatingGap: 0,
+  aoe2LanguageOverrideId: null
 };
 
 export const queueDefinitions: QueueDefinition[] = [
@@ -197,6 +200,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
     setAoe2Localization(localization);
+    const overrideId = stateRef.current.settings.aoe2LanguageOverrideId;
+    if (currentSessionOnly && overrideId !== null && localization.languageId !== overrideId) {
+      updateSettings({ aoe2LanguageOverrideId: null });
+      log(`AOE2_LANGUAGE|Override=false|Reason=detected-language-changed|PreviousId=${overrideId}|DetectedId=${localization.languageId}`);
+    }
     if (reportResult) {
       log(`AOE2_LANGUAGE|Detected=${localization.languageId !== null}|Source=${currentSessionOnly ? "current-session" : "retained-log"}|Id=${localization.languageId ?? "none"}|Code=${localization.languageCode}|Name=${localization.languageName}`);
     }
@@ -242,8 +250,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!window.electronApi) return;
     const refreshOnFocus = () => void refreshAoe2Localization().catch(() => undefined);
-    void refreshAoe2Localization(false, true).catch((error: unknown) => {
-      log(`AOE2_LANGUAGE|Detected=false|Source=retained-log|Error=${error instanceof Error ? error.message : "unknown"}`);
+    const overrideId = stateRef.current.settings.aoe2LanguageOverrideId;
+    const initialLocalization = overrideId === null
+      ? refreshAoe2Localization(false, true)
+      : window.electronApi.getAoe2Localization(true).then(async (detected) => {
+        if (detected.languageId !== null && detected.languageId !== overrideId) {
+          updateSettings({ aoe2LanguageOverrideId: null });
+          setAoe2Localization(detected);
+          log(`AOE2_LANGUAGE|Override=false|Reason=detected-language-changed|PreviousId=${overrideId}|DetectedId=${detected.languageId}`);
+          return true;
+        }
+        const localization = await window.electronApi!.setAoe2LanguageOverride(overrideId);
+        setAoe2Localization(localization);
+        log(`AOE2_LANGUAGE|Override=true|Id=${localization.languageId}|Code=${localization.languageCode}|Name=${localization.languageName}`);
+        return true;
+      });
+    void initialLocalization.catch((error: unknown) => {
+      log(`AOE2_LANGUAGE|Detected=false|Source=initialization|Error=${error instanceof Error ? error.message : "unknown"}`);
     });
     window.addEventListener("focus", refreshOnFocus);
     return () => window.removeEventListener("focus", refreshOnFocus);
@@ -1744,6 +1767,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }
 
+  async function setAoe2LanguageOverride(languageId: number | null): Promise<void> {
+    if (languageId !== null && !isAoe2LanguageId(languageId)) return;
+    if (!window.electronApi) {
+      updateSettings({ aoe2LanguageOverrideId: languageId });
+      return;
+    }
+    try {
+      const localization = await window.electronApi.setAoe2LanguageOverride(languageId);
+      updateSettings({ aoe2LanguageOverrideId: languageId });
+      setAoe2Localization(localization);
+      log(`AOE2_LANGUAGE|Override=${languageId !== null}|Id=${localization.languageId ?? "none"}|Code=${localization.languageCode}|Name=${localization.languageName}`);
+    } catch (error) {
+      log(`AOE2_LANGUAGE|Override=failed|Error=${error instanceof Error ? error.message : "unknown"}`);
+      notify("The AoE2 language could not be changed", "danger");
+    }
+  }
+
   function claimCustomLobbyAutomationStep(key: string): boolean {
     if (customLobbyAutomationStepsRef.current.has(key)) return false;
     customLobbyAutomationStepsRef.current.add(key);
@@ -1808,6 +1848,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     returnToMatchmaking,
     updateMockConfig,
     updateSettings,
+    setAoe2LanguageOverride,
     notify,
     appendDiagnosticLog: log,
     dismissNotification: dismissNotificationById,
@@ -1925,7 +1966,10 @@ function loadSettings(): UserSettings {
         Number(saved.maximumLowerOpponentRatingGap)
       )
         ? Number(saved.maximumLowerOpponentRatingGap)
-        : defaultSettings.maximumLowerOpponentRatingGap
+        : defaultSettings.maximumLowerOpponentRatingGap,
+      aoe2LanguageOverrideId: isAoe2LanguageId(saved.aoe2LanguageOverrideId)
+        ? saved.aoe2LanguageOverrideId
+        : null
     };
   } catch {
     return defaultSettings;

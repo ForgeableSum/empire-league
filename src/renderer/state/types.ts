@@ -46,6 +46,7 @@ export interface UserSettings {
   matchNotifications: boolean;
   autoRejectFamilySharing: boolean;
   maximumLowerOpponentRatingGap: number;
+  aoe2LanguageOverrideId: number | null;
 }
 
 export interface AppState {

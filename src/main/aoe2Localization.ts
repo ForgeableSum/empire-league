@@ -2,25 +2,17 @@ import { readFile, readdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { app } from "electron";
+import { aoe2Languages, isAoe2LanguageId } from "../shared/aoe2Languages.js";
 import { civilizations } from "../shared/civilizations.js";
 import { enabledMapCatalogEntries } from "../shared/mapCatalog.js";
 import type { Aoe2Localization } from "../shared/contracts/localization.js";
 import civBonuses from "../shared/civBonuses.json" with { type: "json" };
 
-// This is the zero-based order used by AoE2's Game Language dropdown.
-const languages = [
-  ["br", "Portuguese (Brazil)"], ["de", "German"], ["en", "English"],
-  ["es", "Spanish"], ["fr", "French"], ["hi", "Hindi"], ["it", "Italian"],
-  ["jp", "Japanese"], ["ko", "Korean"], ["ms", "Malay"],
-  ["mx", "Spanish (Latin America)"], ["ru", "Russian"], ["tr", "Turkish"],
-  ["tw", "Chinese (Traditional)"], ["vi", "Vietnamese"],
-  ["zh", "Chinese (Simplified)"], ["pl", "Polish"]
-] as const;
-
 let rememberedLanguageId: number | null | undefined;
+let languageOverrideId: number | null = null;
 
 function validLanguageId(value: unknown): value is number {
-  return Number.isInteger(value) && Number(value) >= 0 && Number(value) < languages.length;
+  return isAoe2LanguageId(value);
 }
 
 async function readRememberedLanguageId(): Promise<number | null> {
@@ -103,8 +95,14 @@ async function activeLanguageId(currentSessionOnly: boolean): Promise<number | n
 }
 
 export async function loadAoe2Localization(gamePath: string, currentSessionOnly = false): Promise<Aoe2Localization> {
-  const languageId = await activeLanguageId(currentSessionOnly);
-  const language = languages[languageId ?? 2] ?? languages[2];
+  const detectedLanguageId = currentSessionOnly ? await activeLanguageId(true) : null;
+  if (detectedLanguageId !== null && languageOverrideId !== null && detectedLanguageId !== languageOverrideId) {
+    languageOverrideId = null;
+  }
+  const languageId = currentSessionOnly
+    ? detectedLanguageId
+    : languageOverrideId ?? await activeLanguageId(false);
+  const language = aoe2Languages[languageId ?? 2] ?? aoe2Languages[2];
   const stringsPath = (code: string) => join(gamePath, "resources", code, "strings", "key-value", "key-value-strings-utf8.txt");
   try {
     const [englishText, localizedText] = await Promise.all([
@@ -168,4 +166,8 @@ export async function loadAoe2Localization(gamePath: string, currentSessionOnly 
   } catch {
     return { languageId, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
   }
+}
+
+export function setAoe2LanguageOverride(languageId: number | null): void {
+  languageOverrideId = isAoe2LanguageId(languageId) ? languageId : null;
 }

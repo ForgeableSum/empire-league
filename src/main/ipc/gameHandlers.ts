@@ -45,7 +45,8 @@ import {
   showReturnToMenuOverlay
 } from "../window.js";
 import { setObsCaptureMode } from "../obsIntegration.js";
-import { loadAoe2Localization } from "../aoe2Localization.js";
+import { loadAoe2Localization, setAoe2LanguageOverride } from "../aoe2Localization.js";
+import { isAoe2LanguageId } from "../../shared/aoe2Languages.js";
 import {
   closeAoe2NativeWindow,
   clearAoe2TextField,
@@ -2568,6 +2569,14 @@ export function registerGameHandlers(): void {
       return { languageId: null, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
     }
     return loadAoe2Localization(installation.path, currentSessionOnly === true);
+  });
+  ipcMain.handle("game:set-language-override", async (_event, languageId: number | null) => {
+    const installation = await detectAoe2Installation();
+    if (!installation.installed || !installation.path) {
+      return { languageId: null, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
+    }
+    setAoe2LanguageOverride(isAoe2LanguageId(languageId) ? languageId : null);
+    return loadAoe2Localization(installation.path);
   });
   ipcMain.handle("game:scan-local-custom-content", scanLocalCustomContent);
   ipcMain.handle("game:detect-enabled-ui-mods", detectEnabledUiMods);

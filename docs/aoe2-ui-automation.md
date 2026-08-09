@@ -97,6 +97,9 @@ automation. Fifteen seconds after the game window becomes ready, the renderer
 starts checking the current session in the background every five seconds for up
 to five minutes. It updates as soon as the second, profile-loaded language entry
 is available and remembers that confirmed language for future launches.
+The Settings page shows the effective language and permits a confirmed manual
+override. The override feeds both localized UI content and automation, and a
+later authoritative AoE2 detection with a different language replaces it.
 The index follows the Game Language dropdown order and maps
 to the matching `resources/<language>/strings/key-value/key-value-strings-utf8.txt`
 file. Polish is the final dropdown entry rather than being grouped before

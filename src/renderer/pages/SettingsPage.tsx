@@ -1,11 +1,12 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { CircleHelp, Radio, RefreshCw } from "lucide-react";
+import { aoe2Languages } from "../../shared/aoe2Languages";
 import type { ObsIntegrationStatus, ObsOutputStatus } from "../../shared/contracts/electronApi";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { useAppStore } from "../state/appStore";
 
 export function SettingsPage() {
-  const { state, updateSettings, signOut } = useAppStore();
+  const { state, aoe2Language, updateSettings, setAoe2LanguageOverride, signOut } = useAppStore();
   const settings = state.settings;
   const [loginItem, setLoginItem] = useState({ supported: false, openAtLogin: false });
   const [loginItemLoading, setLoginItemLoading] = useState(true);
@@ -14,6 +15,8 @@ export function SettingsPage() {
   const [obsLoading, setObsLoading] = useState(true);
   const [obsOutput, setObsOutput] = useState<ObsOutputStatus | null>(null);
   const [obsOutputLoading, setObsOutputLoading] = useState(false);
+  const [pendingLanguageId, setPendingLanguageId] = useState<number | null>(null);
+  const pendingLanguage = pendingLanguageId === null ? null : aoe2Languages[pendingLanguageId];
 
   useEffect(() => {
     const electronApi = window.electronApi;
@@ -101,8 +104,20 @@ export function SettingsPage() {
     }
   }
 
+  function changeAoe2Language(value: string): void {
+    if (value === "auto") {
+      void setAoe2LanguageOverride(null);
+      return;
+    }
+    const languageId = Number(value);
+    const language = aoe2Languages[languageId];
+    if (!language) return;
+    setPendingLanguageId(languageId);
+  }
+
   return (
-    <section className="settings-grid">
+    <>
+      <section className="settings-grid">
       <SettingsGroup title="Game">
         <Toggle
           label="Launch Empire League when I sign in"
@@ -118,6 +133,26 @@ export function SettingsPage() {
           checked={settings.launchAoe2OnStartup}
           onChange={(launchAoe2OnStartup) => updateSettings({ launchAoe2OnStartup })}
         />
+        <div>
+          <span className="setting-label">
+            Age of Empires II language
+            <HelpTooltip text="Detected automatically from AoE2. You can override it, but it must match the Game Language selected inside AoE2 for lobby automation to work." />
+          </span>
+          <ThemedSelect
+            label=""
+            value={settings.aoe2LanguageOverrideId === null ? "auto" : String(settings.aoe2LanguageOverrideId)}
+            onChange={changeAoe2Language}
+            options={[
+              { value: "auto", label: `Automatic (${aoe2Language})` },
+              ...aoe2Languages.map((language, languageId) => ({ value: String(languageId), label: language[1] }))
+            ]}
+          />
+          <p className="settings-note">
+            {settings.aoe2LanguageOverrideId === null
+              ? `Currently using ${aoe2Language}. AoE2 detections update this automatically.`
+              : `Manual override: ${aoe2Language}. A different language detected from AoE2 will replace it.`}
+          </p>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title="Matchmaking">
@@ -222,7 +257,25 @@ export function SettingsPage() {
           </div>
         )}
       </SettingsGroup>
-    </section>
+      </section>
+      {pendingLanguage && pendingLanguageId !== null && (
+        <div className="modal-backdrop settings-language-backdrop" role="presentation" onPointerDown={() => setPendingLanguageId(null)}>
+          <section className="match-modal settings-language-modal" role="alertdialog" aria-modal="true" aria-labelledby="language-confirm-title" onPointerDown={(event) => event.stopPropagation()}>
+            <span className="eyebrow">Lobby automation</span>
+            <h2 id="language-confirm-title">Use {pendingLanguage[1]} for AoE2?</h2>
+            <p>This must match the Game Language selected inside Age of Empires II. If the languages do not match, Empire League may be unable to select maps and civilizations during lobby automation.</p>
+            <div className="modal-actions">
+              <button className="secondary" type="button" onClick={() => setPendingLanguageId(null)}>Cancel</button>
+              <button className="primary" type="button" autoFocus onClick={() => {
+                const languageId = pendingLanguageId;
+                setPendingLanguageId(null);
+                void setAoe2LanguageOverride(languageId);
+              }}>Use {pendingLanguage[1]}</button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
