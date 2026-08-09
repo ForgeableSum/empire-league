@@ -1,11 +1,18 @@
-import { ArrowLeft, BarChart3, CalendarDays, Download, Gamepad2, History, Home, LogOut, RotateCcw, Swords, Settings, User, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarDays, Download, Gamepad2, History, Home, Languages, LogOut, RotateCcw, Swords, Settings, User, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import appIcon from "../../assets/el_icon_no_plume.png";
 import { presenceService } from "../../services/presenceService";
 import { useAppStore, type AppPage } from "../../state/appStore";
+import { ThemedSelect } from "../common/ThemedSelect";
 import { WindowControls } from "./WindowControls";
 import { isPreviewMode } from "../../previewMode";
+import { aoe2Languages } from "../../../shared/aoe2Languages";
 import type { PendingAppUpdate } from "../../../shared/contracts/electronApi";
+
+// TEST ONLY: set this to false before release to show the prompt only once per
+// account, and only when the software environment reports a non-English locale.
+const FORCE_AOE2_LANGUAGE_PROMPT_EVERY_LOGIN = false;
+const aoe2LanguagePromptKeyPrefix = "empire-league-aoe2-language-prompt-seen";
 
 const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
   { page: "home", label: "Home", icon: <Home size={18} /> },
@@ -20,7 +27,19 @@ const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
 ];
 
 export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode; socialUnreadCount?: number }) {
-  const { page, setPage, state, customLobbyAutomationActive, signOut, selectedProfileId, openPlayerProfile, returnFromPlayerProfile } = useAppStore();
+  const {
+    page,
+    setPage,
+    state,
+    customLobbyAutomationActive,
+    signOut,
+    selectedProfileId,
+    openPlayerProfile,
+    returnFromPlayerProfile,
+    aoe2Language,
+    aoe2LanguageId,
+    setAoe2LanguageOverride
+  } = useAppStore();
   const viewingLinkedProfile = page === "profile" && selectedProfileId !== null && selectedProfileId !== state.currentUser.id;
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
   const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
@@ -29,6 +48,52 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
   const [installingUpdate, setInstallingUpdate] = useState(false);
   const [retryingUpdate, setRetryingUpdate] = useState(false);
   const [gameCountdownActive, setGameCountdownActive] = useState(false);
+  const [languagePromptOpen, setLanguagePromptOpen] = useState(false);
+  const [languagePromptSaving, setLanguagePromptSaving] = useState(false);
+  const [promptLanguageId, setPromptLanguageId] = useState(
+    state.settings.aoe2LanguageOverrideId ?? aoe2LanguageId ?? 2
+  );
+
+  useEffect(() => {
+    if (isPreviewMode) return;
+
+    let cancelled = false;
+    const markerKey = `${aoe2LanguagePromptKeyPrefix}:${state.currentUser.id}`;
+    if (!FORCE_AOE2_LANGUAGE_PROMPT_EVERY_LOGIN && window.localStorage.getItem(markerKey) === "1") return;
+
+    void (async () => {
+      const preferredLanguages = await window.electronApi?.getPreferredSystemLanguages().catch(() => [])
+        ?? [...window.navigator.languages];
+      const primaryLanguage = (preferredLanguages[0] ?? window.navigator.language ?? "en").toLowerCase();
+      const environmentIsEnglish = primaryLanguage === "en" || primaryLanguage.startsWith("en-");
+
+      if (cancelled) return;
+      if (!FORCE_AOE2_LANGUAGE_PROMPT_EVERY_LOGIN && environmentIsEnglish) {
+        window.localStorage.setItem(markerKey, "1");
+        return;
+      }
+
+      setPromptLanguageId(state.settings.aoe2LanguageOverrideId ?? aoe2LanguageId ?? 2);
+      setLanguagePromptOpen(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state.currentUser.id]);
+
+  function completeLanguagePrompt(): void {
+    window.localStorage.setItem(`${aoe2LanguagePromptKeyPrefix}:${state.currentUser.id}`, "1");
+    setLanguagePromptOpen(false);
+  }
+
+  async function confirmPromptLanguage(): Promise<void> {
+    if (languagePromptSaving) return;
+    setLanguagePromptSaving(true);
+    await setAoe2LanguageOverride(promptLanguageId);
+    setLanguagePromptSaving(false);
+    completeLanguagePrompt();
+  }
 
   useEffect(() => {
     const update = () => {
@@ -233,6 +298,40 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
                 {installingUpdate ? "Restarting…" : "Restart and update"}
               </button>
               )}
+            </div>
+          </section>
+        </div>
+      )}
+      {languagePromptOpen && (
+        <div className="modal-backdrop first-login-language-backdrop" role="presentation">
+          <section
+            className="match-modal first-login-language-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="first-login-language-title"
+          >
+            <div className="first-login-language-icon"><Languages size={28} aria-hidden="true" /></div>
+            <span className="eyebrow">Required for reliable automation</span>
+            <h2 id="first-login-language-title">Match Empire League to AoE2</h2>
+            <div className="first-login-language-warning">
+              <strong>Empire League must use the same language selected in AoE2.</strong>
+              <span>Check Age of Empires II → Options → Interface → Game Language. If the languages do not match, automated map and civilization selection can fail and your lobby may not be created.</span>
+            </div>
+            <ThemedSelect
+              className="first-login-language-select"
+              label="Language selected inside AoE2"
+              options={aoe2Languages.map(([, name], id) => ({ value: String(id), label: name }))}
+              value={String(promptLanguageId)}
+              onChange={(value) => setPromptLanguageId(Number(value))}
+            />
+            <p className="first-login-language-current">Current automatic language: <strong>{aoe2Language}</strong></p>
+            <div className="modal-actions first-login-language-actions">
+              <button className="secondary" type="button" disabled={languagePromptSaving} onClick={completeLanguagePrompt}>
+                Keep automatic detection
+              </button>
+              <button className="primary" type="button" disabled={languagePromptSaving} onClick={() => void confirmPromptLanguage()} autoFocus>
+                {languagePromptSaving ? "Saving…" : "Confirm language"}
+              </button>
             </div>
           </section>
         </div>
