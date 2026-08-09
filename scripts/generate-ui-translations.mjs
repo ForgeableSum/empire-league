@@ -24,6 +24,7 @@ const refreshProtected = process.argv.includes("--refresh-protected");
 const requestedLocales = process.argv.slice(2).filter((value) => !value.startsWith("--"));
 const locales = requestedLocales.length ? requestedLocales : Object.keys(localeTargets);
 const i18nRoot = join(process.cwd(), "src", "renderer", "i18n");
+const overridesRoot = join(process.cwd(), "scripts", "ui-translation-overrides");
 const english = JSON.parse(await readFile(join(i18nRoot, "en.json"), "utf8"));
 const phrases = Object.keys(english);
 const separator = "\n[[[EL_SPLIT_7F3A]]]\n";
@@ -123,5 +124,15 @@ for (const locale of locales) {
     process.stdout.write(`\r${locale}: ${index + 1}/${chunks.length}`);
   }
   process.stdout.write("\n");
+  try {
+    const overrides = JSON.parse(await readFile(join(overridesRoot, `${locale}.json`), "utf8"));
+    for (const [phrase, translation] of Object.entries(overrides)) {
+      if (!(phrase in english)) throw new Error(`${locale} override references an unknown English string: ${phrase}`);
+      if (typeof translation !== "string" || !translation.trim()) throw new Error(`${locale} override is empty: ${phrase}`);
+      output[phrase] = translation;
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
   await writeFile(join(i18nRoot, `${locale}.json`), `${JSON.stringify(output, null, 2)}\n`, "utf8");
 }
