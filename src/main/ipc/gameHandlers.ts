@@ -477,6 +477,15 @@ interface ReplaySnapshot {
   modifiedMs: number;
 }
 
+async function snapshotReplayFile(path: string): Promise<ReplaySnapshot | undefined> {
+  try {
+    const details = await stat(path);
+    return { path, size: details.size, modifiedMs: details.mtimeMs };
+  } catch {
+    return undefined;
+  }
+}
+
 async function findReplayFiles(configuredFolder?: string): Promise<ReplaySnapshot[]> {
   const roots: string[] = [];
   if (configuredFolder?.trim()) {
@@ -693,11 +702,16 @@ async function startReplayEndDetection(
         }
       }
 
-      const files = await findReplayFiles(configuredFolder);
+      // Scan every replay only while discovering which file belongs to this
+      // match. Once that file has actually grown, its path is authoritative and
+      // subsequent polls only stat that one file.
+      const files = !active || !observedGrowth
+        ? await findReplayFiles(configuredFolder)
+        : undefined;
       if (!active) {
         // Detection starts shortly after Start Game. Accept a recently-created file,
         // but require a subsequent write before it can ever signal completion.
-        active = files
+        active = files!
           .filter((file) => file.modifiedMs >= startedAt - 60_000)
           .sort((left, right) => right.modifiedMs - left.modifiedMs)[0];
         if (active) {
@@ -706,15 +720,19 @@ async function startReplayEndDetection(
           if (activeCreatedDuringWatch) emitReplayStarted(active);
         }
       } else {
-        const newest = files
-          .filter((file) => file.modifiedMs >= startedAt - 60_000)
-          .sort((left, right) => right.modifiedMs - left.modifiedMs)[0];
-        if (!observedGrowth && newest && newest.path !== active.path && newest.modifiedMs > active.modifiedMs) {
-          active = newest;
-          activeCreatedDuringWatch = !initialFiles.some((file) => file.path === newest.path);
-          lastGrowthAt = Date.now();
+        if (files) {
+          const newest = files
+            .filter((file) => file.modifiedMs >= startedAt - 60_000)
+            .sort((left, right) => right.modifiedMs - left.modifiedMs)[0];
+          if (newest && newest.path !== active.path && newest.modifiedMs > active.modifiedMs) {
+            active = newest;
+            activeCreatedDuringWatch = !initialFiles.some((file) => file.path === newest.path);
+            lastGrowthAt = Date.now();
+          }
         }
-        const current = files.find((file) => file.path === active?.path);
+        const current = files
+          ? files.find((file) => file.path === active?.path)
+          : await snapshotReplayFile(active.path);
         if (current && (current.size !== active.size || current.modifiedMs !== active.modifiedMs)) {
           observedGrowth = true;
           lastGrowthAt = Date.now();
