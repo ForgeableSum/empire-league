@@ -235,7 +235,7 @@ class MatchmakerTransport {
     this.pending.clear();
     if (this.deliberatelyClosed || !this.subscription) return;
     this.reconnectAttempts += 1;
-    if (this.reconnectAttempts > 5) {
+    if (this.reconnectAttempts > 15) {
       this.failSubscription("The connection to the matchmaker was lost.");
       return;
     }
