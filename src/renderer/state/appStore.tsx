@@ -758,7 +758,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (roomSetupTimeoutRef.current !== null) startRoomSetupWatchdog();
   }
 
-  async function handleLobbySetupFailure(_queue: QueueDefinition, message: string): Promise<void> {
+  async function handleLobbySetupFailure(
+    _queue: QueueDefinition,
+    message: string,
+    options: { showLocalFailureGuidance?: boolean } = {}
+  ): Promise<void> {
     if (lobbyRecoveryInFlightRef.current) return;
     lobbyRecoveryInFlightRef.current = true;
     auditLobbyPhase(`failed:${message.replaceAll("|", "/")}`, true);
@@ -790,8 +794,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (closed && !closed.closed) {
       notify(closed.message ?? "AoE2 could not be terminated after the lobby setup failure.", "danger");
     }
-    log(`Opening diagnostic log after lobby setup failure|Aoe2Closed=${closed?.closed ?? false}`);
-    window.dispatchEvent(new Event("empire:open-diagnostic-log"));
+    if (options.showLocalFailureGuidance !== false) {
+      log(`Opening diagnostic log after lobby setup failure|Aoe2Closed=${closed?.closed ?? false}`);
+      window.dispatchEvent(new Event("empire:open-diagnostic-log"));
+    } else {
+      log(`Local failure guidance suppressed for opponent lobby setup failure|Aoe2Closed=${closed?.closed ?? false}`);
+    }
     lobbyRecoveryInFlightRef.current = false;
   }
 
@@ -1254,7 +1262,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             void handleLobbySetupFailure(queue, event.message);
             return;
           }
-          if (event.code === "MATCH_DISCONNECTED" || event.code === "MATCH_SETUP_FAILED") {
+          if (event.code === "MATCH_SETUP_FAILED") {
+            void handleLobbySetupFailure(queue, event.message, { showLocalFailureGuidance: false });
+            return;
+          }
+          if (event.code === "MATCH_DISCONNECTED") {
             void handleLobbySetupFailure(queue, event.message);
             return;
           }
