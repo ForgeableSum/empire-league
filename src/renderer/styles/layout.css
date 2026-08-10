@@ -795,6 +795,8 @@
   min-height: 0;
   display: grid;
   gap: 8px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line-soft);
 }
 
 .sidebar-streams h2 {
