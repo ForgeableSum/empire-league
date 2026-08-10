@@ -107,12 +107,10 @@ const electronApi: ElectronGameApi = {
   getLoginItemSettings: () => ipcRenderer.invoke("system:get-login-item-settings"),
   getAppVersion: () => ipcRenderer.invoke("system:get-app-version"),
   getPreferredSystemLanguages: () => ipcRenderer.invoke("system:get-preferred-languages"),
-  openDiscordInvite: () => ipcRenderer.invoke("system:open-discord-invite"),
-  openTwitchStream: (url) => ipcRenderer.invoke("system:open-twitch-stream", url),
+  openExternalUrl: (url) => ipcRenderer.invoke("system:open-external-url", url),
   getPendingUpdate: () => ipcRenderer.invoke("system:get-pending-update"),
   installPendingUpdate: () => ipcRenderer.invoke("system:install-pending-update"),
   retryPendingUpdate: () => ipcRenderer.invoke("system:retry-pending-update"),
-  openUpdateDownload: () => ipcRenderer.invoke("system:open-update-download"),
   setUpdateChecksPaused: (paused) => ipcRenderer.invoke("system:set-update-checks-paused", paused),
   onUpdateDetected: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, update: Parameters<typeof listener>[0]) => listener(update);

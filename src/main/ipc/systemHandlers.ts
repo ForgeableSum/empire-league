@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { focusMainWindow, minimizeMainWindowToTaskbar } from "../window.js";
 import { getPendingUpdate, installDownloadedUpdate, retryPendingUpdate, setAutoUpdateChecksPaused } from "../autoUpdate.js";
 
-const windowsInstallerUrl = "https://empireleague.gg/updates/windows/Empire-League-Setup.exe";
 let steamLoginParent: BrowserWindow | null = null;
 
 export function registerSystemHandlers(): void {
@@ -60,15 +59,9 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:get-login-item-settings", async () => getLoginItemSettings());
   ipcMain.handle("system:get-app-version", async () => app.getVersion());
   ipcMain.handle("system:get-preferred-languages", async () => app.getPreferredSystemLanguages());
-  ipcMain.handle("system:open-discord-invite", async () => {
-    await shell.openExternal("https://discord.gg/arRjVxx2y7");
-  });
-  ipcMain.handle("system:open-twitch-stream", async (event, value: string) => {
+  ipcMain.handle("system:open-external-url", async (event, value: string) => {
     const url = new URL(value);
-    const allowedHosts = new Set(["twitch.tv", "www.twitch.tv"]);
-    if (url.protocol !== "https:" || !allowedHosts.has(url.hostname) || !/^\/[A-Za-z0-9_]+\/?$/.test(url.pathname)) {
-      throw new Error("Invalid Twitch stream URL.");
-    }
+    if (url.protocol !== "https:") throw new Error("Invalid external URL.");
     const parent = BrowserWindow.fromWebContents(event.sender);
     if (parent) {
       minimizeMainWindowToTaskbar(parent);
@@ -81,9 +74,6 @@ export function registerSystemHandlers(): void {
   });
   ipcMain.handle("system:install-pending-update", async () => installDownloadedUpdate());
   ipcMain.handle("system:retry-pending-update", async () => retryPendingUpdate());
-  ipcMain.handle("system:open-update-download", async () => {
-    await shell.openExternal(windowsInstallerUrl);
-  });
   ipcMain.handle("system:set-update-checks-paused", async (_event, paused: boolean) => {
     if (typeof paused !== "boolean") throw new TypeError("Update pause state must be a boolean.");
     setAutoUpdateChecksPaused(paused);

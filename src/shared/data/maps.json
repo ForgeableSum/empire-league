@@ -31,7 +31,11 @@
       "style": "open",
       "groupId": "land-open",
       "imageAsset": "arabia.png",
-      "wikiUrl": "https://ageofempires.fandom.com/wiki/Arabia"
+      "wikiUrl": "https://ageofempires.fandom.com/wiki/Arabia",
+      "attribution": {
+        "label": "By MembTV",
+        "url": "https://www.youtube.com/@MembTV"
+      }
     },
     {
       "id": "land-madness",

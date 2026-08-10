@@ -94,6 +94,10 @@ export interface MapDefinition {
   name: string;
   style: "open" | "closed" | "hybrid" | "water" | "nomad";
   thumbnailUrl: string;
+  attribution?: {
+    label: string;
+    url: string;
+  };
 }
 
 export type MapGroupId = "land-open" | "land-closed" | "water";

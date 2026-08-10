@@ -2451,17 +2451,21 @@
 .group-map-shade {
   position: absolute;
   inset: 38% 0 0;
+  width: 100%;
+  pointer-events: none;
   background: linear-gradient(transparent, rgba(8, 7, 6, 0.94));
 }
 
 .group-map-name {
   position: absolute;
   inset: auto 9px 8px;
+  z-index: 2;
   display: grid;
   gap: 3px;
   color: #fff;
   text-align: left;
   text-shadow: 0 1px 3px #000;
+  pointer-events: none;
 }
 
 .group-map-name strong {
@@ -2469,14 +2473,14 @@
 }
 
 .group-map.primary .group-map-name {
-  inset: auto 13px 12px;
+  inset: auto 9px 12px;
 }
 
 .group-map.primary .group-map-name strong {
   font-size: 17px;
 }
 
-.group-map-name small {
+.group-map-name a {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -2484,6 +2488,12 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.07em;
+  pointer-events: auto;
+}
+
+.group-map-name a:hover {
+  color: #fff;
+  text-decoration: underline;
 }
 
 .group-map .map-favorite {
@@ -2496,6 +2506,7 @@
   position: absolute;
   top: 8px;
   left: 8px;
+  pointer-events: none;
   padding: 3px 6px;
   border-radius: 999px;
   color: rgba(255, 255, 255, 0.78);

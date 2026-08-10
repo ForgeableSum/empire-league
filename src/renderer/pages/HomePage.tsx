@@ -6,14 +6,13 @@ import { mapGroups } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
 import { AlertTriangle, MessageCircle } from "lucide-react";
 import { isPreviewMode } from "../previewMode";
-import { isAppMinimizeLocked } from "../components/layout/WindowControls";
 import { useSyncExternalStore } from "react";
 import { matchmakerTransport } from "../services/matchmakerTransport";
 
 const openLandMaps = mapGroups.find((group) => group.id === "land-open")?.maps ?? [];
 
 export function HomePage() {
-  const { state, lobbyAutomationActive, weeklyQueueActive, notify, localizeAoe2Name } = useAppStore();
+  const { state, localizeAoe2Name } = useAppStore();
   const user = state.currentUser;
   const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
   const matchmakerStatus = useSyncExternalStore(
@@ -27,16 +26,7 @@ export function HomePage() {
       : "Disconnected";
   const openDiscord = async () => {
     if (window.electronApi) {
-      if (isAppMinimizeLocked(state.queueStatus, weeklyQueueActive, lobbyAutomationActive)) {
-        notify(
-          "Discord opened without minimizing Empire League.",
-          "warning",
-          { detail: "Cancel matchmaking or finish the current match before minimizing." }
-        );
-      } else {
-        await window.electronApi.minimizeToTaskbar();
-      }
-      await window.electronApi.openDiscordInvite();
+      await window.electronApi.openExternalUrl("https://discord.gg/arRjVxx2y7");
       return;
     }
     window.open("https://discord.gg/arRjVxx2y7", "_blank", "noopener,noreferrer");

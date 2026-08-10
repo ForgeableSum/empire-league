@@ -48,7 +48,8 @@ export const maps: MapDefinition[] = enabledMapCatalogEntries.map((map) => ({
   id: map.id,
   name: map.name,
   style: map.style,
-  thumbnailUrl: thumbnailByAsset[map.imageAsset]
+  thumbnailUrl: thumbnailByAsset[map.imageAsset],
+  attribution: map.attribution
 }));
 
 export const mapGroups: RenderedMapGroupDefinition[] = mapCatalog.groups.map((group) => ({

@@ -97,13 +97,30 @@ export function GroupedMapPool({
                       }}
                     >
                       <img src={map.thumbnailUrl} alt="" />
-                      <span className="group-map-shade" />
-                      <span className="group-map-name">
-                        <strong>{mapName}</strong>
-                        {primary && <small>Primary map</small>}
-                      </span>
-                      {!selected && <span className="map-off-label">{groupEnabled ? "Off" : "Group off"}</span>}
                     </button>
+                    <span className="group-map-shade" aria-hidden="true" />
+                    {!selected && <span className="map-off-label">{groupEnabled ? "Off" : "Group off"}</span>}
+                    <span className="group-map-name">
+                      <strong>{mapName}</strong>
+                      {map.attribution && (
+                        <a
+                        href={map.attribution.url}
+                        rel="noreferrer"
+                        aria-label={map.attribution.label}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (window.electronApi) {
+                            void window.electronApi.openExternalUrl(map.attribution!.url);
+                          } else {
+                            window.open(map.attribution!.url, "_blank", "noopener,noreferrer");
+                          }
+                        }}
+                        >
+                          {map.attribution.label}
+                        </a>
+                      )}
+                    </span>
                     <button
                       className={favorite ? "map-favorite active" : "map-favorite"}
                       type="button"
