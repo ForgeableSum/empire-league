@@ -1,5 +1,5 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
-import { CircleHelp, Radio, RefreshCw } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { CircleHelp, Loader2, Radio, RefreshCw } from "lucide-react";
 import { aoe2Languages } from "../../shared/aoe2Languages";
 import type { ObsIntegrationStatus, ObsOutputStatus } from "../../shared/contracts/electronApi";
 import { ThemedSelect } from "../components/common/ThemedSelect";
@@ -13,8 +13,6 @@ export function SettingsPage() {
   const [obsStatus, setObsStatus] = useState<ObsIntegrationStatus | null>(null);
   const [obsPassword, setObsPassword] = useState("");
   const [obsLoading, setObsLoading] = useState(true);
-  const [obsOutput, setObsOutput] = useState<ObsOutputStatus | null>(null);
-  const [obsOutputLoading, setObsOutputLoading] = useState(false);
   const [pendingLanguageId, setPendingLanguageId] = useState<number | null>(null);
   const pendingLanguage = pendingLanguageId === null ? null : aoe2Languages[pendingLanguageId];
 
@@ -38,13 +36,6 @@ export function SettingsPage() {
   useEffect(() => {
     void refreshObsStatus();
   }, []);
-
-  useEffect(() => {
-    if (obsStatus?.state !== "configured") return;
-    void refreshObsOutput();
-    const timer = window.setInterval(() => void refreshObsOutput(), 2_000);
-    return () => window.clearInterval(timer);
-  }, [obsStatus?.state]);
 
   async function refreshObsStatus(password?: string): Promise<void> {
     if (!window.electronApi) {
@@ -73,24 +64,6 @@ export function SettingsPage() {
       }
     } finally {
       setObsLoading(false);
-    }
-  }
-
-  async function refreshObsOutput(): Promise<void> {
-    if (!window.electronApi) return;
-    setObsOutput(await window.electronApi.getObsOutputStatus());
-  }
-
-  async function changeObsOutput(kind: "stream" | "record", active: boolean): Promise<void> {
-    if (!window.electronApi || obsOutputLoading) return;
-    setObsOutputLoading(true);
-    try {
-      const result = kind === "stream"
-        ? await window.electronApi.setObsStreaming(active)
-        : await window.electronApi.setObsRecording(active);
-      setObsOutput(result);
-    } finally {
-      setObsOutputLoading(false);
     }
   }
 
@@ -230,32 +203,7 @@ export function SettingsPage() {
             <RefreshCw size={16} aria-hidden="true" /> Check Again
           </button>
         </div>
-        {obsStatus?.state === "configured" && (
-          <div className="obs-output-controls">
-            {obsOutput?.outputWidth && obsOutput.outputHeight && <p className="obs-video-quality">OBS output: {obsOutput.outputWidth}×{obsOutput.outputHeight}{obsOutput.fps ? ` at ${obsOutput.fps} FPS` : ""}</p>}
-            <div className="obs-output-row">
-              <div><strong>Stream</strong><span>{obsOutput?.streaming ? `Live ${obsOutput.streamTimecode ?? ""}` : "Not live"}</span></div>
-              <button
-                type="button"
-                className={`secondary ${obsOutput?.streaming ? "obs-action-stop" : "obs-action-go"}`}
-                disabled={obsOutputLoading || !obsOutput?.connected}
-                onClick={() => void changeObsOutput("stream", !obsOutput?.streaming)}
-              >{obsOutput?.streaming ? "End Stream" : "Start Streaming"}</button>
-            </div>
-            <div className="obs-output-row">
-              <div><strong>Recording</strong><span>{obsOutput?.recording ? `Recording ${obsOutput.recordTimecode ?? ""}` : "Not recording"}</span></div>
-              <button
-                type="button"
-                className={`secondary ${obsOutput?.recording ? "obs-action-stop" : "obs-action-go"}`}
-                disabled={obsOutputLoading || !obsOutput?.connected}
-                onClick={() => void changeObsOutput("record", !obsOutput?.recording)}
-              >{obsOutput?.recording ? "Stop Recording" : "Start Recording"}</button>
-            </div>
-            {obsOutput?.message && <p className="obs-output-error">{obsOutput.message}</p>}
-            {obsOutput?.connected && !obsOutput.captureReady && <p className="obs-capture-waiting">OBS is waiting for the active Empire League capture window. Try Repair OBS Scene.</p>}
-            <p className="settings-note">The stream shows Empire League during matchmaking and switches to AoE2 only after the game-start countdown. Start Recording is a safe local test.</p>
-          </div>
-        )}
+        {obsStatus?.state === "configured" && <ObsOutputControls />}
       </SettingsGroup>
       </section>
       {pendingLanguage && pendingLanguageId !== null && (
@@ -276,6 +224,73 @@ export function SettingsPage() {
         </div>
       )}
     </>
+  );
+}
+
+function ObsOutputControls() {
+  const [output, setOutput] = useState<ObsOutputStatus | null>(null);
+  const [pending, setPending] = useState<{ kind: "stream" | "record"; active: boolean } | null>(null);
+  const pendingRef = useRef(false);
+  const requestVersion = useRef(0);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function refresh(): Promise<void> {
+      if (!window.electronApi || pendingRef.current) return;
+      const version = requestVersion.current;
+      const result = await window.electronApi.getObsOutputStatus();
+      if (mounted && !pendingRef.current && version === requestVersion.current) setOutput(result);
+    }
+
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2_000);
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  async function changeOutput(kind: "stream" | "record", active: boolean): Promise<void> {
+    if (!window.electronApi || pendingRef.current) return;
+    const pendingStartedAt = performance.now();
+    pendingRef.current = true;
+    requestVersion.current += 1;
+    setPending({ kind, active });
+    try {
+      const result = kind === "stream"
+        ? await window.electronApi.setObsStreaming(active)
+        : await window.electronApi.setObsRecording(active);
+      const remainingFeedbackTime = 900 - (performance.now() - pendingStartedAt);
+      if (remainingFeedbackTime > 0) {
+        await new Promise<void>((resolve) => window.setTimeout(resolve, remainingFeedbackTime));
+      }
+      setOutput(result);
+    } finally {
+      pendingRef.current = false;
+      setPending(null);
+    }
+  }
+
+  return (
+    <div className="obs-output-controls" aria-busy={pending !== null}>
+      {output?.outputWidth && output.outputHeight && <p className="obs-video-quality">OBS output: {output.outputWidth}×{output.outputHeight}{output.fps ? ` at ${output.fps} FPS` : ""}</p>}
+      <div className="obs-output-row" data-pending={pending?.kind === "stream" || undefined}>
+        <div><strong>Stream</strong><span data-pending={pending?.kind === "stream" || undefined}>{pending?.kind === "stream" ? (pending.active ? "OBS is starting the stream…" : "OBS is ending the stream…") : output?.streaming ? `Live ${output.streamTimecode ?? ""}` : "Not live"}</span></div>
+        <button type="button" className={`secondary ${output?.streaming ? "obs-action-stop" : "obs-action-go"}`} disabled={pending !== null || !output?.connected} aria-busy={pending?.kind === "stream"} onClick={() => void changeOutput("stream", !output?.streaming)}>
+          {pending?.kind === "stream" && <Loader2 className="spin" size={18} aria-hidden="true" />}{pending?.kind === "stream" ? (pending.active ? "Starting" : "Stopping") : output?.streaming ? "End Stream" : "Start Streaming"}
+        </button>
+      </div>
+      <div className="obs-output-row" data-pending={pending?.kind === "record" || undefined}>
+        <div><strong>Recording</strong><span data-pending={pending?.kind === "record" || undefined}>{pending?.kind === "record" ? (pending.active ? "OBS is starting the recording…" : "OBS is stopping the recording…") : output?.recording ? `Recording ${output.recordTimecode ?? ""}` : "Not recording"}</span></div>
+        <button type="button" className={`secondary ${output?.recording ? "obs-action-stop" : "obs-action-go"}`} disabled={pending !== null || !output?.connected} aria-busy={pending?.kind === "record"} onClick={() => void changeOutput("record", !output?.recording)}>
+          {pending?.kind === "record" && <Loader2 className="spin" size={18} aria-hidden="true" />}{pending?.kind === "record" ? (pending.active ? "Starting" : "Stopping") : output?.recording ? "Stop Recording" : "Start Recording"}
+        </button>
+      </div>
+      {output?.message && <p className="obs-output-error">{output.message}</p>}
+      {output?.connected && !output.captureReady && <p className="obs-capture-waiting">OBS is waiting for the active Empire League capture window. Try Repair OBS Scene.</p>}
+      <p className="settings-note">The stream shows Empire League during matchmaking and switches to AoE2 only after the game-start countdown. Start Recording is a safe local test.</p>
+    </div>
   );
 }
 
