@@ -97,9 +97,15 @@ export function registerSystemHandlers(): void {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.hostname !== "steamcommunity.com") throw new Error("Invalid Steam login URL.");
     const parent = BrowserWindow.fromWebContents(event.sender);
-    await shell.openExternal(url.toString());
     steamLoginParent = parent;
-    if (parent) minimizeMainWindowToTaskbar(parent);
+    if (parent) {
+      minimizeMainWindowToTaskbar(parent);
+      // Let Windows finish the minimize/blur transition (which also releases
+      // the shell's always-on-top level) before asking it to foreground the
+      // user's browser.
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    await shell.openExternal(url.toString());
   });
   ipcMain.handle("auth:complete-steam-login", async () => {
     const parent = steamLoginParent;
