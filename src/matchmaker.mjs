@@ -36,6 +36,7 @@ import {
   rollCivilizationPreference
 } from "./civilization-roll.mjs";
 import { currentWeeklyMode as weeklyModeAt, weeklyRotation } from "./weekly-rotation.mjs";
+import { getTopAoe2Streams } from "./twitch-streams.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -1158,6 +1159,15 @@ async function handleRequest(request, response) {
 
     const authenticatedPlayer = await authenticate(request);
     if (!authenticatedPlayer) return send(response, 401, { error: "authentication required" });
+
+    if (request.method === "GET" && url.pathname === "/streams/live") {
+      try {
+        return send(response, 200, { streams: await getTopAoe2Streams() });
+      } catch (error) {
+        console.error("[matchmaker] Twitch stream refresh failed:", error);
+        return send(response, 200, { streams: [] });
+      }
+    }
 
     if (request.method === "POST" && url.pathname === "/auth/steam-license") {
       const body = await readJson(request);

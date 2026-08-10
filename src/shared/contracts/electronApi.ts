@@ -138,6 +138,7 @@ export interface ElectronGameApi {
   getAppVersion(): Promise<string>;
   getPreferredSystemLanguages(): Promise<string[]>;
   openDiscordInvite(): Promise<void>;
+  openTwitchStream(url: string): Promise<void>;
   getPendingUpdate(): Promise<PendingAppUpdate | null>;
   installPendingUpdate(): Promise<boolean>;
   retryPendingUpdate(): Promise<boolean>;

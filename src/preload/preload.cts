@@ -108,6 +108,7 @@ const electronApi: ElectronGameApi = {
   getAppVersion: () => ipcRenderer.invoke("system:get-app-version"),
   getPreferredSystemLanguages: () => ipcRenderer.invoke("system:get-preferred-languages"),
   openDiscordInvite: () => ipcRenderer.invoke("system:open-discord-invite"),
+  openTwitchStream: (url) => ipcRenderer.invoke("system:open-twitch-stream", url),
   getPendingUpdate: () => ipcRenderer.invoke("system:get-pending-update"),
   installPendingUpdate: () => ipcRenderer.invoke("system:install-pending-update"),
   retryPendingUpdate: () => ipcRenderer.invoke("system:retry-pending-update"),

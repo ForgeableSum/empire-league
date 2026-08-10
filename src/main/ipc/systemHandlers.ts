@@ -63,6 +63,14 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:open-discord-invite", async () => {
     await shell.openExternal("https://discord.gg/arRjVxx2y7");
   });
+  ipcMain.handle("system:open-twitch-stream", async (_event, value: string) => {
+    const url = new URL(value);
+    const allowedHosts = new Set(["twitch.tv", "www.twitch.tv"]);
+    if (url.protocol !== "https:" || !allowedHosts.has(url.hostname) || !/^\/[A-Za-z0-9_]+\/?$/.test(url.pathname)) {
+      throw new Error("Invalid Twitch stream URL.");
+    }
+    await shell.openExternal(url.toString());
+  });
   ipcMain.handle("system:get-pending-update", async () => {
     return getPendingUpdate();
   });

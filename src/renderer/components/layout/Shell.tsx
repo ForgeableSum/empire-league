@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, CalendarDays, Download, Gamepad2, History, Home, Languages, LogOut, RotateCcw, Swords, Settings, User, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarDays, Download, Eye, Gamepad2, History, Home, Languages, LogOut, Radio, RotateCcw, Swords, Settings, User, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import appIcon from "../../assets/el_icon_no_plume.png";
 import { presenceService } from "../../services/presenceService";
@@ -8,6 +8,7 @@ import { WindowControls } from "./WindowControls";
 import { isPreviewMode } from "../../previewMode";
 import { aoe2Languages } from "../../../shared/aoe2Languages";
 import type { PendingAppUpdate } from "../../../shared/contracts/electronApi";
+import { liveStreamsService, type LiveStream } from "../../services/liveStreamsService";
 
 // TEST ONLY: set this to false before release to show the prompt only once per
 // account, and only when the software environment reports a non-English locale.
@@ -43,6 +44,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
   const viewingLinkedProfile = page === "profile" && selectedProfileId !== null && selectedProfileId !== state.currentUser.id;
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
   const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
+  const [liveStreams, setLiveStreams] = useState<LiveStream[]>([]);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<PendingAppUpdate | null>(null);
   const [installingUpdate, setInstallingUpdate] = useState(false);
@@ -118,6 +120,26 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
       if (active) setAppVersion(version);
     });
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (isPreviewMode) return;
+    let cancelled = false;
+    const refresh = () => {
+      void liveStreamsService.getLiveStreams()
+        .then((streams) => {
+          if (!cancelled) setLiveStreams(streams.slice(0, 3));
+        })
+        .catch(() => {
+          if (!cancelled) setLiveStreams([]);
+        });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -229,6 +251,31 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
             </button>
           ))}
         </nav>
+        {liveStreams.length > 0 && (
+          <section className="sidebar-streams" aria-labelledby="sidebar-streams-title">
+            <h2 id="sidebar-streams-title"><Radio size={14} aria-hidden="true" /> Live now</h2>
+            <div className="sidebar-stream-list">
+              {liveStreams.map((stream) => (
+                <button
+                  className="sidebar-stream"
+                  type="button"
+                  key={stream.id}
+                  title={`${stream.creatorName}: ${stream.title}`}
+                  onClick={() => void window.electronApi?.openTwitchStream(stream.streamUrl)}
+                >
+                  <span className="sidebar-stream-thumbnail">
+                    <img src={stream.thumbnailUrl} alt="" loading="lazy" />
+                    <span>Live</span>
+                  </span>
+                  <span className="sidebar-stream-copy">
+                    <strong data-ui-translation="off">{stream.creatorName}</strong>
+                    <span><Eye size={11} aria-hidden="true" /> {formatViewerCount(stream.viewerCount)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
         <div className="sidebar-meta">
           <div><span>Season</span><strong>1</strong></div>
           {onlinePlayers !== null && onlinePlayers >= 300 && (
@@ -338,6 +385,10 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
       )}
     </div>
   );
+}
+
+function formatViewerCount(viewers: number): string {
+  return `${new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(viewers)} viewers`;
 }
 
 function titleFor(page: AppPage): string {
