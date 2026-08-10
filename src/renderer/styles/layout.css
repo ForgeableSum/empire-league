@@ -3272,6 +3272,57 @@
   gap: 10px;
 }
 
+.ui-mod-warning-backdrop {
+  z-index: 30;
+  background: rgba(10, 9, 8, 0.9);
+}
+
+.ui-mod-warning-modal {
+  width: min(560px, calc(100vw - 40px));
+}
+
+.ui-mod-warning-modal h2,
+.ui-mod-warning-modal p {
+  margin: 0;
+}
+
+.ui-mod-warning-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--danger) 70%, #fff);
+  border-radius: 50%;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.ui-mod-warning-list {
+  max-height: 180px;
+  margin: 0;
+  padding: 12px 12px 12px 34px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--line));
+  border-radius: var(--radius);
+  background: rgba(10, 9, 8, 0.42);
+}
+
+.ui-mod-warning-list li + li {
+  margin-top: 6px;
+}
+
+.ui-mod-warning-consequence {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.ui-mod-warning-modal .modal-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .promotion-backdrop {
   z-index: 20;
   background:

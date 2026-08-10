@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { aoe2UiManifest } from "../../shared/aoe2UiManifest";
 import { isAoe2LanguageId } from "../../shared/aoe2Languages";
 import type { MatchResult } from "../../shared/contracts/matches";
@@ -156,6 +157,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [lobbyAutomationActive, setLobbyAutomationActive] = useState(false);
   const [customLobbyAutomationActive, setCustomLobbyAutomationActive] = useState(false);
   const [weeklyQueueActive, setWeeklyQueueActive] = useState(false);
+  const [incompatibleUiMods, setIncompatibleUiMods] = useState<string[]>([]);
+  const [disablingUiMods, setDisablingUiMods] = useState(false);
   const [page, setPage] = useState<AppPage>(() => isAppPage(previewPage) ? previewPage : "home");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileReturnPage, setProfileReturnPage] = useState<AppPage>("leaderboard");
@@ -298,57 +301,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const gameStartSignalInFlightRef = useRef<Promise<boolean> | null>(null);
   const lobbyTimingAuditRef = useRef<{ matchId: string; startedAt: number; previousAt: number; expectedMs: number; role: "host" | "guest" } | null>(null);
   const familySharingNoticeShownRef = useRef(false);
-  const uiModWarningIdRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (isPreviewMode || !window.electronApi) return;
     let cancelled = false;
     void window.electronApi.detectEnabledUiMods().then(({ mods }) => {
       if (cancelled || !mods.length) return;
-      if (uiModWarningIdRef.current) dismissNotificationById(uiModWarningIdRef.current);
-      uiModWarningIdRef.current = notify("UI mods may interfere with Empire League", "warning", {
-        detail: `${mods.join(", ")} might interfere with automated lobby setup. You can disable ${mods.length === 1 ? "it" : "them"}, or continue anyway.`,
-        durationMs: null,
-        dismissible: false,
-        action: {
-          label: "Disable UI mods",
-          pendingLabel: "Disabling…",
-          run: async () => {
-            try {
-              const process = await window.electronApi!.detectAoe2Process();
-              if (process.running) {
-                const graceful = await window.electronApi!.closeAoe2(false);
-                if (!graceful.closed) {
-                  const forced = await window.electronApi!.closeAoe2(true);
-                  if (!forced.closed) throw new Error(forced.message ?? "AoE2 could not be closed.");
-                }
-              }
-              const result = await window.electronApi!.disableEnabledUiMods();
-              if (!result.disabled.length) throw new Error("The enabled UI mods could not be updated.");
-              if (uiModWarningIdRef.current) dismissNotificationById(uiModWarningIdRef.current);
-              uiModWarningIdRef.current = null;
-              notify("UI mods disabled", "success", {
-                detail: `${result.disabled.join(", ")} disabled.`
-              });
-            } catch (error) {
-              notify("UI mods could not be disabled", "danger", {
-                detail: error instanceof Error ? error.message : "Update the mods manually in AoE2.",
-                durationMs: null
-              });
-            }
-          }
-        },
-        secondaryAction: {
-          label: "Continue anyway",
-          run: () => {
-            if (uiModWarningIdRef.current) dismissNotificationById(uiModWarningIdRef.current);
-            uiModWarningIdRef.current = null;
-          }
-        }
-      });
+      setIncompatibleUiMods(mods);
     }).catch((error) => log(`UI mod detection failed: ${error instanceof Error ? error.message : "Unknown error"}`));
     return () => { cancelled = true; };
   }, []);
+
+  const disableIncompatibleUiMods = async () => {
+    if (!window.electronApi || disablingUiMods) return;
+    setDisablingUiMods(true);
+    try {
+      const process = await window.electronApi.detectAoe2Process();
+      if (process.running) {
+        const graceful = await window.electronApi.closeAoe2(false);
+        if (!graceful.closed) {
+          const forced = await window.electronApi.closeAoe2(true);
+          if (!forced.closed) throw new Error(forced.message ?? "AoE2 could not be closed.");
+        }
+      }
+      const result = await window.electronApi.disableEnabledUiMods();
+      if (!result.disabled.length) throw new Error("The enabled UI mods could not be updated.");
+      setIncompatibleUiMods([]);
+      notify("UI mods disabled", "success", { detail: `${result.disabled.join(", ")} disabled.` });
+    } catch (error) {
+      notify("UI mods could not be disabled", "danger", {
+        detail: error instanceof Error ? error.message : "Update the mods manually in AoE2.",
+        durationMs: null
+      });
+    } finally {
+      setDisablingUiMods(false);
+    }
+  };
 
   useEffect(() => {
     const electronApi = window.electronApi;
@@ -1870,7 +1857,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     signOut,
   };
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return (
+    <AppContext.Provider value={value}>
+      {children}
+      {incompatibleUiMods.length > 0 && (
+        <div className="modal-backdrop ui-mod-warning-backdrop" role="presentation">
+          <section className="match-modal ui-mod-warning-modal" role="alertdialog" aria-modal="true" aria-labelledby="ui-mod-warning-title">
+            <div className="ui-mod-warning-icon"><AlertTriangle size={34} strokeWidth={2.4} aria-hidden="true" /></div>
+            <span className="eyebrow danger">Lobby automation blocked</span>
+            <h2 id="ui-mod-warning-title">These UI mods will break lobby automation</h2>
+            <p>Empire League detected mods that replace the exact AoE2 menu screens or buttons it must control. Disable them before matchmaking.</p>
+            <ul className="ui-mod-warning-list">
+              {incompatibleUiMods.map((mod) => <li key={mod}>{mod}</li>)}
+            </ul>
+            <p className="ui-mod-warning-consequence">Continuing with these mods enabled can leave you or your opponent stuck during lobby setup.</p>
+            <div className="modal-actions">
+              <button className="primary" type="button" disabled={disablingUiMods} autoFocus onClick={() => void disableIncompatibleUiMods()}>
+                {disablingUiMods && <Loader2 className="spin" size={17} aria-hidden="true" />}
+                {disablingUiMods ? "Disabling…" : "Disable mods"}
+              </button>
+              <button className="secondary" type="button" disabled={disablingUiMods} onClick={() => setIncompatibleUiMods([])}>Continue anyway</button>
+            </div>
+          </section>
+        </div>
+      )}
+    </AppContext.Provider>
+  );
 }
 
 function authErrorMessage(error: unknown, fallback: string): string {
