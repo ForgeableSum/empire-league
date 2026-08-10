@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 import { useAppStore } from "../state/appStore";
-import en from "./en.json";
 
 type Catalog = Record<string, string>;
 type LocalizedValue = { source: string; rendered: string };
@@ -118,14 +117,47 @@ function localizeTree(root: Node, localize: (value: string) => string): void {
   }
 }
 
+function restoreText(node: Text): void {
+  const previous = textValues.get(node);
+  if (!previous) return;
+  if (node.data === previous.rendered) node.data = previous.source;
+  textValues.delete(node);
+}
+
+function restoreElement(element: Element): void {
+  const values = attributeValues.get(element);
+  if (!values) return;
+  for (const [attribute, previous] of values) {
+    if (element.getAttribute(attribute) === previous.rendered) {
+      element.setAttribute(attribute, previous.source);
+    }
+  }
+  attributeValues.delete(element);
+}
+
+function restoreTree(root: Node): void {
+  if (root instanceof Text) {
+    restoreText(root);
+    return;
+  }
+  if (!(root instanceof Element) && !(root instanceof Document)) return;
+  if (root instanceof Element) restoreElement(root);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node instanceof Text) restoreText(node);
+    else if (node instanceof Element) restoreElement(node);
+  }
+}
+
 export function UiLocalization(): null {
   const { aoe2LanguageCode } = useAppStore();
-  const [loadedCatalog, setLoadedCatalog] = useState<{ languageCode: string; catalog: Catalog }>({ languageCode: "en", catalog: en });
+  const [loadedCatalog, setLoadedCatalog] = useState<{ languageCode: string; catalog: Catalog }>({ languageCode: "en", catalog: {} });
 
   useEffect(() => {
     let cancelled = false;
     if (aoe2LanguageCode === "en" || !catalogLoaders[aoe2LanguageCode]) {
-      setLoadedCatalog({ languageCode: aoe2LanguageCode, catalog: en });
+      setLoadedCatalog({ languageCode: aoe2LanguageCode, catalog: {} });
       return;
     }
     void catalogLoaders[aoe2LanguageCode]().then((module) => {
@@ -138,6 +170,11 @@ export function UiLocalization(): null {
 
   useLayoutEffect(() => {
     if (loadedCatalog.languageCode !== aoe2LanguageCode) return;
+    if (aoe2LanguageCode === "en") {
+      document.documentElement.lang = "en";
+      restoreTree(document.body);
+      return;
+    }
     const localize = localizerFor(loadedCatalog.catalog);
     document.documentElement.lang = htmlLanguageCodes[aoe2LanguageCode] ?? "en";
     localizeTree(document.body, localize);
