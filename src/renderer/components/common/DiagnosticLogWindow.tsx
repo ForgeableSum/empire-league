@@ -1,4 +1,4 @@
-import { Download, X } from "lucide-react";
+import { AlertTriangle, Download, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore } from "../../state/appStore";
 
@@ -15,7 +15,9 @@ function formatConsoleValue(value: unknown): string {
 export function DiagnosticLogWindow() {
   const { state, appendDiagnosticLog } = useAppStore();
   const [open, setOpen] = useState(false);
+  const [automationFailureOpen, setAutomationFailureOpen] = useState(false);
   const [appVersion, setAppVersion] = useState("unknown");
+  const automationFailureOpenRef = useRef(false);
   const logRef = useRef<HTMLPreElement>(null);
   const sessionStartedAt = useRef(new Date().toISOString());
 
@@ -25,12 +27,17 @@ export function DiagnosticLogWindow() {
 
   useEffect(() => {
     const originalConsoleError = console.error;
-    const toggle = (event: KeyboardEvent) => {
-      if (event.key !== "F10") return;
-      event.preventDefault();
-      setOpen((current) => !current);
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (event.key === "F10") {
+        event.preventDefault();
+        if (!automationFailureOpenRef.current) setOpen((current) => !current);
+      }
     };
-    const openForAutomationFailure = () => setOpen(true);
+    const openForAutomationFailure = () => {
+      setOpen(false);
+      automationFailureOpenRef.current = true;
+      setAutomationFailureOpen(true);
+    };
     const recordError = (event: ErrorEvent) => {
       appendDiagnosticLog(`[Client error] ${event.message}${event.filename ? ` (${event.filename}:${event.lineno})` : ""}`);
     };
@@ -42,18 +49,24 @@ export function DiagnosticLogWindow() {
       originalConsoleError(...values);
       appendDiagnosticLog(`[Console error] ${values.map(formatConsoleValue).join(" ")}`);
     };
-    window.addEventListener("keydown", toggle);
+    window.addEventListener("keydown", handleShortcut);
     window.addEventListener("empire:open-diagnostic-log", openForAutomationFailure);
     window.addEventListener("error", recordError);
     window.addEventListener("unhandledrejection", recordRejection);
     return () => {
       console.error = originalConsoleError;
-      window.removeEventListener("keydown", toggle);
+      window.removeEventListener("keydown", handleShortcut);
       window.removeEventListener("empire:open-diagnostic-log", openForAutomationFailure);
       window.removeEventListener("error", recordError);
       window.removeEventListener("unhandledrejection", recordRejection);
     };
   }, []);
+
+  const closeAutomationFailure = () => {
+    automationFailureOpenRef.current = false;
+    setAutomationFailureOpen(false);
+    setOpen(true);
+  };
 
   useEffect(() => {
     if (open) logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
@@ -80,6 +93,28 @@ export function DiagnosticLogWindow() {
 
   const downloadUrl = useMemo(() => URL.createObjectURL(new Blob([contents], { type: "text/plain;charset=utf-8" })), [contents]);
   useEffect(() => () => URL.revokeObjectURL(downloadUrl), [downloadUrl]);
+
+  if (automationFailureOpen) return (
+    <div className="automation-failure-backdrop" role="presentation">
+      <section className="automation-failure-dialog" role="dialog" aria-modal="true" aria-labelledby="automation-failure-title">
+        <button type="button" className="icon-button automation-failure-close" onClick={closeAutomationFailure} aria-label="Close lobby automation warning"><X size={20} /></button>
+        <div className="automation-failure-icon" aria-hidden="true"><AlertTriangle size={34} strokeWidth={2.2} /></div>
+        <div className="automation-failure-heading">
+          <span>Lobby setup interrupted</span>
+          <h2 id="automation-failure-title">Lobby Automation Failed</h2>
+          <p>Check these common causes before trying again:</p>
+        </div>
+        <ol className="automation-failure-reasons">
+          <li><strong>Language mismatch.</strong> Make sure the language selected in Empire League settings matches the Game Language selected in Age of Empires II options.</li>
+          <li><strong>Wrong game edition.</strong> Open Age of Empires II and make sure the top-left game selector is set to <strong>Definitive Edition</strong>, not a DLC such as Return of Rome or Chronicles.</li>
+          <li><strong>Multiplayer setup is incomplete.</strong> If this is a new account or machine, open the Multiplayer menu, answer the new-player question, and complete the multiplayer benchmark test first.</li>
+        </ol>
+        <button type="button" className="primary automation-failure-action" onClick={closeAutomationFailure}>
+          Continue to diagnostic log
+        </button>
+      </section>
+    </div>
+  );
 
   if (!open) return null;
   const fileDate = new Date().toISOString().replace(/[:.]/g, "-");
