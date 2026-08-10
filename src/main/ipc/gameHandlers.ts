@@ -366,7 +366,44 @@ async function scanLocalCustomContent() {
   };
 }
 
-async function detectEnabledUiMods(): Promise<{ mods: string[]; profileId?: string }> {
+interface DetectedUiMods {
+  mods: string[];
+  profileId?: string;
+  /** Exact mod-status paths, kept private to the main process for safe disabling. */
+  modPaths?: string[];
+}
+
+const automationSensitiveWidgetUiFiles = new Set([
+  "dialogcreatemultiplayergame.json",
+  "dialoglobbysettings.json",
+  "screenempireinvites.json",
+  "screenmainmenu.json",
+  "screenmapselection.json",
+  "screenmultiplayerbrowser.json",
+  "screenmultiplayerlobbyclient.json",
+  "screenmultiplayerlobbyhost.json",
+  "screenmultiplayerlobbyspectator.json",
+  "screenmultiplayerlobbytransition.json",
+  "screenselectscenario.json"
+]);
+
+function isAutomationSensitiveUiPath(path: string): boolean {
+  const normalized = path.replace(/\\/g, "/").toLowerCase();
+  const fileName = normalized.split("/").at(-1) ?? "";
+
+  // Fixed-coordinate automation operates only these menu/lobby layouts. Mods
+  // that merely contain other widgetui files (HUDs, minimaps, etc.) are safe.
+  if (normalized.includes("/widgetui/") && automationSensitiveWidgetUiFiles.has(fileName)) return true;
+
+  // These images are sampled to recognize the main menu and Ready state. A
+  // replacement can break verification even when it does not move a control.
+  return normalized.includes("/widgetui/textures/menu/buttons/button_ready_")
+    || normalized.includes("/widgetui/textures/menu/buttons/button_red_")
+    || normalized.includes("/resources/_common/wpfg/resources/simplemainmenu/")
+    || normalized.includes("/resources/_common/wpfg/resources/button_large/");
+}
+
+async function detectEnabledUiModsDetailed(): Promise<DetectedUiMods> {
   const profilesRoot = join(homedir(), "Games", "Age of Empires 2 DE");
   let profiles: Array<{ name: string; activityMs: number }>;
   try {
@@ -404,21 +441,13 @@ async function detectEnabledUiMods(): Promise<{ mods: string[]; profileId?: stri
     for (const entry of entries) {
       const absolutePath = join(root, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name.toLowerCase() === "widgetui") return true;
         if (await containsAutomationSensitiveUi(absolutePath, depth + 1)) return true;
-      } else {
-        const normalized = absolutePath.replace(/\\/g, "/").toLowerCase();
-        if (
-          normalized.includes("/widgetui/")
-          || normalized.includes("/resources/_common/wpfg/")
-          || normalized.includes("/resources/_common/drs/interface/")
-        ) return true;
-      }
+      } else if (isAutomationSensitiveUiPath(absolutePath)) return true;
     }
     return false;
   };
 
-  const detected = new Set<string>();
+  const detected = new Map<string, string>();
   for (const mod of statuses) {
     if (mod.Enabled === false || !mod.Path) continue;
     const pathParts = String(mod.Path).replace(/\\/g, "/").split("/").filter(Boolean);
@@ -434,27 +463,38 @@ async function detectEnabledUiMods(): Promise<{ mods: string[]; profileId?: stri
       containsAutomationSensitiveUi(join(profilesRoot, profile.name, "mods", category, folder))
     ))).some(Boolean);
     if (hasSensitiveUi) {
-      detected.add(displayName);
+      detected.set(String(mod.Path).replace(/\\/g, "/").toLowerCase(), displayName);
     }
   }
 
-  return { mods: [...detected].sort((left, right) => left.localeCompare(right)), profileId: profile.name };
+  const entries = [...detected.entries()].sort((left, right) => left[1].localeCompare(right[1]));
+  return {
+    mods: entries.map(([, displayName]) => displayName),
+    profileId: profile.name,
+    modPaths: entries.map(([path]) => path)
+  };
+}
+
+async function detectEnabledUiMods(): Promise<{ mods: string[]; profileId?: string }> {
+  const { mods, profileId } = await detectEnabledUiModsDetailed();
+  return { mods, profileId };
 }
 
 async function disableEnabledUiMods(): Promise<{ disabled: string[] }> {
-  const detected = await detectEnabledUiMods();
+  const detected = await detectEnabledUiModsDetailed();
   if (!detected.profileId || !detected.mods.length) return { disabled: [] };
 
   const statusPath = join(homedir(), "Games", "Age of Empires 2 DE", detected.profileId, "mods", "mod-status.json");
   const parsed = JSON.parse(await readFile(statusPath, "utf8")) as {
     Mods?: Array<{ Path?: string; Enabled?: boolean; Title?: string }>;
   };
-  const detectedNames = new Set(detected.mods.map((name) => name.toLowerCase()));
+  const detectedPaths = new Set(detected.modPaths ?? []);
   const disabled: string[] = [];
   for (const mod of parsed.Mods ?? []) {
-    const folder = String(mod.Path ?? "").replace(/\\/g, "/").split("/").filter(Boolean).at(-1) ?? "";
+    const normalizedPath = String(mod.Path ?? "").replace(/\\/g, "/").toLowerCase();
+    const folder = normalizedPath.split("/").filter(Boolean).at(-1) ?? "";
     const displayName = String(mod.Title || folder.replace(/^\d+_/, "")).trim();
-    if (!detectedNames.has(displayName.toLowerCase()) || mod.Enabled === false) continue;
+    if (!detectedPaths.has(normalizedPath) || mod.Enabled === false) continue;
     mod.Enabled = false;
     disabled.push(displayName);
   }
