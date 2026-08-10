@@ -330,7 +330,7 @@ export function showReturnToMenuOverlay(): void {
   const width = 720;
   const height = 190;
   const bottomMargin = 56;
-  returnToMenuOverlay = new BrowserWindow({
+  const overlay = new BrowserWindow({
     show: false,
     x: display.workArea.x + Math.round((display.workArea.width - width) / 2),
     y: display.workArea.y + display.workArea.height - height - bottomMargin,
@@ -349,11 +349,12 @@ export function showReturnToMenuOverlay(): void {
       sandbox: true
     }
   });
-  returnToMenuOverlay.setAlwaysOnTop(true, "screen-saver");
-  returnToMenuOverlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  returnToMenuOverlay.setIgnoreMouseEvents(true);
-  returnToMenuOverlay.once("closed", () => {
-    returnToMenuOverlay = null;
+  returnToMenuOverlay = overlay;
+  overlay.setAlwaysOnTop(true, "screen-saver");
+  overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  overlay.setIgnoreMouseEvents(true);
+  overlay.once("closed", () => {
+    if (returnToMenuOverlay === overlay) returnToMenuOverlay = null;
   });
   const markup = `<!doctype html>
 <html>
@@ -389,8 +390,10 @@ export function showReturnToMenuOverlay(): void {
   </section>
 </body>
 </html>`;
-  void returnToMenuOverlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(markup)}`)
-    .then(() => returnToMenuOverlay?.showInactive());
+  void overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(markup)}`)
+    .then(() => {
+      if (returnToMenuOverlay === overlay && !overlay.isDestroyed()) overlay.showInactive();
+    });
 }
 
 export function hideReturnToMenuOverlay(): void {

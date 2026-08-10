@@ -581,14 +581,17 @@ function focusMainWindowAfterReplay(window: BrowserWindow, manageRunningGame = f
     keepAoe2NativeWindowBehind(game.pid);
     console.info(`[AoE2 replay] WINDOW_MANAGED|Pid=${game.pid}|Taskbar=False|AltTab=False`);
   };
-  manageGameWindow();
+  // Restore Electron before lowering AoE2. Lowering the game first can expose
+  // the desktop while a hidden/fullscreen BrowserWindow takes a moment to
+  // become visible, leaving only the return-to-menu overlay on screen.
   focusMainWindow(window);
+  manageGameWindow();
   for (const delayMs of [250, 1000]) {
     const timer = setTimeout(() => {
       replayFocusTimers = replayFocusTimers.filter((candidate) => candidate !== timer);
       if (!window.isDestroyed()) {
-        manageGameWindow();
         focusMainWindow(window);
+        manageGameWindow();
       }
     }, delayMs);
     timer.unref();
