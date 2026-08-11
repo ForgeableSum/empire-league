@@ -298,7 +298,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     if (!isHost && room.platformLobbyId && !me.aoeJoined && claimCustomLobbyAutomationStep(guestJoinKey)) {
       void (async () => {
         try {
-          const opened = await window.electronApi!.openAoe2Lobby(room.platformLobbyId!);
+          const opened = await window.electronApi!.openAoe2Lobby(room.platformLobbyId!, true);
           if (!opened.opened) throw new Error("AoE2 did not open the custom lobby.");
           if (content?.kind !== "scenario" || room.source === "weekly") await applyMapPlayerSettings(me);
           await customLobbyService.reportJoined(room.id);

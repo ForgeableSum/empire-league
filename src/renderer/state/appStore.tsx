@@ -1020,7 +1020,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }));
           log(`Host published lobby: ${event.lobby.platformLobbyId ?? "pending"}`);
           if (event.lobby.platformLobbyId?.startsWith("aoe2de://0/") && window.electronApi) {
-            void window.electronApi.openAoe2Lobby(event.lobby.platformLobbyId).then(async (result) => {
+            const allowCustomContentPrompt = isCustomLobbyMap(matchedSessionRef.current?.selectedMap);
+            void window.electronApi.openAoe2Lobby(
+              event.lobby.platformLobbyId,
+              allowCustomContentPrompt
+            ).then(async (result) => {
               log(result.opened ? "Opened the host lobby in AoE2" : "The host lobby URI was rejected");
               if (result.opened) {
                 log("Guest lobby opened; waiting for the Ready button state to settle");

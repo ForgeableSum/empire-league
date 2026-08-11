@@ -123,7 +123,7 @@ export interface ElectronGameApi {
   onMouseTestModeChanged(listener: (active: boolean) => void): () => void;
   onAoe2AutomationLog(listener: (message: string) => void): () => void;
   createRanked1v1Lobby(request: CreateLobbyRequest): Promise<CreateLobbyResult>;
-  openAoe2Lobby(lobbyId: string): Promise<OpenLobbyResult>;
+  openAoe2Lobby(lobbyId: string, allowCustomContentPrompt?: boolean): Promise<OpenLobbyResult>;
   openSteamLogin(url: string): Promise<void>;
   completeSteamLogin(): Promise<void>;
   loadAuthToken(): Promise<string | null>;

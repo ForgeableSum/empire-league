@@ -4110,7 +4110,11 @@ export function registerGameHandlers(): void {
     };
   });
 
-  ipcMain.handle("game:open-lobby", async (event, lobbyId: string) => {
+  ipcMain.handle("game:open-lobby", async (
+    event,
+    lobbyId: string,
+    allowCustomContentPrompt = false
+  ) => {
     if (!/^aoe2de:\/\/0\/\d+$/.test(lobbyId)) {
       return { opened: false };
     }
@@ -4182,15 +4186,49 @@ export function registerGameHandlers(): void {
       // Do not equate a successful process spawn with a successful join. Poll
       // AoE2's rendered state so a rejected handoff cannot send civilization
       // automation into an unrelated menu.
-      const joinDeadline = Date.now() + lobbySetupTiming.guestJoinMs;
-      let lobbyState = readAoe2HostSetupState(game.pid);
+      let joinDeadline = Date.now() + lobbySetupTiming.guestJoinMs;
+      let contentPromptAttempted = false;
+      const readLobbyState = () => readAoe2HostSetupState(game.pid!, {
+        contentPickerExpected: allowCustomContentPrompt === true
+      });
+      let lobbyState = readLobbyState();
       while (lobbyState.state !== "lobby-room" && Date.now() < joinDeadline) {
+        if (
+          allowCustomContentPrompt === true
+          && lobbyState.state === "content-picker"
+          && !contentPromptAttempted
+        ) {
+          const warningBefore = readAoe2ContentWarningState(game.pid);
+          emitLog(`LOBBY_HANDOFF_CONTENT|Step=Detect|${warningBefore.detail}`);
+          if (warningBefore.state === "visible") {
+            contentPromptAttempted = true;
+            const tab = await sendAoe2Tab(game.pid);
+            await delay(contentConfirmationKeyDelayMs);
+            const enter = tab.sent
+              ? await sendAoe2Enter(game.pid)
+              : { sent: false, detail: "SKIPPED_TAB_FAILED" };
+            await delay(aoe2UiManifest.actions.confirmGuestContent.settleMs);
+            const warningAfter = readAoe2ContentWarningState(game.pid);
+            const confirmed = tab.sent && enter.sent && warningAfter.state !== "visible";
+            emitLog(
+              `LOBBY_HANDOFF_CONTENT|Step=Confirm|Confirmed=${confirmed}`
+              + `|Tab=${tab.detail}|Enter=${enter.detail}|After=${warningAfter.detail}`
+            );
+            if (!confirmed) return { opened: false };
+            // Custom content may still need to download after confirmation.
+            // Extend only this optional branch; prompt-free joins keep the
+            // normal handoff deadline and can finish immediately.
+            joinDeadline = Date.now() + lobbySetupTiming.customMapTransferTimeoutMs;
+          }
+        }
         await delay(500);
         keepAoe2NativeWindowBehind(game.pid);
-        lobbyState = readAoe2HostSetupState(game.pid);
+        lobbyState = readLobbyState();
       }
       emitLog(
         `LOBBY_HANDOFF_VERIFY|Method=AoeUrlHelperExecutable|Joined=${lobbyState.state === "lobby-room"}`
+        + `|CustomContentAllowed=${allowCustomContentPrompt === true}`
+        + `|ContentPromptAttempted=${contentPromptAttempted}`
         + `|${lobbyState.detail}`
       );
       if (lobbyState.state !== "lobby-room") return { opened: false };
