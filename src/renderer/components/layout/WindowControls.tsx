@@ -1,4 +1,5 @@
 import { Minus, X } from "lucide-react";
+import type { GameStatus } from "../../../shared/contracts/gameIntegration";
 import type { QueueStatus } from "../../../shared/contracts/matchmaking";
 import { useAppStore } from "../../state/appStore";
 
@@ -14,19 +15,36 @@ const minimizeLockedStatuses = new Set<QueueStatus>([
 ]);
 const independentWindowMinimize = import.meta.env.VITE_INDEPENDENT_WINDOW_MINIMIZE === "true";
 
-export function isAppMinimizeLocked(queueStatus: QueueStatus, weeklyQueueActive: boolean, lobbyAutomationActive: boolean): boolean {
-  return !independentWindowMinimize && (weeklyQueueActive || lobbyAutomationActive || minimizeLockedStatuses.has(queueStatus));
+export function isAppMinimizeLocked(
+  queueStatus: QueueStatus,
+  gameStatus: GameStatus,
+  weeklyQueueActive: boolean,
+  lobbyAutomationActive: boolean
+): boolean {
+  return !independentWindowMinimize && (
+    gameStatus === "loading"
+    || weeklyQueueActive
+    || lobbyAutomationActive
+    || minimizeLockedStatuses.has(queueStatus)
+  );
 }
 
 export function WindowControls() {
   const { state, lobbyAutomationActive, weeklyQueueActive, notify } = useAppStore();
 
   async function minimizeToTaskbar(): Promise<void> {
-    if (isAppMinimizeLocked(state.queueStatus, weeklyQueueActive, lobbyAutomationActive)) {
+    if (isAppMinimizeLocked(state.queueStatus, state.gameStatus, weeklyQueueActive, lobbyAutomationActive)) {
+      const gameIsBooting = state.gameStatus === "loading";
       notify(
-        "Empire League cannot be minimized during an active match.",
+        gameIsBooting
+          ? "Empire League cannot be minimized while AoE2 is starting."
+          : "Empire League cannot be minimized during an active match.",
         "danger",
-        { detail: "Cancel matchmaking or finish the current match before minimizing." }
+        {
+          detail: gameIsBooting
+            ? "Wait for the game to finish loading before minimizing."
+            : "Cancel matchmaking or finish the current match before minimizing."
+        }
       );
       return;
     }
