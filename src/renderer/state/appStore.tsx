@@ -414,29 +414,66 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!window.electronApi) return;
     return window.electronApi.onReplayEnded((filePath) => {
       const match = stateRef.current.activeMatch;
-      if (!match || stateRef.current.queueStatus !== "in_game" || replayResultInFlightRef.current) return;
+      const queueStatus = stateRef.current.queueStatus;
+      const inFlight = replayResultInFlightRef.current;
+      log(
+        `REPLAY_RESULT|Event=Received|Match=${match?.id ?? "none"}|QueueStatus=${queueStatus}`
+        + `|InFlight=${inFlight}|File=${filePath}`
+      );
+      if (!match) {
+        log(`REPLAY_RESULT|Event=Ignored|Reason=NoActiveMatch|QueueStatus=${queueStatus}|File=${filePath}`);
+        return;
+      }
+      if (queueStatus !== "in_game") {
+        log(
+          `REPLAY_RESULT|Event=Ignored|Reason=QueueStatus|Match=${match.id}`
+          + `|QueueStatus=${queueStatus}|File=${filePath}`
+        );
+        return;
+      }
+      if (inFlight) {
+        log(`REPLAY_RESULT|Event=Ignored|Reason=AlreadyInFlight|Match=${match.id}|File=${filePath}`);
+        return;
+      }
       replayResultInFlightRef.current = true;
+      log(`REPLAY_RESULT|Event=Accepted|Match=${match.id}|File=${filePath}`);
       void (async () => {
         let replay: Awaited<ReturnType<typeof parseReplayMetadata>>;
         try {
+          log(`REPLAY_RESULT|Event=ParseStarted|Match=${match.id}|File=${filePath}`);
           replay = await parseReplayMetadata(filePath, match.queue.format === "team");
         } catch (error) {
           if (error instanceof ReplayNotFinishedError) {
             replayResultInFlightRef.current = false;
+            log(
+              `REPLAY_RESULT|Event=ParseDeferred|Match=${match.id}`
+              + `|Reason=${error.message}|File=${filePath}`
+            );
             return;
           }
           const message = error instanceof Error ? error.message : "Replay parsing failed.";
+          log(`REPLAY_RESULT|Event=ParseFailed|Match=${match.id}|Reason=${message}|File=${filePath}`);
           setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
+          let contestedStage: "Confirm" | "Report" = "Confirm";
           try {
             // A non-retryable parse failure makes the result contested, but the
             // match has still ended. Start the same menu recovery used after a
             // successfully parsed replay before reporting the contested result.
+            log(`REPLAY_RESULT|Event=ConfirmRequested|Match=${match.id}|Outcome=Contested`);
             await window.electronApi?.confirmReplayEnded();
+            log(`REPLAY_RESULT|Event=Confirmed|Match=${match.id}|Outcome=Contested`);
+            contestedStage = "Report";
+            log(`REPLAY_RESULT|Event=ReportStarted|Match=${match.id}|Outcome=Contested`);
             await services.matchmaking.reportMatchResult({ matchId: match.id, error: message });
+            log(`REPLAY_RESULT|Event=ReportSubmitted|Match=${match.id}|Outcome=Contested`);
             log("Replay could not be parsed; result reported as contested");
             return;
           } catch (reportError) {
             replayResultInFlightRef.current = false;
+            log(
+              `REPLAY_RESULT|Event=${contestedStage}Failed|Match=${match.id}|Outcome=Contested`
+              + `|Reason=${reportError instanceof Error ? reportError.message : message}`
+            );
             setError({
               code: "RESULT_VERIFICATION_FAILED",
               message: "The replay parsing failure could not be reported.",
@@ -447,15 +484,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        await window.electronApi?.confirmReplayEnded();
+        log(
+          `REPLAY_RESULT|Event=Parsed|Match=${match.id}|TerminalReason=${replay.reason}`
+          + `|DurationMs=${replay.durationMs}|File=${filePath}`
+        );
+        log(`REPLAY_RESULT|Event=ConfirmRequested|Match=${match.id}|Outcome=Parsed`);
+        try {
+          await window.electronApi?.confirmReplayEnded();
+        } catch (error) {
+          log(
+            `REPLAY_RESULT|Event=ConfirmFailed|Match=${match.id}|Outcome=Parsed`
+            + `|Reason=${error instanceof Error ? error.message : String(error)}`
+          );
+          throw error;
+        }
+        log(`REPLAY_RESULT|Event=Confirmed|Match=${match.id}|Outcome=Parsed`);
         setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
         log(`Replay ended with terminal operation (${replay.reason}): ${filePath}`);
         matchHistoryService.rememberReplay(match.id, filePath);
         try {
+          log(`REPLAY_RESULT|Event=ReportStarted|Match=${match.id}|Outcome=Parsed`);
           await services.matchmaking.reportMatchResult({ matchId: match.id, replay });
+          log(`REPLAY_RESULT|Event=ReportSubmitted|Match=${match.id}|Outcome=Parsed`);
           log("Replay result reported; waiting for opponent report");
         } catch (error) {
           replayResultInFlightRef.current = false;
+          log(
+            `REPLAY_RESULT|Event=ReportFailed|Match=${match.id}|Outcome=Parsed`
+            + `|Reason=${error instanceof Error ? error.message : "Matchmaker reporting failed."}`
+          );
           setError({
             code: "RESULT_VERIFICATION_FAILED",
             message: "The replay result could not be reported.",
@@ -463,7 +520,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             retryable: true
           });
         }
-      })();
+      })().catch((error) => {
+        replayResultInFlightRef.current = false;
+        log(
+          `REPLAY_RESULT|Event=UnhandledFailure|Match=${match.id}`
+          + `|Reason=${error instanceof Error ? error.message : String(error)}|File=${filePath}`
+        );
+      });
     });
   }, [services]);
 

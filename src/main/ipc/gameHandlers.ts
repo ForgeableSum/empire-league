@@ -716,6 +716,21 @@ async function startReplayEndDetection(
     console.info(`[AoE2 replay] STARTED|File=${replay.path}`);
   };
 
+  const emitReplayEnded = (replay: ReplaySnapshot, reason: "FileGrowth" | "QuietFallback"): void => {
+    if (window.webContents.isDestroyed()) {
+      console.warn(
+        `[AoE2 replay] NOTIFY_SKIPPED|Reason=${reason}|RendererDestroyed=True`
+        + `|File=${replay.path}|Size=${replay.size}|ModifiedMs=${replay.modifiedMs}`
+      );
+      return;
+    }
+    window.webContents.send("game:replay-ended", replay.path);
+    console.info(
+      `[AoE2 replay] NOTIFY|Reason=${reason}|RendererDestroyed=False`
+      + `|File=${replay.path}|Size=${replay.size}|ModifiedMs=${replay.modifiedMs}`
+    );
+  };
+
   const poll = async (): Promise<void> => {
     if (generation !== replayDetectionGeneration || window.isDestroyed()) return;
     try {
@@ -783,7 +798,7 @@ async function startReplayEndDetection(
           lastGrowthAt = Date.now();
           active = current;
           emitReplayStarted(current);
-          if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
+          emitReplayEnded(current, "FileGrowth");
         } else if (current && (observedGrowth || activeCreatedDuringWatch)) {
           const now = Date.now();
           const elapsedMs = now - startedAt;
@@ -793,7 +808,7 @@ async function startReplayEndDetection(
           const candidateKey = `${current.path}|${current.size}|${current.modifiedMs}`;
           if (now - lastGrowthAt >= stableForMs && candidateKey !== lastCandidateKey) {
             lastCandidateKey = candidateKey;
-            if (!window.webContents.isDestroyed()) window.webContents.send("game:replay-ended", current.path);
+            emitReplayEnded(current, "QuietFallback");
             console.info(
               `[AoE2 replay] INSPECT|Reason=QuietFallback|File=${current.path}|StableMs=${stableForMs}|ElapsedMs=${elapsedMs}`
             );
@@ -2942,6 +2957,10 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:confirm-replay-ended", async (event) => {
     stopReplayEndDetection();
     const window = BrowserWindow.fromWebContents(event.sender);
+    console.info(
+      `[AoE2 replay] CONFIRM|RendererDestroyed=${event.sender.isDestroyed()}`
+      + `|WindowFound=${Boolean(window)}|ReturnWatchStarted=${Boolean(window)}`
+    );
     if (window) startReturnToMenuWatch(window);
   });
 
