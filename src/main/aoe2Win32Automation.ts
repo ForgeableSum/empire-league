@@ -726,19 +726,21 @@ export async function clearAoe2TextField(processId: number): Promise<NativeInput
   if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
 
   const events = [
-    sendWindowMessage(window, 0x0100, 0x24, 1),
-    sendWindowMessage(window, 0x0101, 0x24, -2147483647)
+    // AoE2's text fields accept the standard Select All shortcut through
+    // window-local messages. This replaces 256 synchronous Delete pairs,
+    // which took several seconds on slower game-window message loops.
+    sendWindowMessage(window, 0x0100, 0x11, 1),
+    sendWindowMessage(window, 0x0100, 0x41, 1),
+    sendWindowMessage(window, 0x0101, 0x41, -2147483647),
+    sendWindowMessage(window, 0x0101, 0x11, -2147483647),
+    sendWindowMessage(window, 0x0100, 0x2e, 1),
+    sendWindowMessage(window, 0x0101, 0x2e, -2147483647)
   ];
-  for (let index = 0; index < 256; index += 1) {
-    events.push(sendWindowMessage(window, 0x0100, 0x2e, 1));
-    events.push(sendWindowMessage(window, 0x0101, 0x2e, -2147483647));
-    if (index % 16 === 15) await delay(10);
-  }
   const sent = events.every((event) => event.dispatched);
   await delay(150);
   return {
     sent,
-    detail: `${sent ? "SENT" : "SEND_FAILED"}|Mode=WindowMessageKeyText|Action=HomeDelete|DeleteCount=256`
+    detail: `${sent ? "SENT" : "SEND_FAILED"}|Mode=WindowMessageKeyText|Action=SelectAllDelete`
   };
 }
 
