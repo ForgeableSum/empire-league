@@ -3715,7 +3715,7 @@ export function registerGameHandlers(): void {
 
         const [randomX, randomY] = civilizationDesignPoint("Random");
         let randomSelected = false;
-        for (let attempt = 1; attempt <= 3 && !randomSelected; attempt += 1) {
+        for (let attempt = 1; attempt <= 1 && !randomSelected; attempt += 1) {
           const randomTile = await postAoe2DesignClick(
             gameProcess.pid!,
             randomX,
@@ -3828,7 +3828,7 @@ export function registerGameHandlers(): void {
       }
 
       let tileSelected = false;
-      for (let attempt = 1; attempt <= 3 && !tileSelected; attempt += 1) {
+      for (let attempt = 1; attempt <= 1 && !tileSelected; attempt += 1) {
         const tileResult = await postAoe2DesignClick(
           gameProcess.pid,
           civilizationX,
@@ -3883,7 +3883,7 @@ export function registerGameHandlers(): void {
       }
       if (!tileSelected) {
         if (usesFilteredPicker) return await selectRandomFallback("TileUnavailable");
-        throw new Error(`${selection} could not be visibly selected after 3 attempts.`);
+        throw new Error(`${selection} could not be visibly selected.`);
       }
 
       const confirmClick = await postAoe2DesignClick(
