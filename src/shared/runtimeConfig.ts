@@ -29,6 +29,15 @@ export const lobbySetupTiming = {
   revealAfterStartMs: 8000
 } as const;
 
+// Expected durations used only by the setup countdown. Keep these separate
+// from the longer runtime deadlines above so ordinary successful paths are
+// estimated accurately without weakening failure detection or fallbacks.
+export const lobbySetupEstimateTiming = {
+  guestJoinMs: 5_000,
+  customTransferReadyAdjustmentMs: 5_000,
+  gameRevealMs: 2_000
+} as const;
+
 export const lobbySetupRetryTiming = {
   beforeClipboardRetryMs: 1000,
   clipboardReadMs: lobbySetupTiming.clipboardReadMs

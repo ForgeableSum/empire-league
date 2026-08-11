@@ -3,6 +3,7 @@ import type { CivilizationPreference, MatchSession } from "../../shared/contract
 import {
   adaptiveLobbyTimingEnabled,
   contentConfirmationKeyDelayMs,
+  lobbySetupEstimateTiming,
   lobbySetupTiming
 } from "../../shared/runtimeConfig";
 
@@ -58,11 +59,12 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
   total += actionDuration(actions.copyLobbyUri) + lobbySetupTiming.clipboardReadMs;
   total += civilizationSelectionDuration(match.queue.civilizationPreference);
   total += lobbySetupTiming.lobbyMetadataMs;
-  total += lobbySetupTiming.guestJoinMs + lobbySetupTiming.guestReadySettleMs;
+  total += lobbySetupEstimateTiming.guestJoinMs + lobbySetupTiming.guestReadySettleMs;
   total += civilizationSelectionDuration(match.opponentCivilizationPreference);
   total += lobbySetupTiming.hostReadySettleMs + actionDuration(actions.hostReady);
 
   if (custom) {
+    total += lobbySetupEstimateTiming.customTransferReadyAdjustmentMs;
     total += lobbySetupTiming.customMapTransferPollMs + actions.guestReady.settleMs;
     total += contentConfirmationKeyDelayMs + actions.confirmGuestContent.settleMs;
     total += lobbySetupTiming.hostReadySettleMs + actionDuration(actions.hostReady);
@@ -73,7 +75,7 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
 
   total += actionDuration(actions.guestReady);
   total += lobbySetupTiming.hostReadyToStartMs + lobbySetupTiming.startGameSettleMs;
-  total += actionDuration(actions.startGame) + lobbySetupTiming.revealAfterStartMs;
+  total += actionDuration(actions.startGame) + lobbySetupEstimateTiming.gameRevealMs;
   return total;
 }
 
