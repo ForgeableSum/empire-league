@@ -4117,6 +4117,10 @@ export function registerGameHandlers(): void {
     if (!captureReady) return { opened: false };
     const inputGuardStarted = await startInputGuard(appWindow);
     console.info(`[AoE2 automation] INPUT_LOCK|Requested=True|Guard=${inputGuardStarted}|Source=GuestOpenLobby`);
+    const emitLog = (message: string) => {
+      console.info(`[AoE2 automation] ${message}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+    };
     // Steam activates AoE2 asynchronously while handing off the lobby URI.
     // Keep reasserting the non-activating bottom z-order throughout that handoff
     // so the game cannot escape above the Electron automation cover.
@@ -4128,11 +4132,49 @@ export function registerGameHandlers(): void {
     }, 25);
     keepGameBehind.unref();
     try {
-      await shell.openExternal(lobbyId);
+      const steamExecutable = await getSteamExecutable();
+      if (!steamExecutable) {
+        emitLog("LOBBY_HANDOFF|Method=SteamExecutable|Accepted=False|Reason=STEAM_NOT_FOUND");
+        return { opened: false };
+      }
+      // Invoke Steam directly instead of asking Windows to resolve the
+      // aoe2de:// protocol. Some otherwise healthy AoE2 installations are
+      // missing the AOE URL Helper association and Windows displays an app
+      // picker while shell.openExternal still resolves successfully.
+      const handoff = spawn(
+        steamExecutable,
+        ["-applaunch", aoe2AppId, "SKIPINTRO", lobbyId],
+        { detached: true, stdio: "ignore", windowsHide: false }
+      );
+      const handoffStarted = await new Promise<boolean>((resolve) => {
+        handoff.once("spawn", () => resolve(true));
+        handoff.once("error", (error) => {
+          emitLog(
+            `LOBBY_HANDOFF|Method=SteamExecutable|Accepted=False`
+            + `|Reason=SPAWN_FAILED|Error=${error.message.replaceAll("|", "/")}`
+          );
+          resolve(false);
+        });
+      });
+      if (!handoffStarted) return { opened: false };
+      handoff.unref();
+      emitLog(`LOBBY_HANDOFF|Method=SteamExecutable|Accepted=True|Pid=${handoff.pid ?? "unknown"}|Uri=${lobbyId}`);
       keepAoe2NativeWindowBehind(game.pid);
-      // Give the game time to navigate to and finish joining the lobby before
-      // Ready automation while preserving the background-only interaction.
-      await delay(lobbySetupTiming.guestJoinMs);
+      // Do not equate a successful process spawn with a successful join. Poll
+      // AoE2's rendered state so a rejected handoff cannot send civilization
+      // automation into an unrelated menu.
+      const joinDeadline = Date.now() + lobbySetupTiming.guestJoinMs;
+      let lobbyState = readAoe2HostSetupState(game.pid);
+      while (lobbyState.state !== "lobby-room" && Date.now() < joinDeadline) {
+        await delay(500);
+        keepAoe2NativeWindowBehind(game.pid);
+        lobbyState = readAoe2HostSetupState(game.pid);
+      }
+      emitLog(
+        `LOBBY_HANDOFF_VERIFY|Method=SteamExecutable|Joined=${lobbyState.state === "lobby-room"}`
+        + `|${lobbyState.detail}`
+      );
+      if (lobbyState.state !== "lobby-room") return { opened: false };
     } finally {
       clearInterval(keepGameBehind);
       keepAoe2NativeWindowBehind(game.pid);

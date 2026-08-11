@@ -60,15 +60,16 @@ wrong screen.
 ## Guest flow
 
 1. Receive the published `aoe2de://0/<digits>` URI.
-2. Open the URI through Steam/AoE2.
-3. Wait for the lobby screen to settle.
-4. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), a cleared search field, and the filtered result coordinate. A persistent white outline proves selection; a gray outline proves the requested tile acquired hover/focus and permits Enter activation. The client retries unverified input up to twice and verifies the picker closed. Random fallback clears the filter first and is subject to the same verification.
-5. Report that the guest joined so the host can ready and release custom lobby files.
-6. After the host-ready report, poll `guestReady`.
-7. Only when the selected map is listed in `customMapNames`, an unavailable Ready control triggers an attempt at AoE2's unverified user-generated-content warning. After a successful confirmation click, report content acceptance once so the host can verify and, if AoE2 cleared it, reapply Ready. The guest continues polling during this handshake.
-8. Continue until AoE2 enables and verifies the guest Ready control or the transfer timeout expires. The guest and host lobby layouts intentionally use different ready points.
-9. Report guest readiness to the matchmaker.
-10. Wait for the host to start the match.
+2. Pass the URI directly to `steam.exe -applaunch 813780`; do not depend on Windows having the optional `aoe2de://` URL Helper association.
+3. Verify AoE2 reached the lobby room. A successful Steam process handoff alone does not prove the join completed.
+4. Wait for the lobby screen to settle.
+5. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), a cleared search field, and the filtered result coordinate. A persistent white outline proves selection; a gray outline proves the requested tile acquired hover/focus and permits Enter activation. The client retries unverified input up to twice and verifies the picker closed. Random fallback clears the filter first and is subject to the same verification.
+6. Report that the guest joined so the host can ready and release custom lobby files.
+7. After the host-ready report, poll `guestReady`.
+8. Only when the selected map is listed in `customMapNames`, an unavailable Ready control triggers an attempt at AoE2's unverified user-generated-content warning. After a successful confirmation click, report content acceptance once so the host can verify and, if AoE2 cleared it, reapply Ready. The guest continues polling during this handshake.
+9. Continue until AoE2 enables and verifies the guest Ready control or the transfer timeout expires. The guest and host lobby layouts intentionally use different ready points.
+10. Report guest readiness to the matchmaker.
+11. Wait for the host to start the match.
 
 AoE2's unverified-content modal is accepted with one window-local Tab followed by Enter. The guest sends this sequence only once, then continues polling Ready while the host verifies its Ready state again.
 
