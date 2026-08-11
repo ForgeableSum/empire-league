@@ -68,6 +68,7 @@ interface AppContextValue {
   updateMockConfig: (patch: Partial<MockServiceConfig>) => void;
   updateSettings: (patch: Partial<UserSettings>) => void;
   setAoe2LanguageOverride: (languageId: number | null) => Promise<void>;
+  openExternalUrl: (url: string) => Promise<void>;
   notify: (
     message: string,
     tone?: NotificationItem["tone"],
@@ -1884,6 +1885,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function openExternalUrl(url: string): Promise<void> {
+    if (lobbyAutomationActive || customLobbyAutomationActive || state.transitionInputLocked) {
+      notify("External links are unavailable while the game is being prepared.", "warning", {
+        detail: "Wait for the countdown and lobby automation to finish before opening this link."
+      });
+      return;
+    }
+    if (window.electronApi) {
+      await window.electronApi.openExternalUrl(url);
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   const value: AppContextValue = {
     state,
     lobbyAutomationActive,
@@ -1934,6 +1949,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateMockConfig,
     updateSettings,
     setAoe2LanguageOverride,
+    openExternalUrl,
     notify,
     appendDiagnosticLog: log,
     dismissNotification: dismissNotificationById,

@@ -38,7 +38,7 @@ export function GroupedMapPool({
   onFavorite,
   disabled = false
 }: GroupedMapPoolProps) {
-  const { localizeAoe2Name } = useAppStore();
+  const { localizeAoe2Name, openExternalUrl } = useAppStore();
   const [showMapGuidance, setShowMapGuidance] = useState(shouldShowMapGuidance);
 
   function dismissMapGuidance() {
@@ -110,11 +110,7 @@ export function GroupedMapPool({
                         onClick={(event) => {
                           event.preventDefault();
                           event.stopPropagation();
-                          if (window.electronApi) {
-                            void window.electronApi.openExternalUrl(map.attribution!.url);
-                          } else {
-                            window.open(map.attribution!.url, "_blank", "noopener,noreferrer");
-                          }
+                          void openExternalUrl(map.attribution!.url);
                         }}
                         >
                           {map.attribution.label}

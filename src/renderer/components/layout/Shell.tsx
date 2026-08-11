@@ -40,7 +40,8 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
     returnFromPlayerProfile,
     aoe2Language,
     aoe2LanguageId,
-    setAoe2LanguageOverride
+    setAoe2LanguageOverride,
+    openExternalUrl
   } = useAppStore();
   const viewingLinkedProfile = page === "profile" && selectedProfileId !== null && selectedProfileId !== state.currentUser.id;
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
@@ -269,7 +270,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
                   type="button"
                   key={stream.id}
                   title={`${stream.creatorName}: ${stream.title}`}
-                  onClick={() => void window.electronApi?.openExternalUrl(stream.streamUrl)}
+                  onClick={() => void openExternalUrl(stream.streamUrl)}
                 >
                   <span className="sidebar-stream-thumbnail">
                     <img src={stream.thumbnailUrl} alt="" loading="lazy" />
@@ -343,7 +344,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
                   <RotateCcw className={retryingUpdate ? "spin" : undefined} size={17} aria-hidden="true" />
                   {retryingUpdate ? "Retrying…" : "Retry download"}
                 </button>
-                <button className="secondary" type="button" onClick={() => void window.electronApi?.openExternalUrl("https://empireleague.gg/updates/windows/Empire-League-Setup.exe")}>
+                <button className="secondary" type="button" onClick={() => void openExternalUrl("https://empireleague.gg/updates/windows/Empire-League-Setup.exe")}>
                   Download manually
                 </button>
               </>}

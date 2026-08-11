@@ -12,7 +12,7 @@ import { matchmakerTransport } from "../services/matchmakerTransport";
 const openLandMaps = mapGroups.find((group) => group.id === "land-open")?.maps ?? [];
 
 export function HomePage() {
-  const { state, localizeAoe2Name } = useAppStore();
+  const { state, localizeAoe2Name, openExternalUrl } = useAppStore();
   const user = state.currentUser;
   const recentForm = state.recentMatches.slice(0, 5).map((match) => match.outcome);
   const matchmakerStatus = useSyncExternalStore(
@@ -24,13 +24,7 @@ export function HomePage() {
     : matchmakerStatus === "connecting"
       ? "Connecting..."
       : "Disconnected";
-  const openDiscord = async () => {
-    if (window.electronApi) {
-      await window.electronApi.openExternalUrl("https://discord.gg/arRjVxx2y7");
-      return;
-    }
-    window.open("https://discord.gg/arRjVxx2y7", "_blank", "noopener,noreferrer");
-  };
+  const openDiscord = () => openExternalUrl("https://discord.gg/arRjVxx2y7");
   return (
     <section className="page-grid">
       {!isPreviewMode && (
