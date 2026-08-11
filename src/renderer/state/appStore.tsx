@@ -89,6 +89,7 @@ const aoe2LanguageInitialRefreshDelayMs = 15_000;
 const aoe2LanguageRefreshIntervalMs = 5_000;
 const aoe2LanguageRefreshDurationMs = 5 * 60_000;
 const roomSetupTimeoutMs = 65_000;
+const roomSetupEstimateMarginMs = 15_000;
 
 function isLobbyAutomationProgress(message: string): boolean {
   if (message.includes("INPUT_GUARD|GUARD_HEALTH")) return false;
@@ -296,6 +297,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const lobbyRecoveryInFlightRef = useRef(false);
   const matchedSessionRef = useRef<MatchSession | null>(null);
   const roomSetupTimeoutRef = useRef<number | null>(null);
+  const roomSetupWatchdogDurationRef = useRef(roomSetupTimeoutMs);
   const replayResultInFlightRef = useRef(false);
   const gameRevealInFlightRef = useRef<Promise<void> | null>(null);
   const gameStartSignalInFlightRef = useRef<Promise<boolean> | null>(null);
@@ -743,15 +745,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return id;
   }
 
-  function startRoomSetupWatchdog(): void {
+  function startRoomSetupWatchdog(durationMs = roomSetupWatchdogDurationRef.current): void {
     clearRoomSetupWatchdog();
+    roomSetupWatchdogDurationRef.current = durationMs;
     roomSetupTimeoutRef.current = window.setTimeout(() => {
       roomSetupTimeoutRef.current = null;
       const queue = stateRef.current.selectedQueue;
       if (queue) {
-        void handleLobbySetupFailure(queue, "Lobby setup stopped making progress for 65 seconds.");
+        void handleLobbySetupFailure(
+          queue,
+          `Lobby setup stopped making progress for ${Math.ceil(durationMs / 1000)} seconds.`
+        );
       }
-    }, roomSetupTimeoutMs);
+    }, durationMs);
   }
 
   function touchRoomSetupWatchdog(): void {
@@ -940,20 +946,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const matchedSession = matchedSessionRef.current;
           if (!matchedSession) return;
           void window.electronApi?.stopMatchFoundAlert();
-          startRoomSetupWatchdog();
           const acceptedSession = {
             ...matchedSession,
             acceptedByPlayer: true,
             acceptedByOpponent: true,
             status: event.role === "host" ? "creating_lobby" as const : "waiting_for_opponent" as const
           };
+          const setupEstimateMs = estimateLobbySetupMs(acceptedSession);
+          startRoomSetupWatchdog(event.role === "guest"
+            ? Math.max(roomSetupTimeoutMs, setupEstimateMs + roomSetupEstimateMarginMs)
+            : roomSetupTimeoutMs);
           matchedSessionRef.current = acceptedSession;
           startLobbyTimingAudit(acceptedSession, event.role === "host" ? "host" : "guest");
           setState((previous) => ({
             ...previous,
             queueStatus: event.role === "host" ? "creating_lobby" : "waiting_for_opponent",
             roomSetupStartedAt: new Date().toISOString(),
-            roomSetupEstimateMs: estimateLobbySetupMs(acceptedSession),
+            roomSetupEstimateMs: setupEstimateMs,
             roomSetupMilestone: event.role === "host"
               ? "Setting up lobby room"
               : "Waiting for the host to set up the lobby room",
@@ -963,7 +972,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (event.role === "host" && window.electronApi) {
             void services.matchmaking.reportLobbySetupEstimate(
               acceptedSession.id,
-              estimateLobbySetupMs(acceptedSession)
+              setupEstimateMs
             ).catch((error: unknown) => {
               log(`Could not synchronize lobby countdown: ${error instanceof Error ? error.message : "unknown error"}`);
             });
@@ -988,12 +997,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             lobbyTimingAuditRef.current.expectedMs = event.estimateMs;
           }
           auditLobbyPhase("countdown-synchronized");
+          if (lobbyTimingAuditRef.current?.role === "guest") {
+            startRoomSetupWatchdog(Math.max(
+              roomSetupTimeoutMs,
+              event.estimateMs + roomSetupEstimateMarginMs
+            ));
+          }
           setState((previous) => ({ ...previous, roomSetupEstimateMs: event.estimateMs }));
           log(`Synchronized lobby countdown with host estimate: ${Math.ceil(event.estimateMs / 1000)} seconds`);
         }
         if (event.type === "lobby_ready") {
           auditLobbyPhase("lobby-published");
-          startRoomSetupWatchdog();
+          startRoomSetupWatchdog(roomSetupTimeoutMs);
           setState((previous) => ({
             ...previous,
             queueStatus: "ready",
