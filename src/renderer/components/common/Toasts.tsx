@@ -28,6 +28,8 @@ function Toast({ item, dismiss }: { item: NotificationItem; dismiss: () => void 
   const [pendingAction, setPendingAction] = useState<"primary" | "secondary" | null>(null);
   const startedAtRef = useRef(Date.now());
   const toastRef = useRef<HTMLDivElement>(null);
+  const dismissRef = useRef(dismiss);
+  dismissRef.current = dismiss;
   const Icon = toneIcons[item.tone];
 
   useEffect(() => {
@@ -45,9 +47,9 @@ function Toast({ item, dismiss }: { item: NotificationItem; dismiss: () => void 
   useEffect(() => {
     if (paused || item.durationMs === null) return;
     startedAtRef.current = Date.now();
-    const timer = window.setTimeout(dismiss, remainingMs);
+    const timer = window.setTimeout(() => dismissRef.current(), remainingMs);
     return () => window.clearTimeout(timer);
-  }, [dismiss, item.durationMs, paused, remainingMs]);
+  }, [item.durationMs, paused, remainingMs]);
 
   function pauseTimer(): void {
     setRemainingMs((current) => Math.max(0, current - (Date.now() - startedAtRef.current)));
