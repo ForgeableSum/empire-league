@@ -33,6 +33,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
     setPage,
     state,
     customLobbyAutomationActive,
+    weeklyQueueActive,
     signOut,
     selectedProfileId,
     openPlayerProfile,
@@ -236,6 +237,13 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
                   role="status"
                   aria-label={state.queueStatus === "searching" ? "Searching for a match" : "Preparing game"}
                 >
+                  <span aria-hidden="true" />
+                  <span aria-hidden="true" />
+                  <span aria-hidden="true" />
+                </span>
+              )}
+              {item.page === "weekly" && weeklyQueueActive && (
+                <span className="medieval-loader nav-search-loader" role="status" aria-label="Searching for a weekly game">
                   <span aria-hidden="true" />
                   <span aria-hidden="true" />
                   <span aria-hidden="true" />
