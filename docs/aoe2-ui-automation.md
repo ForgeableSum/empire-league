@@ -60,8 +60,8 @@ wrong screen.
 ## Guest flow
 
 1. Receive the published `aoe2de://0/<digits>` URI.
-2. Pass the URI directly to `steam.exe -applaunch 813780`; do not depend on Windows having the optional `aoe2de://` URL Helper association.
-3. Verify AoE2 reached the lobby room. A successful Steam process handoff alone does not prove the join completed.
+2. Pass the URI directly to AoE2's bundled `Tools_Builds/AOEURLHelper.exe`; do not depend on Windows having the optional `aoe2de://` protocol association. The helper performs the Steam handoff required by an already-running game.
+3. Verify AoE2 reached the lobby room. A successful helper process launch alone does not prove the join completed.
 4. Wait for the lobby screen to settle.
 5. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), a cleared search field, and the filtered result coordinate. A persistent white outline proves selection; a gray outline proves the requested tile acquired hover/focus and permits Enter activation. The client retries unverified input up to twice and verifies the picker closed. Random fallback clears the filter first and is subject to the same verification.
 6. Report that the guest joined so the host can ready and release custom lobby files.

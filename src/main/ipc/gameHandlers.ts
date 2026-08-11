@@ -2273,6 +2273,20 @@ async function getSteamExecutable(): Promise<string | undefined> {
   return undefined;
 }
 
+async function getAoeUrlHelperExecutable(gamePath?: string): Promise<string | undefined> {
+  const programFiles = process.env.ProgramFiles;
+  const programFilesX86 = process.env["ProgramFiles(x86)"];
+  const candidates = [
+    gamePath ? join(gamePath, "Tools_Builds", "AOEURLHelper.exe") : undefined,
+    programFilesX86 ? join(programFilesX86, "AOE URL Helper", "AOEURLHelper.exe") : undefined,
+    programFiles ? join(programFiles, "AOE URL Helper", "AOEURLHelper.exe") : undefined
+  ].filter((path): path is string => Boolean(path));
+  for (const executablePath of candidates) {
+    if (await pathExists(executablePath)) return executablePath;
+  }
+  return undefined;
+}
+
 async function getSteamAppsFolders(steamRoot: string): Promise<string[]> {
   const defaultSteamApps = join(steamRoot, "steamapps");
   const folders = [defaultSteamApps];
@@ -4132,25 +4146,27 @@ export function registerGameHandlers(): void {
     }, 25);
     keepGameBehind.unref();
     try {
-      const steamExecutable = await getSteamExecutable();
-      if (!steamExecutable) {
-        emitLog("LOBBY_HANDOFF|Method=SteamExecutable|Accepted=False|Reason=STEAM_NOT_FOUND");
+      const installation = await detectAoe2Installation();
+      const helperExecutable = await getAoeUrlHelperExecutable(installation.path);
+      if (!helperExecutable) {
+        emitLog("LOBBY_HANDOFF|Method=AoeUrlHelperExecutable|Accepted=False|Reason=HELPER_NOT_FOUND");
         return { opened: false };
       }
-      // Invoke Steam directly instead of asking Windows to resolve the
-      // aoe2de:// protocol. Some otherwise healthy AoE2 installations are
-      // missing the AOE URL Helper association and Windows displays an app
-      // picker while shell.openExternal still resolves successfully.
+      // Invoke AoE2's bundled URL helper directly instead of asking Windows
+      // to resolve the aoe2de:// protocol. This is the same Microsoft helper
+      // the protocol registration normally calls, and it performs the Steam
+      // handoff that `steam.exe -applaunch` alone does not forward to an
+      // already-running game.
       const handoff = spawn(
-        steamExecutable,
-        ["-applaunch", aoe2AppId, "SKIPINTRO", lobbyId],
+        helperExecutable,
+        [lobbyId],
         { detached: true, stdio: "ignore", windowsHide: false }
       );
       const handoffStarted = await new Promise<boolean>((resolve) => {
         handoff.once("spawn", () => resolve(true));
         handoff.once("error", (error) => {
           emitLog(
-            `LOBBY_HANDOFF|Method=SteamExecutable|Accepted=False`
+            `LOBBY_HANDOFF|Method=AoeUrlHelperExecutable|Accepted=False`
             + `|Reason=SPAWN_FAILED|Error=${error.message.replaceAll("|", "/")}`
           );
           resolve(false);
@@ -4158,7 +4174,10 @@ export function registerGameHandlers(): void {
       });
       if (!handoffStarted) return { opened: false };
       handoff.unref();
-      emitLog(`LOBBY_HANDOFF|Method=SteamExecutable|Accepted=True|Pid=${handoff.pid ?? "unknown"}|Uri=${lobbyId}`);
+      emitLog(
+        `LOBBY_HANDOFF|Method=AoeUrlHelperExecutable|Accepted=True`
+        + `|Pid=${handoff.pid ?? "unknown"}|Uri=${lobbyId}`
+      );
       keepAoe2NativeWindowBehind(game.pid);
       // Do not equate a successful process spawn with a successful join. Poll
       // AoE2's rendered state so a rejected handoff cannot send civilization
@@ -4171,7 +4190,7 @@ export function registerGameHandlers(): void {
         lobbyState = readAoe2HostSetupState(game.pid);
       }
       emitLog(
-        `LOBBY_HANDOFF_VERIFY|Method=SteamExecutable|Joined=${lobbyState.state === "lobby-room"}`
+        `LOBBY_HANDOFF_VERIFY|Method=AoeUrlHelperExecutable|Joined=${lobbyState.state === "lobby-room"}`
         + `|${lobbyState.detail}`
       );
       if (lobbyState.state !== "lobby-room") return { opened: false };
