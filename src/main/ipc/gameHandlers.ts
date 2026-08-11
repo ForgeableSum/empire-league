@@ -4188,9 +4188,10 @@ export function registerGameHandlers(): void {
       // automation into an unrelated menu.
       let joinDeadline = Date.now() + lobbySetupTiming.guestJoinMs;
       let contentPromptAttempted = false;
-      const readLobbyState = () => readAoe2HostSetupState(game.pid!, {
-        contentPickerExpected: allowCustomContentPrompt === true
-      });
+      // A custom lobby can render its Ready control as disabled gray while
+      // content transfers. Do not force picker precedence here: an actual UGC
+      // prompt is still recognized as content-picker and verified separately.
+      const readLobbyState = () => readAoe2HostSetupState(game.pid!);
       let lobbyState = readLobbyState();
       while (lobbyState.state !== "lobby-room" && Date.now() < joinDeadline) {
         if (

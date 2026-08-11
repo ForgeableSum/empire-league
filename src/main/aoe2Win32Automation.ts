@@ -1005,6 +1005,13 @@ export function readAoe2HostSetupState(
     (red > green * 2 && red > 80) || (green > red * 2 && green > 80);
   const hasReadyButton = isReadyButtonColor(buttonRed, buttonGreen)
     || isReadyButtonColor(guestButtonRed, guestButtonGreen);
+  // During a custom-content transfer, AoE2 disables the guest Ready control
+  // and renders it as a uniform mid-gray button. The surrounding lobby stays
+  // parchment-colored, which otherwise resembles the random-map picker and
+  // caused successful custom-lobby joins to be rejected as `content-picker`.
+  const guestReadyChroma = Math.max(...guestReadyButton) - Math.min(...guestReadyButton);
+  const hasDisabledGuestReadyButton = guestReadyChroma <= 5
+    && guestButtonRed >= 45 && guestButtonRed <= 90;
   const hasLobbyParchment = leftRed > 150 && leftGreen > 110 && leftBlue > 70
     && centerRed > 140 && centerGreen > 110 && centerBlue > 70;
   const hasMultiplayerPanel = panelRed > 180 && panelGreen > 180 && panelBlue > 160;
@@ -1060,7 +1067,7 @@ export function readAoe2HostSetupState(
       ? "main-menu-news"
     : options.contentPickerExpected && hasContentPicker
     ? "content-picker"
-    : hasReadyButton
+    : hasReadyButton || (hasLobbyParchment && hasDisabledGuestReadyButton)
       ? "lobby-room"
       : hasContentPicker
       ? "content-picker"
