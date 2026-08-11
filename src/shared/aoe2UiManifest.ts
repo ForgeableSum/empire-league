@@ -118,10 +118,8 @@ export const aoe2UiManifest = {
   civilizationPicker: {
     searchPoint: [375, 300] as const,
     filteredCivilizationPoint: [1259, 515] as const,
-    // AoE2 takes several seconds to populate filtered civilization results,
-    // while one second is sufficient for the clicked tile outline to settle
-    // before pixel verification and optional Enter activation.
-    searchSettleMs: 4_500,
+    // Allow filtered civilization results to populate before selecting the tile.
+    searchSettleMs: 1_500,
     selectionSettleMs: 1_000
   },
   mapPicker: {
