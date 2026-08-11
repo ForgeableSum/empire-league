@@ -46,7 +46,8 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
   const actions = aoe2UiManifest.actions;
 
   let total = lobbySetupTiming.hostLobbyAutomationSettleMs
-    + lobbySetupTiming.hostLobbyAutomationOverheadMs;
+    + lobbySetupTiming.hostLobbyAutomationOverheadMs
+    + lobbySetupEstimateTiming.hostSetupSafetyMarginMs;
   total += (multiplayerTabCount * multiplayerTabDelayMs) + actions.multiplayer.settleMs;
   total += actionDuration(actions.hostGame) + clickEnterDelayMs;
   total += actionDuration(actions.createLobby);

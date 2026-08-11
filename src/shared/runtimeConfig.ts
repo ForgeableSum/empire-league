@@ -33,6 +33,7 @@ export const lobbySetupTiming = {
 // from the longer runtime deadlines above so ordinary successful paths are
 // estimated accurately without weakening failure detection or fallbacks.
 export const lobbySetupEstimateTiming = {
+  hostSetupSafetyMarginMs: 3_000,
   guestJoinMs: 5_000,
   customTransferReadyAdjustmentMs: 5_000,
   gameRevealMs: 2_000
