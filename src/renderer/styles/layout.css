@@ -4017,6 +4017,10 @@
   pointer-events: auto;
 }
 
+.toast.toast-shake {
+  animation: toast-shake 360ms ease-in-out;
+}
+
 .toast.has-action {
   grid-template-columns: auto minmax(0, 1fr) auto;
   grid-template-areas:
@@ -4752,6 +4756,18 @@
   to {
     transform: scaleX(0);
   }
+}
+
+@keyframes toast-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-9px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast.toast-shake { animation: none; }
 }
 
 .custom-game-settings {

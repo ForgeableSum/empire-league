@@ -792,6 +792,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     tone: NotificationItem["tone"] = "info",
     options: { detail?: string; durationMs?: number | null; dismissible?: boolean; action?: NotificationItem["action"]; secondaryAction?: NotificationItem["secondaryAction"] } = {}
   ): string {
+    const existingError = tone === "danger"
+      ? stateRef.current.notifications.find((item) => item.tone === "danger" && item.message === message)
+      : undefined;
+    if (existingError) {
+      setState((previous) => ({
+        ...previous,
+        notifications: previous.notifications.map((item) => item.id === existingError.id
+          ? { ...item, attentionSequence: (item.attentionSequence ?? 0) + 1 }
+          : item)
+      }));
+      return existingError.id;
+    }
     const id = crypto.randomUUID();
     setState((previous) => ({
       ...previous,

@@ -27,7 +27,20 @@ function Toast({ item, dismiss }: { item: NotificationItem; dismiss: () => void 
   const [paused, setPaused] = useState(false);
   const [pendingAction, setPendingAction] = useState<"primary" | "secondary" | null>(null);
   const startedAtRef = useRef(Date.now());
+  const toastRef = useRef<HTMLDivElement>(null);
   const Icon = toneIcons[item.tone];
+
+  useEffect(() => {
+    if (!item.attentionSequence) return;
+    const toast = toastRef.current;
+    if (!toast) return;
+    toast.classList.remove("toast-shake");
+    void toast.offsetWidth;
+    toast.classList.add("toast-shake");
+    const clearShake = () => toast.classList.remove("toast-shake");
+    toast.addEventListener("animationend", clearShake, { once: true });
+    return () => toast.removeEventListener("animationend", clearShake);
+  }, [item.attentionSequence]);
 
   useEffect(() => {
     if (paused || item.durationMs === null) return;
@@ -47,7 +60,7 @@ function Toast({ item, dismiss }: { item: NotificationItem; dismiss: () => void 
   } as CSSProperties;
 
   return (
-    <div className={`toast ${item.tone}${item.action || item.secondaryAction ? " has-action" : ""}`} onMouseEnter={pauseTimer} onMouseLeave={() => setPaused(false)}>
+    <div ref={toastRef} className={`toast ${item.tone}${item.action || item.secondaryAction ? " has-action" : ""}`} onMouseEnter={pauseTimer} onMouseLeave={() => setPaused(false)}>
       <Icon className={`toast-icon${item.tone === "loading" ? " spin" : ""}`} size={20} aria-hidden="true" />
       <div className="toast-copy">
         <strong>{item.message}</strong>

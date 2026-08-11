@@ -32,6 +32,7 @@ export interface MockServiceConfig {
 
 export interface NotificationItem {
   id: string;
+  attentionSequence?: number;
   tone: "info" | "success" | "warning" | "danger" | "loading";
   message: string;
   detail?: string;
