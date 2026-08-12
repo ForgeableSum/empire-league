@@ -1189,20 +1189,36 @@ async function handleRequest(request, response) {
       }
       if (request.method === "GET" && url.pathname === "/admin/api/overview") {
         const users = connectedAdminUsers();
-        const [[rows], [countRows]] = await Promise.all([
-          database.query("SELECT id, severity, event_code AS eventCode, phase, player_name AS playerName, context_type AS contextType, context_id AS contextId, message, created_at AS createdAt FROM admin_events WHERE event_type = 'lobby_automation_failure' AND severity = 'critical' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR) ORDER BY created_at DESC LIMIT 200"),
-          database.query("SELECT COUNT(*) AS failureCount FROM admin_events WHERE event_type = 'lobby_automation_failure' AND severity = 'critical' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR)")
+        const requestedFailurePage = Math.max(1, Math.floor(Number(url.searchParams.get("failurePage")) || 1));
+        const failurePageSize = 5;
+        const [[countRows], [summaryRows]] = await Promise.all([
+          database.query("SELECT COUNT(*) AS failureCount FROM admin_events WHERE event_type = 'lobby_automation_failure' AND severity = 'critical' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR)"),
+          database.query("SELECT event_code AS eventCode, phase, COUNT(*) AS occurrenceCount, MAX(created_at) AS latestAt FROM admin_events WHERE event_type = 'lobby_automation_failure' AND severity = 'critical' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR) GROUP BY event_code, phase ORDER BY occurrenceCount DESC, latestAt DESC")
         ]);
+        const failureCount = Number(countRows[0]?.failureCount ?? 0);
+        const failurePageCount = Math.max(1, Math.ceil(failureCount / failurePageSize));
+        const failurePage = Math.min(requestedFailurePage, failurePageCount);
+        const failureOffset = (failurePage - 1) * failurePageSize;
+        const [rows] = await database.query(
+          `SELECT id, severity, event_code AS eventCode, phase, player_name AS playerName,
+             context_type AS contextType, context_id AS contextId, message, created_at AS createdAt
+           FROM admin_events
+           WHERE event_type = 'lobby_automation_failure' AND severity = 'critical'
+             AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR)
+           ORDER BY created_at DESC LIMIT ${failurePageSize} OFFSET ${failureOffset}`
+        );
         return send(response, 200, {
           metrics: {
             online: users.length,
             searching: users.filter((user) => user.status === "searching").length,
             inGame: users.filter((user) => user.status === "in-game").length,
-            failures24h: Number(countRows[0]?.failureCount ?? 0),
+            failures24h: failureCount,
             uptimeSeconds: Math.floor(process.uptime())
           },
           users,
-          failures: rows
+          failures: rows,
+          failureSummary: summaryRows.map((item) => ({ ...item, occurrenceCount: Number(item.occurrenceCount) })),
+          failurePagination: { page: failurePage, pageSize: failurePageSize, pageCount: failurePageCount, total: failureCount }
         });
       }
       if (request.method === "POST" && url.pathname === "/admin/api/messages") {
