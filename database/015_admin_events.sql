@@ -1,4 +1,4 @@
-CREATE TABLE admin_events (
+CREATE TABLE IF NOT EXISTS admin_events (
   id CHAR(36) PRIMARY KEY,
   event_type VARCHAR(50) NOT NULL,
   player_id VARCHAR(64) NULL,
@@ -10,3 +10,5 @@ CREATE TABLE admin_events (
   INDEX idx_admin_events_type_created (event_type, created_at),
   CONSTRAINT fk_admin_events_player FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL
 );
+
+INSERT IGNORE INTO schema_migrations (version) VALUES ('015_admin_events');

@@ -13,10 +13,17 @@ import { rollCivilization } from "../../shared/civilizations";
 import { delay } from "./timing";
 import { matchmakerTransport } from "./matchmakerTransport";
 
+export interface AutomationFailureReport {
+  severity: "critical";
+  code: string;
+  phase: string;
+  message: string;
+}
+
 export interface MatchmakingService {
   joinQueue(request: JoinQueueRequest): Promise<QueueTicket>;
   updateQueue(ticketId: string, queue: NonNullable<JoinQueueRequest["queue"]>): Promise<void>;
-  leaveQueue(ticketId: string): Promise<void>;
+  leaveQueue(ticketId: string, automationFailure?: AutomationFailureReport): Promise<void>;
   subscribeToQueue(ticketId: string, listener: QueueEventListener): UnsubscribeFunction;
   acceptMatch(matchId: string): Promise<void>;
   declineMatch(matchId: string): Promise<void>;
@@ -53,8 +60,11 @@ export class LocalMatchmakingService implements MatchmakingService {
     });
   }
 
-  async leaveQueue(ticketId: string): Promise<void> {
-    await matchmakerTransport.request(`/tickets/${encodeURIComponent(ticketId)}`, { method: "DELETE" });
+  async leaveQueue(ticketId: string, automationFailure?: AutomationFailureReport): Promise<void> {
+    await matchmakerTransport.request(`/tickets/${encodeURIComponent(ticketId)}`, {
+      method: "DELETE",
+      body: automationFailure ? { automationFailure } : undefined
+    });
     if (this.activeTicketId === ticketId) this.activeTicketId = null;
   }
 

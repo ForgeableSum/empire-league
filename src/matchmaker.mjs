@@ -443,11 +443,11 @@ function connectedAdminUsers() {
   }).sort((left, right) => left.displayName.localeCompare(right.displayName));
 }
 
-async function recordAutomationFailure({ player, contextType, contextId, message }) {
+async function recordAutomationFailure({ player, contextType, contextId, message, code = "AUTOMATION_FAILED", phase = "lobby_setup" }) {
   try {
     await database.execute(
-      "INSERT INTO admin_events (id, event_type, player_id, player_name, context_type, context_id, message) VALUES (?, 'lobby_automation_failure', ?, ?, ?, ?, ?)",
-      [randomUUID(), player?.id ?? null, player?.displayName ?? null, contextType, contextId, String(message).slice(0, 500)]
+      "INSERT INTO admin_events (id, event_type, severity, event_code, phase, player_id, player_name, context_type, context_id, message) VALUES (?, 'lobby_automation_failure', 'critical', ?, ?, ?, ?, ?, ?, ?)",
+      [randomUUID(), code, phase, player?.id ?? null, player?.displayName ?? null, contextType, contextId, String(message).slice(0, 500)]
     );
   } catch (error) {
     console.error("[matchmaker] Could not record automation failure:", error);
@@ -1190,8 +1190,8 @@ async function handleRequest(request, response) {
       if (request.method === "GET" && url.pathname === "/admin/api/overview") {
         const users = connectedAdminUsers();
         const [[rows], [countRows]] = await Promise.all([
-          database.query("SELECT id, player_name AS playerName, context_type AS contextType, context_id AS contextId, message, created_at AS createdAt FROM admin_events WHERE event_type = 'lobby_automation_failure' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR) ORDER BY created_at DESC LIMIT 200"),
-          database.query("SELECT COUNT(*) AS failureCount FROM admin_events WHERE event_type = 'lobby_automation_failure' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR)")
+          database.query("SELECT id, severity, event_code AS eventCode, phase, player_name AS playerName, context_type AS contextType, context_id AS contextId, message, created_at AS createdAt FROM admin_events WHERE event_type = 'lobby_automation_failure' AND severity = 'critical' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR) ORDER BY created_at DESC LIMIT 200"),
+          database.query("SELECT COUNT(*) AS failureCount FROM admin_events WHERE event_type = 'lobby_automation_failure' AND severity = 'critical' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR)")
         ]);
         return send(response, 200, {
           metrics: {
@@ -1618,7 +1618,14 @@ async function handleRequest(request, response) {
       room.status = "open";
       room.gameStartedAt = undefined;
       room.automationError = String(body.error ?? "AoE2 lobby automation failed.").slice(0, 300);
-      void recordAutomationFailure({ player: authenticatedPlayer, contextType: "custom_lobby", contextId: room.id, message: room.automationError });
+      void recordAutomationFailure({
+        player: authenticatedPlayer,
+        contextType: "custom_lobby",
+        contextId: room.id,
+        message: room.automationError,
+        code: "CUSTOM_LOBBY_AUTOMATION_FAILED",
+        phase: "lobby_creation"
+      });
       room.platformLobbyId = undefined;
       for (const player of room.players) {
         player.aoeJoined = false;
@@ -1865,10 +1872,26 @@ async function handleRequest(request, response) {
       const ticketId = decodeURIComponent(ticketMatch[1]);
       const ticket = tickets.get(ticketId);
       if (!ticket || ticket.player.id !== authenticatedPlayer.id) return send(response, 404, { error: "ticket not found" });
+      const body = await readJson(request);
       clearTicketSearchTimers(ticket);
       const match = ticket.matchId ? matches.get(ticket.matchId) : null;
       if (match) {
         const setupStarted = match.accepted.size === matchTickets(match).length;
+        const automationFailure = body.automationFailure;
+        const validCriticalFailure = automationFailure?.severity === "critical"
+          && typeof automationFailure.code === "string" && /^[A-Z][A-Z0-9_]{2,79}$/.test(automationFailure.code)
+          && typeof automationFailure.phase === "string" && /^[a-z][a-z0-9_]{2,79}$/.test(automationFailure.phase)
+          && typeof automationFailure.message === "string" && automationFailure.message.trim();
+        if (setupStarted && validCriticalFailure) {
+          void recordAutomationFailure({
+            player: authenticatedPlayer,
+            contextType: "ranked_match",
+            contextId: match.id,
+            message: automationFailure.message.trim(),
+            code: automationFailure.code,
+            phase: automationFailure.phase
+          });
+        }
         emitToMatch(match, {
           type: "error",
           code: setupStarted ? "MATCH_SETUP_FAILED" : "MATCH_DECLINED",
@@ -2080,7 +2103,14 @@ async function handleRequest(request, response) {
         code: "GAME_START_FAILED",
         message: failureMessage
       });
-      void recordAutomationFailure({ player: authenticatedPlayer, contextType: "ranked_match", contextId: match.id, message: failureMessage });
+      void recordAutomationFailure({
+        player: authenticatedPlayer,
+        contextType: "ranked_match",
+        contextId: match.id,
+        message: failureMessage,
+        code: "GAME_START_NOT_DETECTED",
+        phase: "game_start"
+      });
       deleteMatch(match);
       console.warn(`[matchmaker] ${match.id}: ${failedRole} reported no loading or replay signal after Start Game`);
       return send(response, 200, { failed: true });

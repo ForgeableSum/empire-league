@@ -13,7 +13,7 @@ import { getCatalogMap, mapCatalog } from "../../shared/mapCatalog";
 import { maps, currentUser } from "../mocks/mockPlayers";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
 import { MockGameIntegrationService } from "../services/gameIntegrationService";
-import { LocalMatchmakingService, MockMatchmakingService } from "../services/matchmakingService";
+import { LocalMatchmakingService, MockMatchmakingService, type AutomationFailureReport } from "../services/matchmakingService";
 import { MockMatchResultService } from "../services/matchResultService";
 import { nowLog } from "../services/timing";
 import { authService } from "../services/authService";
@@ -830,7 +830,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (queue) {
         void handleLobbySetupFailure(
           queue,
-          `Lobby setup stopped making progress for ${Math.ceil(durationMs / 1000)} seconds.`
+          `Lobby setup stopped making progress for ${Math.ceil(durationMs / 1000)} seconds.`,
+          { criticalFailure: { code: "LOBBY_SETUP_STALLED", phase: "lobby_setup" } }
         );
       }
     }, durationMs);
@@ -843,10 +844,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   async function handleLobbySetupFailure(
     _queue: QueueDefinition,
     message: string,
-    options: { showLocalFailureGuidance?: boolean } = {}
+    options: { showLocalFailureGuidance?: boolean; criticalFailure?: Omit<AutomationFailureReport, "severity" | "message"> } = {}
   ): Promise<void> {
     if (lobbyRecoveryInFlightRef.current) return;
     lobbyRecoveryInFlightRef.current = true;
+    const criticalFailure: AutomationFailureReport | undefined = options.criticalFailure
+      ? { severity: "critical", ...options.criticalFailure, message }
+      : undefined;
+    if (criticalFailure) log(`CRITICAL | ${criticalFailure.phase.replaceAll("_", " ")} | ${message}`);
     auditLobbyPhase(`failed:${message.replaceAll("|", "/")}`, true);
     void window.electronApi?.stopMatchFoundAlert();
     clearRoomSetupWatchdog();
@@ -869,7 +874,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       roomSetupMilestone: null
     }));
     notify(message, "warning", { durationMs: 5000, dismissible: false });
-    if (ticketId) await services.matchmaking.leaveQueue(ticketId).catch(() => undefined);
+    if (ticketId) await services.matchmaking.leaveQueue(ticketId, criticalFailure).catch(() => undefined);
     await window.electronApi?.setLobbyInputLock(false).catch(() => ({ locked: false }));
     log("Lobby setup failed; terminating AoE2 and leaving matchmaking cancelled");
     const closed = await window.electronApi?.closeAoe2(true).catch(() => null);
@@ -1141,7 +1146,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }).catch((error: unknown) => {
               const message = error instanceof Error ? error.message : "The host lobby could not be opened.";
               log(`Opening the host lobby failed: ${message}`);
-              void handleLobbySetupFailure(queue, message);
+              void handleLobbySetupFailure(queue, message, {
+                criticalFailure: { code: "LOBBY_OPEN_FAILED", phase: "lobby_join" }
+              });
             });
           }
         }
@@ -1167,7 +1174,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             } catch (error) {
               const message = error instanceof Error ? error.message : "The host could not finalize the lobby.";
               log(`Automated host Ready failed: ${message}`);
-              void handleLobbySetupFailure(queue, message);
+              void handleLobbySetupFailure(queue, message, {
+                criticalFailure: { code: "HOST_READY_FAILED", phase: "lobby_ready" }
+              });
             }
           })();
         }
@@ -1224,7 +1233,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             } catch (error) {
               const message = error instanceof Error ? error.message : "Lobby file transfer did not complete.";
               log(`Guest file transfer or Ready failed: ${message}`);
-              void handleLobbySetupFailure(queue, message);
+              void handleLobbySetupFailure(queue, message, {
+                criticalFailure: { code: "GUEST_READY_FAILED", phase: "lobby_ready" }
+              });
             }
           })();
         }
@@ -1252,7 +1263,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             } catch (error) {
               const message = error instanceof Error ? error.message : "The host could not resume the lobby file transfer.";
               log(`Second host Ready failed: ${message}`);
-              void handleLobbySetupFailure(queue, message);
+              void handleLobbySetupFailure(queue, message, {
+                criticalFailure: { code: "HOST_RESUME_FAILED", phase: "lobby_ready" }
+              });
             }
           })();
         }
@@ -1292,7 +1305,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             } catch (error) {
               const message = error instanceof Error ? error.message : "The automated game start failed.";
               log(`Automated host start failed: ${message}`);
-              void handleLobbySetupFailure(queue, message);
+              void handleLobbySetupFailure(queue, message, {
+                criticalFailure: { code: "HOST_GAME_START_FAILED", phase: "game_start" }
+              });
             }
           })();
         }
@@ -1311,7 +1326,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }).catch((error) => {
             void handleLobbySetupFailure(
               queue,
-              error instanceof Error ? error.message : "Game start confirmation failed."
+              error instanceof Error ? error.message : "Game start confirmation failed.",
+              { criticalFailure: { code: "GAME_START_CONFIRMATION_FAILED", phase: "game_start" } }
             );
           });
         }
@@ -1628,7 +1644,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const message = error instanceof Error ? error.message : "We could not create the AoE2 lobby.";
       log(`Lobby preparation failed: ${message}`);
       const queue = match.queue;
-      void handleLobbySetupFailure(queue, message);
+      void handleLobbySetupFailure(queue, message, {
+        criticalFailure: { code: "LOBBY_PREPARATION_FAILED", phase: "lobby_creation" }
+      });
     }
   }
 
