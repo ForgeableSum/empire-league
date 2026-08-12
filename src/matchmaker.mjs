@@ -245,6 +245,11 @@ function cleanupCustomLobbyDisconnect(playerId) {
   if (!room) return;
   if (room.source === "weekly") {
     const disconnected = room.players.find((player) => player.id === playerId);
+    if (room.status !== "started" && room.hostId === playerId) {
+      customLobbies.delete(room.id);
+      broadcastCustomRooms({ id: room.id, reason: "The weekly host disconnected during lobby setup." });
+      return;
+    }
     room.players = room.players.filter((player) => player.id !== playerId);
     if (!room.players.length) {
       customLobbies.delete(room.id);
@@ -258,17 +263,7 @@ function cleanupCustomLobbyDisconnect(playerId) {
       broadcastCustomRooms();
       return;
     }
-    if (room.hostId === playerId) {
-      room.hostId = room.players[0].id;
-      for (const player of room.players) player.host = player.id === room.hostId;
-      room.platformLobbyId = undefined;
-      room.automationError = undefined;
-      for (const player of room.players) {
-        player.aoeJoined = false;
-        player.aoeReady = false;
-      }
-      addLobbySystemMessage(room, `${room.players[0].displayName} is continuing as host.`);
-    } else if (disconnected) {
+    if (disconnected) {
       addLobbySystemMessage(room, `${disconnected.displayName} left; the FFA will continue.`);
     }
     broadcastCustomRooms();

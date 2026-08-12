@@ -1,5 +1,5 @@
 import { CalendarDays, Check, Clock3, Shield, Sparkles, Swords, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { civilizations } from "../../shared/civilizations";
 import type { CustomLobbyRoom } from "../../shared/contracts/customLobby";
 import { ThemedSelect } from "../components/common/ThemedSelect";
@@ -9,12 +9,18 @@ import { useAppStore } from "../state/appStore";
 import { AnimatedEllipsis, NetworkLobby } from "./CustomPage";
 
 export function WeeklyPage() {
-  const { state, ensureAoe2Ready, notify, setWeeklyQueueActive, localizeAoe2Name } = useAppStore();
+  const {
+    state, ensureAoe2Ready, notify, setWeeklyQueueActive, localizeAoe2Name,
+    setLobbyAutomationActive, clearCustomLobbyAutomationSteps
+  } = useAppStore();
   const [status, setStatus] = useState<WeeklyQueueStatus | null>(null);
   const [room, setRoom] = useState<CustomLobbyRoom>();
   const [civilization, setCivilization] = useState("Random");
   const [pending, setPending] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const activeRoomIdRef = useRef<string | undefined>(undefined);
+
+  activeRoomIdRef.current = room?.id;
 
   useEffect(() => {
     void weeklyQueueService.status().then((next) => {
@@ -22,6 +28,21 @@ export function WeeklyPage() {
       setRoom(next.room);
     }).catch((error) => notify("Weekly queue could not be loaded.", "danger", { detail: messageFor(error) }));
     return customLobbyService.onEvent((event) => {
+      const closedWeeklyRoomId = event.closedRoomId === activeRoomIdRef.current
+        ? event.closedRoomId
+        : undefined;
+      if (closedWeeklyRoomId) {
+        clearCustomLobbyAutomationSteps(closedWeeklyRoomId);
+        setLobbyAutomationActive(false);
+        notify("Weekly game cancelled.", "warning", {
+          detail: event.closeReason ?? "The weekly lobby was closed because its host disconnected.",
+          durationMs: null
+        });
+        void window.electronApi?.setLobbyInputLock(false).catch(() => ({ locked: false }));
+        void window.electronApi?.closeAoe2(true).then((closed) => {
+          if (!closed.closed) notify(closed.message ?? "AoE2 could not be terminated after the weekly game was cancelled.", "danger");
+        }).catch(() => notify("AoE2 could not be terminated after the weekly game was cancelled.", "danger"));
+      }
       const active = event.rooms.find((candidate) => candidate.source === "weekly"
         && candidate.players.some((player) => player.id === state.currentUser.id));
       if (active) {
