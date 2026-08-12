@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } 
 import { civilizations } from "../../shared/civilizations";
 import type { Aoe2CivilizationSelection } from "../../shared/aoe2UiManifest";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings, type CustomLobbyRoom, type LocalCustomContent, type LocalCustomContentCatalog } from "../../shared/contracts/customLobby";
+import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import { lobbySetupTiming } from "../../shared/runtimeConfig";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { customLobbyService } from "../services/customLobbyService";
@@ -266,6 +267,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     }
     if (room.status !== "launching" || !window.electronApi) return;
     const content = room.map;
+    const customContentFlow = requiresCustomContentTransfer(room);
     const hostSetupKey = `${room.id}:host-setup`;
     if (isHost && !room.platformLobbyId && claimCustomLobbyAutomationStep(hostSetupKey)) {
       void (async () => {
@@ -298,7 +300,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     if (!isHost && room.platformLobbyId && !me.aoeJoined && claimCustomLobbyAutomationStep(guestJoinKey)) {
       void (async () => {
         try {
-          const opened = await window.electronApi!.openAoe2Lobby(room.platformLobbyId!, true);
+          const opened = await window.electronApi!.openAoe2Lobby(room.platformLobbyId!, customContentFlow);
           if (!opened.opened) throw new Error("AoE2 did not open the custom lobby.");
           if (content?.kind !== "scenario" || room.source === "weekly") await applyMapPlayerSettings(me);
           await customLobbyService.reportJoined(room.id);
@@ -321,7 +323,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           do {
             await new Promise((resolve) => window.setTimeout(resolve, lobbySetupTiming.customMapTransferPollMs));
             ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready", "custom");
-            if (!ready.sent && !contentConfirmationAttempted) {
+            if (!ready.sent && customContentFlow && !contentConfirmationAttempted) {
               contentConfirmationAttempted = true;
               await window.electronApi!.runAoe2LobbyCursorAction("content-confirm", "custom");
             }
@@ -519,6 +521,17 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
       </div>
     </section>
   );
+}
+
+function requiresCustomContentTransfer(room: CustomLobbyRoom): boolean {
+  if (room.dataMod || room.map?.kind === "scenario") return true;
+  if (!room.map) return false;
+  const catalogMap = enabledMapCatalogEntries.find((entry) =>
+    entry.id === room.map?.id || entry.gameMapName === room.map?.gameName
+  );
+  // A map absent from the built-in/catalogued pool came from the local custom
+  // content scan and should follow the same guarded UGC flow as ranked custom maps.
+  return catalogMap ? Boolean(catalogMap.isCustomMap) : true;
 }
 
 const customLobbySettingLabels: Array<[keyof CustomLobbyGameSettings, string]> = [
