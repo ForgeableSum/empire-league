@@ -4,7 +4,7 @@ import { civilizations } from "../../shared/civilizations";
 import type { Aoe2CivilizationSelection } from "../../shared/aoe2UiManifest";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings, type CustomLobbyRoom, type LocalCustomContent, type LocalCustomContentCatalog } from "../../shared/contracts/customLobby";
 import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
-import { lobbySetupTiming } from "../../shared/runtimeConfig";
+import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runtimeConfig";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { customLobbyService } from "../services/customLobbyService";
 import { replayHasEnded } from "../services/replayMetadataService";
@@ -318,18 +318,29 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
       void (async () => {
         try {
           const deadline = Date.now() + lobbySetupTiming.customMapTransferTimeoutMs;
-          let contentConfirmationAttempted = false;
+          let contentAcceptanceReported = false;
           let ready: Awaited<ReturnType<typeof window.electronApi.runAoe2LobbyCursorAction>>;
           do {
             await new Promise((resolve) => window.setTimeout(resolve, lobbySetupTiming.customMapTransferPollMs));
             ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready", "custom");
-            if (!ready.sent && customContentFlow && !contentConfirmationAttempted) {
-              contentConfirmationAttempted = true;
-              await window.electronApi!.runAoe2LobbyCursorAction("content-confirm", "custom");
+            if (!ready.sent && customContentFlow && !contentAcceptanceReported) {
+              const confirmation = await window.electronApi!.runAoe2LobbyCursorAction("content-confirm", "custom");
+              if (confirmation.sent) {
+                await customLobbyService.reportContentAccepted(room.id);
+                contentAcceptanceReported = true;
+                await new Promise((resolve) => window.setTimeout(resolve, customContentHostRecoveryMs));
+              }
             }
           } while (!ready.sent && Date.now() < deadline);
           if (!ready.sent) {
             throw new Error("The guest Ready button remained unavailable after the file-transfer timeout.");
+          }
+          if (customContentFlow && !contentAcceptanceReported) {
+            await customLobbyService.reportContentAccepted(room.id);
+            contentAcceptanceReported = true;
+            await new Promise((resolve) => window.setTimeout(resolve, customContentHostRecoveryMs));
+            ready = await window.electronApi!.runAoe2LobbyCursorAction("guest-ready", "custom");
+            if (!ready.sent) throw new Error("Guest Ready did not remain available after host transfer recovery.");
           }
           await customLobbyService.reportAoeReady(room.id);
         } catch (error) {
@@ -352,6 +363,24 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
         } catch (error) {
           await customLobbyService.failStart(room.id, messageFor(error));
           releaseCustomLobbyAutomationStep(hostReadyKey);
+        }
+      })();
+      return;
+    }
+
+    const guestsAcceptedContent = customContentFlow
+      && room.players.filter((player) => !player.host).every((player) => player.aoeContentAccepted);
+    const hostContentRecoveryKey = `${room.id}:host-content-recovery:${room.platformLobbyId ?? "pending"}`;
+    if (isHost && guestsAcceptedContent && !me.aoeReady && claimCustomLobbyAutomationStep(hostContentRecoveryKey)) {
+      void (async () => {
+        try {
+          await new Promise((resolve) => window.setTimeout(resolve, customContentHostRecoveryMs));
+          const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready", "custom");
+          if (!ready.sent) throw new Error(ready.message || "The host could not resume the lobby file transfer.");
+          await customLobbyService.reportAoeReady(room.id);
+        } catch (error) {
+          await customLobbyService.failStart(room.id, messageFor(error));
+          releaseCustomLobbyAutomationStep(hostContentRecoveryKey);
         }
       })();
       return;

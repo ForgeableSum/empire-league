@@ -69,6 +69,10 @@ export const customLobbyService = {
     if (isPreviewMode) return;
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/joined`, { method: "POST" });
   },
+  async reportContentAccepted(roomId: string): Promise<void> {
+    if (isPreviewMode) return;
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/content-accepted`, { method: "POST" });
+  },
   async reportAoeReady(roomId: string): Promise<void> {
     if (isPreviewMode) return;
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/aoe-ready`, { method: "POST" });

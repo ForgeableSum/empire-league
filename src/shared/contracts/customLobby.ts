@@ -38,6 +38,7 @@ export interface CustomLobbyPlayer {
   ready: boolean;
   host: boolean;
   aoeJoined?: boolean;
+  aoeContentAccepted?: boolean;
   aoeReady?: boolean;
 }
 

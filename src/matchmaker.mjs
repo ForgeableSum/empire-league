@@ -1542,6 +1542,7 @@ async function handleRequest(request, response) {
       room.automationError = undefined;
       for (const player of room.players) {
         player.aoeJoined = false;
+        player.aoeContentAccepted = false;
         player.aoeReady = false;
       }
       addLobbySystemMessage(room, "The host is creating the AoE2 lobby.");
@@ -1573,6 +1574,23 @@ async function handleRequest(request, response) {
       player.aoeJoined = true;
       broadcastCustomRooms();
       return send(response, 200, { joined: true });
+    }
+
+    const contentAcceptedCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/content-accepted$/);
+    if (request.method === "POST" && contentAcceptedCustomLobby) {
+      const room = customLobbies.get(decodeURIComponent(contentAcceptedCustomLobby[1]));
+      const player = room?.players.find((item) => item.id === authenticatedPlayer.id);
+      if (!room || room.status !== "launching" || !player || player.host) {
+        return send(response, 403, { error: "Only a launching lobby guest can report content acceptance." });
+      }
+      if (!player.aoeContentAccepted) {
+        player.aoeJoined = true;
+        player.aoeContentAccepted = true;
+        const host = room.players.find((item) => item.host);
+        if (host) host.aoeReady = false;
+        broadcastCustomRooms();
+      }
+      return send(response, 200, { accepted: true });
     }
 
     const readyCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/aoe-ready$/);
