@@ -6,6 +6,7 @@ import {
   detectAoe2NativeProcess,
   hideAoe2NativeWindow
 } from "./aoe2Win32Automation.js";
+import { handleEmpireLeagueAudioFocus } from "./aoe2AudioSuppression.js";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 let pointerTimer: NodeJS.Timeout | undefined;
@@ -135,9 +136,11 @@ export function createMainWindow({ startMinimized = false }: { startMinimized?: 
   // using it. A persistent screen-saver-level window obscures applications
   // selected through Alt+Tab even though Windows changes the foreground app.
   mainWindow.on("focus", () => {
+    handleEmpireLeagueAudioFocus(true);
     if (!mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(true, "screen-saver");
   });
   mainWindow.on("blur", () => {
+    handleEmpireLeagueAudioFocus(false);
     if (!mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false, "normal");
   });
 

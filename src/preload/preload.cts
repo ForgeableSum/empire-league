@@ -19,6 +19,7 @@ const electronApi: ElectronGameApi = {
   launchAoe2: () => ipcRenderer.invoke("game:launch"),
   focusAoe2: () => ipcRenderer.invoke("game:focus"),
   focusAoe2ForGameplay: (matchId) => ipcRenderer.invoke("game:focus-for-gameplay", matchId),
+  beginAoe2MatchAudioSuppression: () => ipcRenderer.invoke("game:begin-match-audio-suppression"),
   setLobbyInputLock: (locked) => ipcRenderer.invoke("game:set-lobby-input-lock", locked),
   onLobbyGuardPointer: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, point: { x: number; y: number; sequence: number }) => listener(point);

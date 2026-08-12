@@ -48,6 +48,11 @@ import { setObsCaptureMode } from "../obsIntegration.js";
 import { loadAoe2Localization, setAoe2LanguageOverride } from "../aoe2Localization.js";
 import { isAoe2LanguageId } from "../../shared/aoe2Languages.js";
 import {
+  beginAoe2GameplayAudio,
+  beginAoe2MatchAudioSuppression,
+  endAoe2MatchAudioSuppression
+} from "../aoe2AudioSuppression.js";
+import {
   closeAoe2NativeWindow,
   clearAoe2TextField,
   detectAoe2NativeProcess,
@@ -2635,6 +2640,9 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
 }
 
 export function registerGameHandlers(): void {
+  ipcMain.handle("game:begin-match-audio-suppression", () => {
+    beginAoe2MatchAudioSuppression();
+  });
   ipcMain.handle("game:get-localization", async (_event, currentSessionOnly = false) => {
     const installation = await detectAoe2Installation();
     if (!installation.installed || !installation.path) {
@@ -2737,7 +2745,10 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:close", async (_event, force: boolean) => {
     const processStatus = await detectAoe2Process();
-    if (!processStatus.running || !processStatus.pid) return { closed: true, running: false };
+    if (!processStatus.running || !processStatus.pid) {
+      endAoe2MatchAudioSuppression();
+      return { closed: true, running: false };
+    }
 
     restoreAoe2Window();
     if (force) {
@@ -2748,6 +2759,7 @@ export function registerGameHandlers(): void {
 
     const closed = await waitForAoe2Exit(force ? 5000 : 8000);
     if (closed) {
+      endAoe2MatchAudioSuppression();
       launchRequested = false;
       launchRequestedAt = 0;
       if (ownedAoe2Pid === processStatus.pid) {
@@ -2763,6 +2775,9 @@ export function registerGameHandlers(): void {
   });
 
   ipcMain.handle("game:launch", async (event) => {
+    // A managed AoE2 session is silent from launch through matchmaking and
+    // lobby automation. Game-start is the sole path that restores its audio.
+    beginAoe2MatchAudioSuppression();
     const existing = await detectAoe2Process();
     if (existing.running) {
       if (existing.pid && !existing.windowReady) {
@@ -2789,6 +2804,7 @@ export function registerGameHandlers(): void {
     try {
       const installation = await detectAoe2Installation();
       if (!installation.installed) {
+        endAoe2MatchAudioSuppression();
         launchRequested = false;
         launchRequestedAt = 0;
         return {
@@ -2800,6 +2816,7 @@ export function registerGameHandlers(): void {
 
       const steamExecutable = await getSteamExecutable();
       if (!steamExecutable) {
+        endAoe2MatchAudioSuppression();
         launchRequested = false;
         launchRequestedAt = 0;
         return { launched: false, status: "not_detected", message: "Steam could not be launched." };
@@ -2823,6 +2840,7 @@ export function registerGameHandlers(): void {
       appWindow?.once("closed", restoreAoe2Window);
       return { launched: true, status: "running", message: "Launching AoE2 DE." };
     } catch (error) {
+      endAoe2MatchAudioSuppression();
       restoreAoe2Window();
       launchRequested = false;
       launchRequestedAt = 0;
@@ -2851,6 +2869,7 @@ export function registerGameHandlers(): void {
       throw new Error("A match ID is required for the gameplay handoff.");
     }
     const startedAt = Date.now();
+    beginAoe2GameplayAudio();
     void setObsCaptureMode("game");
     let focused = false;
     let lastPid: number | undefined;

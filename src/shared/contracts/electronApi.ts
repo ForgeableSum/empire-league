@@ -90,6 +90,7 @@ export interface ElectronGameApi {
   launchAoe2(): Promise<GameLaunchResult>;
   focusAoe2(): Promise<GameFocusResult>;
   focusAoe2ForGameplay(matchId: string): Promise<GameFocusResult>;
+  beginAoe2MatchAudioSuppression(): Promise<void>;
   setLobbyInputLock(locked: boolean): Promise<{ locked: boolean }>;
   onLobbyGuardPointer(listener: (point: { x: number; y: number; sequence: number }) => void): () => void;
   acknowledgeLobbyGuardPointer(sequence: number): void;

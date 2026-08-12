@@ -1172,6 +1172,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })();
         }
         if (event.type === "host_lobby_ready" && window.electronApi) {
+          void window.electronApi.beginAoe2MatchAudioSuppression();
           auditLobbyPhase("host-ready");
           const customContentFlow = isCustomLobbyMap(matchedSessionRef.current?.selectedMap);
           setState((previous) => ({
@@ -1256,6 +1257,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })();
         }
         if (event.type === "guest_lobby_ready" && window.electronApi) {
+          void window.electronApi.beginAoe2MatchAudioSuppression();
           auditLobbyPhase("guest-ready");
           setState((previous) => ({
             ...previous,
