@@ -1492,6 +1492,41 @@
   width: 22px;
 }
 
+.country-tooltip {
+  position: relative;
+  display: inline-flex;
+  justify-self: center;
+  outline: none;
+}
+
+.country-tooltip-content {
+  position: absolute;
+  z-index: 20;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: max-content;
+  max-width: min(260px, calc(100vw - 48px));
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: #11100f;
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.country-tooltip:hover .country-tooltip-content,
+.country-tooltip:focus-visible .country-tooltip-content {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .themed-select-field {
   position: relative;
   display: grid;

@@ -210,12 +210,17 @@ function countryFlag(countryCode?: string) {
   if (!code) return "Unknown";
   if (!/^[A-Z]{2}$/.test(code)) return code;
 
+  const countryName = new Intl.DisplayNames(["en"], { type: "region" }).of(code) ?? code;
+
   return (
-    <span
-      className={`country-flag fi fi-${code.toLowerCase()}`}
-      role="img"
-      aria-label={`${code} flag`}
-      title={code}
-    />
+    <span className="country-tooltip" tabIndex={0} aria-label={countryName}>
+      <span
+        className={`country-flag fi fi-${code.toLowerCase()}`}
+        aria-hidden="true"
+      />
+      <span className="country-tooltip-content" role="tooltip" data-ui-translation="off">
+        {countryName}
+      </span>
+    </span>
   );
 }
