@@ -830,8 +830,20 @@ export function readAoe2ContentWarningState(processId: number): NativeContentWar
     return { state: "unknown", detail: `PIXEL_READ_FAILED|${describePixelRead(window)}` };
   }
 
-  const goldVotes = borderSamples.filter(({ rgb }) => rgb
-    && rgb[0] > 220 && rgb[1] >= 120 && rgb[1] <= 210 && rgb[2] < 45).length;
+  // AoE2 can render the warning frame substantially darker on some clients.
+  // Match the gold hue/chroma as well as a modest brightness floor instead of
+  // requiring the red channel to exceed 220. For example, a captured warning
+  // used 163,119,24 and 152,93,1 on its left frame.
+  // The blue ceiling keeps ordinary tan lobby parchment from voting as gold.
+  const goldVotes = borderSamples.filter(({ rgb }) => {
+    if (!rgb) return false;
+    const [red, green, blue] = rgb;
+    return red >= 140
+      && green >= 80
+      && blue <= 45
+      && red > green
+      && green > blue * 2.5;
+  }).length;
   const darkVotes = interiorSamples.filter(({ rgb }) => rgb && Math.max(...rgb) < 35).length;
   // On ultrawide viewports the warning's right and lower frame samples land
   // inside dark panel chrome, while the two left-frame samples remain the
