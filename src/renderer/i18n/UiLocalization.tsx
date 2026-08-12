@@ -28,6 +28,7 @@ const htmlLanguageCodes: Record<string, string> = {
   vi: "vi", zh: "zh-Hans"
 };
 const translatedAttributes = ["aria-label", "placeholder", "title"] as const;
+const uiTranslationsEnabled = true;
 const textValues = new WeakMap<Text, LocalizedValue>();
 const attributeValues = new WeakMap<Element, Map<string, LocalizedValue>>();
 
@@ -156,7 +157,7 @@ export function UiLocalization(): null {
 
   useEffect(() => {
     let cancelled = false;
-    if (aoe2LanguageCode === "en" || !catalogLoaders[aoe2LanguageCode]) {
+    if (!uiTranslationsEnabled || aoe2LanguageCode === "en" || !catalogLoaders[aoe2LanguageCode]) {
       setLoadedCatalog({ languageCode: aoe2LanguageCode, catalog: {} });
       return;
     }
@@ -170,7 +171,7 @@ export function UiLocalization(): null {
 
   useLayoutEffect(() => {
     if (loadedCatalog.languageCode !== aoe2LanguageCode) return;
-    if (aoe2LanguageCode === "en") {
+    if (!uiTranslationsEnabled || aoe2LanguageCode === "en") {
       document.documentElement.lang = "en";
       restoreTree(document.body);
       return;
