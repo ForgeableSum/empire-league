@@ -94,6 +94,7 @@ export interface ElectronGameApi {
   setLobbyInputLock(locked: boolean): Promise<{ locked: boolean }>;
   onLobbyGuardPointer(listener: (point: { x: number; y: number; sequence: number }) => void): () => void;
   acknowledgeLobbyGuardPointer(sequence: number): void;
+  onLobbyGuardShortcutBlocked(listener: () => void): () => void;
   startReplayEndDetection(replayFolder?: string): Promise<{ started: boolean; message?: string }>;
   stopReplayEndDetection(): Promise<void>;
   confirmReplayEnded(): Promise<void>;

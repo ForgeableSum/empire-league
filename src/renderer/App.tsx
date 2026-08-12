@@ -283,6 +283,7 @@ function initialsFor(name: string): string {
 
 function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; manageNativeLock: boolean }) {
   const [pointer, setPointer] = useState<{ x: number; y: number; sequence: number } | null>(null);
+  const { notify } = useAppStore();
 
   useEffect(() => {
     if (!active) {
@@ -300,6 +301,21 @@ function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; m
       removePointerListener?.();
     };
   }, [active, manageNativeLock]);
+
+  useEffect(() => {
+    if (!active) return;
+    const removeShortcutListener = window.electronApi?.onLobbyGuardShortcutBlocked(() => {
+      notify(
+        "Stay in Empire League while the lobby is being prepared.",
+        "danger",
+        {
+          detail: "Keyboard shortcuts that switch away from Empire League are temporarily blocked so lobby automation can finish. Controls unlock automatically after the countdown.",
+          durationMs: 6500
+        }
+      );
+    });
+    return removeShortcutListener;
+  }, [active, notify]);
 
   useEffect(() => {
     const forwarding = active && pointer !== null;

@@ -1153,6 +1153,10 @@ public static class AoeInputGuard {
   private const uint WM_QUIT = 0x0012;
   private const int VK_CONTROL = 0x11;
   private const int VK_SHIFT = 0x10;
+  private const int VK_MENU = 0x12;
+  private const int VK_LMENU = 0xA4;
+  private const int VK_RMENU = 0xA5;
+  private const int VK_F4 = 0x73;
   private const int VK_F12 = 0x7B;
   private const uint GA_ROOT = 2;
   private const uint LLMHF_INJECTED = 0x00000001;
@@ -1236,6 +1240,7 @@ public static class AoeInputGuard {
   private static uint ownerProcessId;
   private static uint targetProcessId;
   private static int shutdownSignaled;
+  private static int altPressed;
   private static long lastOwnerHeartbeatTimestamp;
   private static long guardStartedTimestamp;
 
@@ -1365,13 +1370,27 @@ public static class AoeInputGuard {
   private static IntPtr OnKeyboard(int code, IntPtr wParam, IntPtr lParam) {
     if (code >= 0) {
       int key = Marshal.ReadInt32(lParam);
+      uint message = unchecked((uint)wParam.ToInt64());
+      bool keyDown = message == 0x0100 || message == 0x0104;
+      bool keyUp = message == 0x0101 || message == 0x0105;
+      bool altKey = key == VK_MENU || key == VK_LMENU || key == VK_RMENU;
+      if (altKey) {
+        if (keyDown) Interlocked.Exchange(ref altPressed, 1);
+        else if (keyUp) Interlocked.Exchange(ref altPressed, 0);
+      }
       bool emergency = key == VK_F12
         && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
         && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+      bool exitRequested = key == VK_F4
+        && Interlocked.CompareExchange(ref altPressed, 0, 0) != 0
+        && keyDown;
       if (emergency) {
         PostThreadMessage(guardThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+      } else if (exitRequested) {
+        Console.WriteLine("EXIT_REQUEST");
+        Console.Out.Flush();
+        PostThreadMessage(guardThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
       } else {
-        uint message = unchecked((uint)wParam.ToInt64());
         string action = message == 0x0101 || message == 0x0105 ? "UP" : "DOWN";
         Console.WriteLine("KEY|{0}|{1}", action, key);
         Console.Out.Flush();
@@ -1603,6 +1622,11 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
       const messages = stdoutBuffer.split(/\r?\n/);
       stdoutBuffer = messages.pop() ?? "";
       messages.filter(Boolean).forEach((message) => {
+        if (message === "EXIT_REQUEST") {
+          releaseAllInputSuppression("AltF4");
+          app.quit();
+          return;
+        }
         if (message.startsWith("KEY|") || message.startsWith("MOUSE|")) {
           forwardGuardedInput(message);
           return;
@@ -1640,6 +1664,15 @@ function forwardGuardedInput(message: string): void {
     const virtualKey = Number(parts[2]);
     const modifier = guardedModifier(virtualKey);
     if (action === "DOWN" && modifier) guardedModifiers.add(modifier);
+    const blockedEscapeShortcut = action === "DOWN" && (
+      virtualKey === 0x1b
+      || virtualKey === 0x5b
+      || virtualKey === 0x5c
+      || (virtualKey === 0x09 && guardedModifiers.has("alt"))
+    );
+    if (blockedEscapeShortcut) {
+      window.webContents.send("game:lobby-guard-shortcut-blocked");
+    }
     const keyCode = electronKeyCode(virtualKey);
     if (!keyCode) return;
     window.webContents.sendInputEvent({
