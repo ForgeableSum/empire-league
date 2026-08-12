@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { playerRatingForQueue, ratingPoolForQueue } from "./rating-pool.mjs";
 import { replayPlayerWon } from "./replay-result.mjs";
 import { WebSocket, WebSocketServer } from "ws";
@@ -37,10 +37,14 @@ import {
 } from "./civilization-roll.mjs";
 import { currentWeeklyMode as weeklyModeAt, weeklyRotation } from "./weekly-rotation.mjs";
 import { getTopAoe2Streams } from "./twitch-streams.mjs";
+import { adminDashboardHtml, adminLoginHtml } from "./admin-dashboard.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
 const publicBaseUrl = (process.env.PUBLIC_MATCHMAKER_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, "");
+const adminToken = process.env.MATCHMAKER_ADMIN_TOKEN ?? "";
+const adminSessions = new Map();
+const adminSessionLifetimeMs = 12 * 60 * 60 * 1000;
 const tickets = new Map();
 const matches = new Map();
 const playersJoiningQueue = new Set();
@@ -393,8 +397,61 @@ function send(response, status, body) {
 }
 
 function sendHtml(response, status, body) {
-  response.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+  response.writeHead(status, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   response.end(body);
+}
+
+function adminTokenMatches(candidate) {
+  if (!adminToken || typeof candidate !== "string") return false;
+  const expected = createHash("sha256").update(adminToken).digest();
+  const actual = createHash("sha256").update(candidate).digest();
+  return timingSafeEqual(expected, actual);
+}
+
+function adminSession(request) {
+  const cookie = String(request.headers.cookie ?? "").split(";").map((item) => item.trim()).find((item) => item.startsWith("el_admin="));
+  const id = cookie?.slice("el_admin=".length);
+  const expiresAt = id ? adminSessions.get(id) : 0;
+  if (!id || !expiresAt || expiresAt <= Date.now()) {
+    if (id) adminSessions.delete(id);
+    return false;
+  }
+  return true;
+}
+
+function connectedAdminUsers() {
+  const users = new Map();
+  for (const socket of webSocketServer.clients) {
+    const player = socketSessions.get(socket)?.player;
+    if (socket.readyState !== WebSocket.OPEN || !player) continue;
+    const existing = users.get(player.id) ?? { id: player.id, displayName: player.displayName, connections: 0 };
+    existing.connections += 1;
+    users.set(player.id, existing);
+  }
+  const searchingIds = new Set([
+    ...[...tickets.values()].filter((ticket) => !ticket.matchId).map((ticket) => ticket.player.id),
+    ...weeklyQueue.keys()
+  ]);
+  const inGameIds = new Set([...socialPresence].filter(([, value]) => value?.presence === "in_game").map(([id]) => id));
+  for (const room of customLobbies.values()) {
+    if (room.status === "started") for (const player of room.players) inGameIds.add(player.id);
+  }
+  return [...users.values()].map((user) => {
+    const presence = socialPresence.get(user.id);
+    const status = inGameIds.has(user.id) ? "in-game" : searchingIds.has(user.id) ? "searching" : "online";
+    return { ...user, status, activity: presence?.activity ?? (status === "searching" ? "Looking for a match" : status === "in-game" ? "In game" : "Online") };
+  }).sort((left, right) => left.displayName.localeCompare(right.displayName));
+}
+
+async function recordAutomationFailure({ player, contextType, contextId, message }) {
+  try {
+    await database.execute(
+      "INSERT INTO admin_events (id, event_type, player_id, player_name, context_type, context_id, message) VALUES (?, 'lobby_automation_failure', ?, ?, ?, ?, ?)",
+      [randomUUID(), player?.id ?? null, player?.displayName ?? null, contextType, contextId, String(message).slice(0, 500)]
+    );
+  } catch (error) {
+    console.error("[matchmaker] Could not record automation failure:", error);
+  }
 }
 
 async function readJson(request) {
@@ -1104,6 +1161,70 @@ async function handleRequest(request, response) {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
 
   try {
+    if (request.method === "GET" && (url.pathname === "/admin" || url.pathname === "/admin/")) {
+      if (!adminToken) return sendHtml(response, 503, adminLoginHtml("MATCHMAKER_ADMIN_TOKEN is not configured on this server."));
+      return sendHtml(response, 200, adminSession(request) ? adminDashboardHtml() : adminLoginHtml());
+    }
+
+    if (request.method === "POST" && url.pathname === "/admin/login") {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      const form = new URLSearchParams(Buffer.concat(chunks).toString("utf8"));
+      if (!adminTokenMatches(form.get("token"))) return sendHtml(response, 401, adminLoginHtml("Invalid admin token."));
+      const sessionId = randomUUID();
+      adminSessions.set(sessionId, Date.now() + adminSessionLifetimeMs);
+      response.writeHead(303, {
+        Location: "/admin",
+        "Set-Cookie": `el_admin=${sessionId}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=${adminSessionLifetimeMs / 1000}`,
+        "Cache-Control": "no-store"
+      });
+      return response.end();
+    }
+
+    if (url.pathname.startsWith("/admin/api/") || url.pathname === "/admin/logout") {
+      if (!adminSession(request)) return send(response, 401, { error: "Admin session expired." });
+      if (request.method === "POST" && url.pathname === "/admin/logout") {
+        response.writeHead(200, { "Set-Cookie": "el_admin=; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=0", "Content-Type": "application/json" });
+        return response.end('{"ok":true}');
+      }
+      if (request.method === "GET" && url.pathname === "/admin/api/overview") {
+        const users = connectedAdminUsers();
+        const [[rows], [countRows]] = await Promise.all([
+          database.query("SELECT id, player_name AS playerName, context_type AS contextType, context_id AS contextId, message, created_at AS createdAt FROM admin_events WHERE event_type = 'lobby_automation_failure' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR) ORDER BY created_at DESC LIMIT 200"),
+          database.query("SELECT COUNT(*) AS failureCount FROM admin_events WHERE event_type = 'lobby_automation_failure' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR)")
+        ]);
+        return send(response, 200, {
+          metrics: {
+            online: users.length,
+            searching: users.filter((user) => user.status === "searching").length,
+            inGame: users.filter((user) => user.status === "in-game").length,
+            failures24h: Number(countRows[0]?.failureCount ?? 0),
+            uptimeSeconds: Math.floor(process.uptime())
+          },
+          users,
+          failures: rows
+        });
+      }
+      if (request.method === "POST" && url.pathname === "/admin/api/messages") {
+        const body = await readJson(request);
+        const message = String(body.message ?? "").trim().slice(0, 500);
+        const recipientId = String(body.recipientId ?? "");
+        if (!message) return send(response, 400, { error: "A message is required." });
+        const recipients = recipientId === "all"
+          ? new Set(connectedAdminUsers().map((user) => user.id))
+          : new Set(connectedAdminUsers().some((user) => user.id === recipientId) ? [recipientId] : []);
+        if (!recipients.size) return send(response, 404, { error: "No connected recipients matched." });
+        for (const playerId of recipients) sendToPlayer(playerId, { type: "admin_message", message, sentAt: new Date().toISOString() });
+        return send(response, 200, { delivered: recipients.size });
+      }
+      if (request.method === "POST" && url.pathname === "/admin/api/restart") {
+        send(response, 202, { restarting: true });
+        setTimeout(() => process.exit(1), 250).unref();
+        return;
+      }
+      return send(response, 404, { error: "Admin endpoint not found." });
+    }
+
     if (request.method === "GET" && url.pathname === "/health") {
       const connection = await checkDatabase();
       return send(response, 200, {
@@ -1497,6 +1618,7 @@ async function handleRequest(request, response) {
       room.status = "open";
       room.gameStartedAt = undefined;
       room.automationError = String(body.error ?? "AoE2 lobby automation failed.").slice(0, 300);
+      void recordAutomationFailure({ player: authenticatedPlayer, contextType: "custom_lobby", contextId: room.id, message: room.automationError });
       room.platformLobbyId = undefined;
       for (const player of room.players) {
         player.aoeJoined = false;
@@ -1952,11 +2074,13 @@ async function handleRequest(request, response) {
         return send(response, 403, { error: "only a matched player may report a failed game start" });
       }
       const failedRole = actingTicket.id === match.host.id ? "host" : "guest";
+      const failureMessage = `Game failed to start: the ${failedRole} client did not detect a loading screen or replay after Start Game was clicked.`;
       emitToMatch(match, {
         type: "error",
         code: "GAME_START_FAILED",
-        message: `Game failed to start: the ${failedRole} client did not detect a loading screen or replay after Start Game was clicked.`
+        message: failureMessage
       });
+      void recordAutomationFailure({ player: authenticatedPlayer, contextType: "ranked_match", contextId: match.id, message: failureMessage });
       deleteMatch(match);
       console.warn(`[matchmaker] ${match.id}: ${failedRole} reported no loading or replay signal after Start Game`);
       return send(response, 200, { failed: true });

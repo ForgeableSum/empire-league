@@ -37,6 +37,7 @@ export type CustomLobbyEvent = {
   closedRoomId?: string;
   closeReason?: string;
 };
+export type AdminMessage = { message: string; sentAt: string };
 
 class MatchmakerTransport {
   private token: string | null = null;
@@ -51,6 +52,7 @@ class MatchmakerTransport {
   private deliberatelyClosed = false;
   private socialListeners = new Set<(event: SocialEvent) => void>();
   private customLobbyListeners = new Set<(event: CustomLobbyEvent) => void>();
+  private adminMessageListeners = new Set<(event: AdminMessage) => void>();
   private connectionStatus: MatchmakerConnectionStatus = "disconnected";
   private connectionStatusListeners = new Set<() => void>();
 
@@ -110,6 +112,11 @@ class MatchmakerTransport {
     return () => this.customLobbyListeners.delete(listener);
   }
 
+  onAdminMessage(listener: (event: AdminMessage) => void): UnsubscribeFunction {
+    this.adminMessageListeners.add(listener);
+    return () => this.adminMessageListeners.delete(listener);
+  }
+
   private connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN && !this.connectPromise) return Promise.resolve();
     if (this.connectPromise) return this.connectPromise;
@@ -146,6 +153,7 @@ class MatchmakerTransport {
       ticketId?: string;
       sequence?: number;
       event?: Parameters<QueueEventListener>[0] | SocialEvent | CustomLobbyEvent;
+      sentAt?: string;
     };
     try {
       message = JSON.parse(String(event.data));
@@ -163,6 +171,10 @@ class MatchmakerTransport {
     }
     if (message.type === "custom_lobby_event" && message.event) {
       for (const listener of this.customLobbyListeners) listener(message.event as CustomLobbyEvent);
+      return;
+    }
+    if (message.type === "admin_message" && typeof message.message === "string") {
+      for (const listener of this.adminMessageListeners) listener({ message: message.message, sentAt: message.sentAt ?? new Date().toISOString() });
       return;
     }
     if (message.type === "response" && message.id) {

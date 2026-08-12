@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
 import loadingScreenArtwork from "./assets/el5-loading.png";
 import { socialService } from "./services/socialService";
+import { matchmakerTransport } from "./services/matchmakerTransport";
 import { isPreviewMode } from "./previewMode";
 import { previewFriendRequests, previewFriends } from "./mocks/previewData";
 
@@ -38,7 +39,7 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const { page, state, lobbyAutomationActive, authStatus, authError, signInWithSteam } = useAppStore();
+  const { page, state, lobbyAutomationActive, authStatus, authError, signInWithSteam, notify } = useAppStore();
   const rankedLobbyTransition = ["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error;
   const gameInSession = state.queueStatus === "in_game" || state.gameStatus === "in_match";
 
@@ -49,6 +50,10 @@ export function App() {
   useEffect(() => {
     chatsRef.current = chats;
   }, [chats]);
+
+  useEffect(() => matchmakerTransport.onAdminMessage(({ message }) => {
+    notify("Message from Empire League", "info", { detail: message, durationMs: 15_000 });
+  }), [notify]);
 
   useEffect(() => {
     const clearAttention = () => void window.electronApi?.clearUnreadMessageAlert();
