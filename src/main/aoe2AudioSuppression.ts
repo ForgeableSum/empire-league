@@ -6,6 +6,8 @@ let gameplayStarted = false;
 let desiredMuted = false;
 let worker: ChildProcessWithoutNullStreams | null = null;
 let refreshTimer: NodeJS.Timeout | undefined;
+let lastManagedPid: number | undefined;
+let shuttingDown = false;
 
 // Core Audio exposes per-process mute through audio sessions, but not through a
 // regular Win32 function. Keep one lightweight PowerShell worker alive so the
@@ -47,13 +49,21 @@ public static class SessionMute {
   }
 }
 '@
-while (($line = [Console]::ReadLine()) -ne $null) {
-  try { $parts = $line.Split('|'); [SessionMute]::Set([uint32]$parts[0], $parts[1] -eq '1') } catch { [Console]::Error.WriteLine($_.Exception.Message) }
+try {
+  while (($line = [Console]::ReadLine()) -ne $null) {
+    try {
+      $parts = $line.Split('|'); $lastPid = [uint32]$parts[0]
+      [SessionMute]::Set($lastPid, $parts[1] -eq '1')
+    } catch { [Console]::Error.WriteLine($_.Exception.Message) }
+  }
+} finally {
+  # Closing the IPC pipe must never leave Windows' persisted app mute enabled.
+  if ($null -ne $lastPid) { try { [SessionMute]::Set($lastPid, $false) } catch {} }
 }
 `;
 
 function ensureWorker(): ChildProcessWithoutNullStreams | null {
-  if (process.platform !== "win32") return null;
+  if (process.platform !== "win32" || shuttingDown) return null;
   if (worker && !worker.killed) return worker;
   worker = spawn("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", workerScript], {
     windowsHide: true,
@@ -68,6 +78,7 @@ function applyDesiredMute(): void {
   const pid = detectAoe2NativeProcess().pid;
   const activeWorker = ensureWorker();
   if (!pid || !activeWorker?.stdin.writable) return;
+  lastManagedPid = pid;
   activeWorker.stdin.write(`${pid}|${desiredMuted ? 1 : 0}\n`);
 }
 
@@ -104,4 +115,30 @@ export function endAoe2MatchAudioSuppression(): void {
   matchAudioManaged = false;
   gameplayStarted = false;
   setDesiredMute(false);
+}
+
+export async function restoreAoe2AudioOnShutdown(): Promise<void> {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = undefined;
+  matchAudioManaged = false;
+  gameplayStarted = false;
+  desiredMuted = false;
+
+  const pid = detectAoe2NativeProcess().pid ?? lastManagedPid;
+  // Recreate a failed worker if necessary. A previous worker may have applied
+  // mute successfully and then exited before shutdown restoration.
+  const activeWorker = pid ? ensureWorker() : worker;
+  if (pid && activeWorker?.stdin.writable) {
+    // Preserve ordering on the worker's stdin: this unmute is processed after
+    // every queued mute, then EOF triggers its independent finally safeguard.
+    activeWorker.stdin.write(`${pid}|0\n`);
+    activeWorker.stdin.end();
+    await Promise.race([
+      new Promise<void>((resolve) => activeWorker.once("exit", () => resolve())),
+      new Promise<void>((resolve) => setTimeout(resolve, 1_000))
+    ]);
+  }
+  shuttingDown = true;
+  worker = null;
+  lastManagedPid = undefined;
 }

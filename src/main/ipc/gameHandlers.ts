@@ -50,7 +50,8 @@ import { isAoe2LanguageId } from "../../shared/aoe2Languages.js";
 import {
   beginAoe2GameplayAudio,
   beginAoe2MatchAudioSuppression,
-  endAoe2MatchAudioSuppression
+  endAoe2MatchAudioSuppression,
+  restoreAoe2AudioOnShutdown
 } from "../aoe2AudioSuppression.js";
 import {
   closeAoe2NativeWindow,
@@ -2720,15 +2721,17 @@ export function registerGameHandlers(): void {
   app.on("before-quit", (event) => {
     releaseAllInputSuppression("BeforeQuit");
     stopReplayEndDetection();
-    if (!ownedAoe2Pid || !ownedAoe2WindowReady || quittingAfterGameCleanup) {
-      if ((ownedAoe2Pid || launchRequested) && !ownedAoe2WindowReady) {
-        console.info("[AoE2 process] SHUTDOWN_CLEANUP_SKIPPED|Reason=WindowNotReady");
-      }
-      return;
-    }
+    if (quittingAfterGameCleanup) return;
     event.preventDefault();
     quittingAfterGameCleanup = true;
     void (async () => {
+      await restoreAoe2AudioOnShutdown();
+      if (!ownedAoe2Pid || !ownedAoe2WindowReady) {
+        if ((ownedAoe2Pid || launchRequested) && !ownedAoe2WindowReady) {
+          console.info("[AoE2 process] SHUTDOWN_CLEANUP_SKIPPED|Reason=WindowNotReady");
+        }
+        return;
+      }
       const pid = ownedAoe2Pid;
       ownedAoe2Pid = undefined;
       ownedAoe2WindowReady = false;
