@@ -1,5 +1,8 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { spawn } from "node:child_process";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { playerRatingForQueue, ratingPoolForQueue } from "./rating-pool.mjs";
 import { replayPlayerWon } from "./replay-result.mjs";
 import { WebSocket, WebSocketServer } from "ws";
@@ -45,6 +48,7 @@ const publicBaseUrl = (process.env.PUBLIC_MATCHMAKER_URL ?? `http://127.0.0.1:${
 const adminToken = process.env.MATCHMAKER_ADMIN_TOKEN ?? "";
 const adminSessions = new Map();
 const adminSessionLifetimeMs = 12 * 60 * 60 * 1000;
+const systemdManaged = Boolean(process.env.INVOCATION_ID || process.env.JOURNAL_STREAM);
 const tickets = new Map();
 const matches = new Map();
 const playersJoiningQueue = new Set();
@@ -406,6 +410,25 @@ function adminTokenMatches(candidate) {
   const expected = createHash("sha256").update(adminToken).digest();
   const actual = createHash("sha256").update(candidate).digest();
   return timingSafeEqual(expected, actual);
+}
+
+function restartMatchmaker() {
+  if (!systemdManaged) {
+    const scriptUrl = pathToFileURL(resolve(process.argv[1])).href;
+    const replacement = spawn(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `setTimeout(() => import(${JSON.stringify(scriptUrl)}), 750)`
+    ], {
+      cwd: process.cwd(),
+      env: process.env,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true
+    });
+    replacement.unref();
+  }
+  process.exit(1);
 }
 
 function adminSession(request) {
@@ -1235,7 +1258,7 @@ async function handleRequest(request, response) {
       }
       if (request.method === "POST" && url.pathname === "/admin/api/restart") {
         send(response, 202, { restarting: true });
-        setTimeout(() => process.exit(1), 250).unref();
+        setTimeout(restartMatchmaker, 250).unref();
         return;
       }
       return send(response, 404, { error: "Admin endpoint not found." });
