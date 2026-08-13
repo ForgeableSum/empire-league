@@ -1020,12 +1020,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const inputLock = await window.electronApi?.setLobbyInputLock(true)
             .catch(() => ({ locked: false }));
           if (!inputLock?.locked) {
-            await handleLobbySetupFailure(
-              acceptedSession.queue,
-              "Empire League could not secure the lobby automation input lock.",
-              { criticalFailure: { code: "LOBBY_INPUT_LOCK_FAILED", phase: "lobby_setup" } }
-            );
-            return;
+            log("LOBBY_INPUT_LOCK_EARLY_MISS | Continuing lobby automation; the automation sequence will retry the guard");
           }
           const setupEstimateMs = estimateLobbySetupMs(acceptedSession);
           startRoomSetupWatchdog(event.role === "guest"
