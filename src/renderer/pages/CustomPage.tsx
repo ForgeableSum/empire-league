@@ -381,7 +381,14 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
             await new Promise((resolve) => window.setTimeout(resolve, customContentHostRecoveryMs));
           }
           if (activeAutomationAttemptRef.current !== automationAttemptId) return;
-          if (content?.kind !== "scenario" || room.source === "weekly") await applyMapPlayerSettings(me);
+          // Player settings were applied before the host first readied. During
+          // custom-content recovery AoE2 may leave that Ready state intact; in
+          // that case trying to open the civilization picker is ignored and its
+          // lobby-background pixels are misreported as a failed selection.
+          // Recovery only needs to restore/verify Ready, not reapply settings.
+          if (acceptedContentCount === 0 && (content?.kind !== "scenario" || room.source === "weekly")) {
+            await applyMapPlayerSettings(me);
+          }
           if (activeAutomationAttemptRef.current !== automationAttemptId) return;
           const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready", "custom");
           if (activeAutomationAttemptRef.current !== automationAttemptId) return;
