@@ -822,7 +822,13 @@ async function startReplayEndDetection(
         }
       }
 
-      if (!observedGrowth && Date.now() - startedAt >= replayStartTimeoutMs) {
+      // A replay created during this watch is already proof that recording
+      // started. Its first snapshot can remain unchanged for longer than the
+      // startup deadline on slower machines, so observedGrowth alone is not a
+      // safe startup signal. emitReplayStarted handles both valid cases: a new
+      // replay discovered after Start Game, or a pre-existing candidate that
+      // subsequently grows.
+      if (!replayStartedEmitted && Date.now() - startedAt >= replayStartTimeoutMs) {
         stopReplayEndDetection();
         focusMainWindowAfterReplay(window);
         if (!window.webContents.isDestroyed()) {
