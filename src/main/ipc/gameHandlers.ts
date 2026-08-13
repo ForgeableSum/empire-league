@@ -517,7 +517,8 @@ const replayPollIntervalMs = 1500;
 const replayStartupWindowMs = 60_000;
 const replayStartupStableForMs = 6_000;
 const replayRunningStableForMs = 3_000;
-const replayStartTimeoutMs = 30_000;
+const replayStartWarningMs = 30_000;
+const replayStartTimeoutMs = 60_000;
 
 interface ReplaySnapshot {
   path: string;
@@ -702,6 +703,7 @@ async function startReplayEndDetection(
   let recoveredFromMainMenu = false;
   let observedGameProcess = false;
   let recoveredFromProcessExit = false;
+  let replayStartWarningEmitted = false;
 
   const initialFiles = await findReplayFiles(configuredFolder);
   if (configuredFolder?.trim() && initialFiles.length === 0) {
@@ -822,19 +824,32 @@ async function startReplayEndDetection(
         }
       }
 
+      const replayStartElapsedMs = Date.now() - startedAt;
+      if (
+        !replayStartedEmitted
+        && !replayStartWarningEmitted
+        && replayStartElapsedMs >= replayStartWarningMs
+      ) {
+        replayStartWarningEmitted = true;
+        console.warn(
+          `[AoE2 replay] START_DELAYED|WarningMs=${replayStartWarningMs}`
+          + `|TimeoutMs=${replayStartTimeoutMs}`
+        );
+      }
+
       // A replay created during this watch is already proof that recording
       // started. Its first snapshot can remain unchanged for longer than the
       // startup deadline on slower machines, so observedGrowth alone is not a
       // safe startup signal. emitReplayStarted handles both valid cases: a new
       // replay discovered after Start Game, or a pre-existing candidate that
       // subsequently grows.
-      if (!replayStartedEmitted && Date.now() - startedAt >= replayStartTimeoutMs) {
+      if (!replayStartedEmitted && replayStartElapsedMs >= replayStartTimeoutMs) {
         stopReplayEndDetection();
         focusMainWindowAfterReplay(window);
         if (!window.webContents.isDestroyed()) {
           window.webContents.send(
             "game:replay-detection-failed",
-            "The replay file did not start updating within 30 seconds of the match starting."
+            "The replay file did not start updating within 60 seconds of the match starting."
           );
         }
         console.warn(`[AoE2 replay] START_TIMEOUT|TimeoutMs=${replayStartTimeoutMs}`);
