@@ -41,6 +41,7 @@ export function App() {
 
   const { page, state, lobbyAutomationActive, authStatus, authError, signInWithSteam, notify } = useAppStore();
   const rankedLobbyTransition = ["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error;
+  const rankedInputGuardActive = ["match_found", "accepting"].includes(state.queueStatus) || rankedLobbyTransition;
   const gameInSession = state.queueStatus === "in_game" || state.gameStatus === "in_match";
 
   useEffect(() => {
@@ -242,7 +243,7 @@ export function App() {
 
   return (
     <>
-      <LobbyInputForwarding active={lobbyAutomationActive || rankedLobbyTransition} manageNativeLock={rankedLobbyTransition && !lobbyAutomationActive} />
+      <LobbyInputForwarding active={lobbyAutomationActive || rankedInputGuardActive} manageNativeLock={rankedInputGuardActive} />
       <Shell socialUnreadCount={friends.reduce((total, friend) => total + (friend.unread ?? 0), 0)}>
         {page === "home" && <HomePage />}
         {page === "ranked" && <QueuePage />}

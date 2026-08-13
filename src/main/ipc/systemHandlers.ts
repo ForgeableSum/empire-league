@@ -21,6 +21,13 @@ export function registerSystemHandlers(): void {
     if (!window) return;
     focusMainWindow(window);
     window.moveTop();
+    const focusDeadline = Date.now() + 2_000;
+    while (!window.isFocused() && Date.now() < focusDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      focusMainWindow(window);
+      window.moveTop();
+    }
+    if (!window.isFocused()) throw new Error("The Empire League window could not be focused for the match-found prompt.");
     if (!showNotification) return;
 
     window.flashFrame(true);

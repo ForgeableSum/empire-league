@@ -1388,7 +1388,10 @@ public static class AoeInputGuard {
     EnumWindows((window, _) => {
       uint processId;
       GetWindowThreadProcessId(window, out processId);
-      if (processId == targetProcessId && IsWindowVisible(window)) {
+      // AoE2 is deliberately hidden while Empire League is taskbar-minimized.
+      // Its top-level window is still sufficient for the global input hooks
+      // and will be revealed later by lobby automation.
+      if (processId == targetProcessId) {
         found = window;
         return false;
       }

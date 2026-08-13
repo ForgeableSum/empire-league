@@ -995,6 +995,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             status: "match_found" as const
           };
           matchedSessionRef.current = matchedSession;
+          if (window.electronApi) {
+            await window.electronApi.alertMatchFound(state.settings.matchNotifications).catch((error: unknown) => {
+              log(`MATCH_FOUND_FOCUS_FAILED | ${error instanceof Error ? error.message : "Unknown error"}`);
+            });
+          }
           setPage("ranked");
           setState((previous) => ({
             ...previous,
@@ -1005,7 +1010,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             activeMatch: matchedSession
           }));
           log(`Match found: ${event.match.id}`);
-          void window.electronApi?.alertMatchFound(state.settings.matchNotifications);
         }
         if (event.type === "opponent_accepted") {
           const matchedSession = matchedSessionRef.current;
@@ -1017,11 +1021,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             acceptedByOpponent: true,
             status: event.role === "host" ? "creating_lobby" as const : "waiting_for_opponent" as const
           };
-          const inputLock = await window.electronApi?.setLobbyInputLock(true)
-            .catch(() => ({ locked: false }));
-          if (!inputLock?.locked) {
-            log("LOBBY_INPUT_LOCK_EARLY_MISS | Continuing lobby automation; the automation sequence will retry the guard");
-          }
           const setupEstimateMs = estimateLobbySetupMs(acceptedSession);
           startRoomSetupWatchdog(event.role === "guest"
             ? Math.max(roomSetupTimeoutMs, setupEstimateMs + roomSetupEstimateMarginMs)
