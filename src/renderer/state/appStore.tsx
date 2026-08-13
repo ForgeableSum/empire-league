@@ -417,39 +417,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const match = stateRef.current.activeMatch;
       const queueStatus = stateRef.current.queueStatus;
       const inFlight = replayResultInFlightRef.current;
-      log(
-        `REPLAY_RESULT|Event=Received|Match=${match?.id ?? "none"}|QueueStatus=${queueStatus}`
-        + `|InFlight=${inFlight}|File=${filePath}`
-      );
       if (!match) {
-        log(`REPLAY_RESULT|Event=Ignored|Reason=NoActiveMatch|QueueStatus=${queueStatus}|File=${filePath}`);
         return;
       }
       if (queueStatus !== "in_game") {
-        log(
-          `REPLAY_RESULT|Event=Ignored|Reason=QueueStatus|Match=${match.id}`
-          + `|QueueStatus=${queueStatus}|File=${filePath}`
-        );
         return;
       }
       if (inFlight) {
-        log(`REPLAY_RESULT|Event=Ignored|Reason=AlreadyInFlight|Match=${match.id}|File=${filePath}`);
         return;
       }
       replayResultInFlightRef.current = true;
-      log(`REPLAY_RESULT|Event=Accepted|Match=${match.id}|File=${filePath}`);
       void (async () => {
         let replay: Awaited<ReturnType<typeof parseReplayMetadata>>;
         try {
-          log(`REPLAY_RESULT|Event=ParseStarted|Match=${match.id}|File=${filePath}`);
           replay = await parseReplayMetadata(filePath, match.queue.format === "team");
         } catch (error) {
           if (error instanceof ReplayNotFinishedError) {
             replayResultInFlightRef.current = false;
-            log(
-              `REPLAY_RESULT|Event=ParseDeferred|Match=${match.id}`
-              + `|Reason=${error.message}|File=${filePath}`
-            );
             return;
           }
           const message = error instanceof Error ? error.message : "Replay parsing failed.";
