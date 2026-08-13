@@ -1,5 +1,7 @@
 import { aoe2UiManifest, type Aoe2UiAction } from "../../shared/aoe2UiManifest";
 import type { CivilizationPreference, MatchSession } from "../../shared/contracts/matchmaking";
+import type { CustomLobbyRoom } from "../../shared/contracts/customLobby";
+import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import {
   adaptiveLobbyTimingEnabled,
   contentConfirmationKeyDelayMs,
@@ -74,6 +76,52 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
     total += lobbySetupTiming.customMapTransferPollMs;
   }
 
+  total += actionDuration(actions.guestReady);
+  total += lobbySetupTiming.hostReadyToStartMs + lobbySetupTiming.startGameSettleMs;
+  total += actionDuration(actions.startGame) + lobbySetupEstimateTiming.gameRevealMs;
+  return total;
+}
+
+/** Deterministic estimate for the custom-room automation path. */
+export function estimateCustomLobbySetupMs(room: CustomLobbyRoom): number {
+  const actions = aoe2UiManifest.actions;
+  const mapPicker = aoe2UiManifest.mapPicker;
+  const catalogMap = enabledMapCatalogEntries.find((entry) =>
+    entry.id === room.map?.id || entry.gameMapName === room.map?.gameName
+  );
+  const usesCustomContent = Boolean(room.dataMod || room.map?.kind === "scenario")
+    || (room.map ? (catalogMap ? Boolean(catalogMap.isCustomMap) : true) : false);
+  const selectsPlayerSettings = room.map?.kind !== "scenario" || room.source === "weekly";
+
+  let total = lobbySetupTiming.hostLobbyAutomationOverheadMs
+    + lobbySetupEstimateTiming.hostSetupSafetyMarginMs;
+  if (room.source === "weekly") total += lobbySetupTiming.hostLobbyAutomationSettleMs;
+  total += (multiplayerTabCount * multiplayerTabDelayMs) + actions.multiplayer.settleMs;
+  total += actionDuration(actions.hostGame) + clickEnterDelayMs;
+  total += actionDuration(actions.createLobby);
+  total += defaultClickDurationMs() + lobbySetupTiming.resetFocusMs + lobbySetupTiming.resetConfirmationMs;
+  total += defaultClickDurationMs() + mapPicker.openSettleMs;
+  total += defaultClickDurationMs() + mapPicker.styleMenuSettleMs;
+  total += defaultClickDurationMs() + mapPicker.styleSelectionSettleMs;
+  total += defaultClickDurationMs() + mapPicker.searchSettleMs;
+  total += defaultClickDurationMs() + mapPicker.selectionSettleMs;
+  total += actionDuration(actions.copyLobbyUri) + lobbySetupTiming.clipboardReadMs;
+  total += lobbySetupTiming.lobbyMetadataMs + lobbySetupEstimateTiming.guestJoinMs;
+
+  if (selectsPlayerSettings) {
+    // Each machine configures its own slot concurrently, so budget for one
+    // selection path rather than multiplying the estimate by player count.
+    total += civilizationSelectionDuration({ mode: "pick", civilization: "Random" });
+  }
+  total += lobbySetupTiming.hostReadySettleMs + actionDuration(actions.hostReady);
+  if (usesCustomContent) {
+    total += lobbySetupEstimateTiming.customTransferReadyAdjustmentMs;
+    total += lobbySetupTiming.customMapTransferPollMs + actions.guestReady.settleMs;
+    total += contentConfirmationKeyDelayMs + actions.confirmGuestContent.settleMs;
+    total += lobbySetupTiming.hostReadySettleMs + actionDuration(actions.hostReady);
+  } else {
+    total += lobbySetupTiming.customMapTransferPollMs;
+  }
   total += actionDuration(actions.guestReady);
   total += lobbySetupTiming.hostReadyToStartMs + lobbySetupTiming.startGameSettleMs;
   total += actionDuration(actions.startGame) + lobbySetupEstimateTiming.gameRevealMs;

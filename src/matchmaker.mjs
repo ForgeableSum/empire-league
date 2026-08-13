@@ -1560,6 +1560,7 @@ async function handleRequest(request, response) {
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can start the lobby." });
       if (!room.players.length || room.players.some((player) => !player.ready)) return send(response, 409, { error: "Every player must be ready." });
       room.status = "launching";
+      room.automationStartedAt = new Date().toISOString();
       room.gameStartedAt = undefined;
       room.platformLobbyId = undefined;
       room.automationError = undefined;

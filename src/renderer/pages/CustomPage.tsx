@@ -7,6 +7,7 @@ import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runtimeConfig";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { customLobbyService } from "../services/customLobbyService";
+import { estimateCustomLobbySetupMs } from "../services/lobbyTimingService";
 import { replayHasEnded } from "../services/replayMetadataService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import { useAppStore } from "../state/appStore";
@@ -552,7 +553,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
         onChange={(key, checked) => act(customLobbyService.updateSettings(room.id, { [key]: checked }))}
       />
       <div className={`custom-lobby-actions${room.status !== "open" ? " launching" : ""}`}>
-        <span>{room.status === "started" ? <GameStartCountdown startedAt={room.gameStartedAt} /> : room.status === "launching" ? <>Creating and synchronizing the AoE2 lobby<AnimatedEllipsis /></> : room.automationError ? room.automationError : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>
+        <span>{room.status === "started" || room.status === "launching" ? <GameStartCountdown room={room} /> : room.automationError ? room.automationError : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>
         {isHost && <button className="primary large" disabled={startRequestPending || room.status !== "open" || !room.map || !room.players.every((player) => player.ready)} onClick={() => act(startCustomGame())}>{startRequestPending || room.status !== "open" ? <>Starting<AnimatedEllipsis /></> : "Start Game"}</button>}
       </div>
     </section>
@@ -619,23 +620,25 @@ export function AnimatedEllipsis() {
   return <span className="animated-ellipsis" aria-hidden="true"><i /><i /><i /></span>;
 }
 
-function GameStartCountdown({ startedAt }: { startedAt?: string }) {
-  const [remaining, setRemaining] = useState(() => customGameCountdownRemaining(startedAt));
+function GameStartCountdown({ room }: { room: CustomLobbyRoom }) {
+  const [remaining, setRemaining] = useState(() => customGameCountdownRemaining(room));
 
   useEffect(() => {
-    const update = () => setRemaining(customGameCountdownRemaining(startedAt));
+    const update = () => setRemaining(customGameCountdownRemaining(room));
     update();
     const timer = window.setInterval(update, 100);
     return () => window.clearInterval(timer);
-  }, [startedAt]);
+  }, [room.status, room.automationStartedAt, room.gameStartedAt]);
 
   return remaining > 0
     ? <span className="custom-game-countdown-label" aria-live="polite">Game starts in <strong className="custom-game-countdown">{remaining}</strong></span>
     : <>Entering game<AnimatedEllipsis /></>;
 }
 
-function customGameCountdownRemaining(startedAt?: string): number {
-  if (!startedAt) return 5;
+function customGameCountdownRemaining(room: CustomLobbyRoom): number {
+  const startedAt = room.status === "launching" ? room.automationStartedAt : room.gameStartedAt;
+  const countdownMs = room.status === "launching" ? estimateCustomLobbySetupMs(room) : 5_000;
+  if (!startedAt) return Math.ceil(countdownMs / 1_000);
   const elapsedMs = Math.max(0, Date.now() - new Date(startedAt).getTime());
-  return Math.max(0, Math.ceil((5_000 - elapsedMs) / 1_000));
+  return Math.max(0, Math.ceil((countdownMs - elapsedMs) / 1_000));
 }
