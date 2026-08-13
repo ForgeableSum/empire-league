@@ -2933,14 +2933,34 @@ export function registerGameHandlers(): void {
       throw new Error("A match ID is required for the gameplay handoff.");
     }
     const startedAt = Date.now();
-    const audioResult = await beginAoe2GameplayAudio();
-    console.info(`[AoE2 audio] GAMEPLAY_VERIFY|Match=${matchId}|${audioResult}`);
-    if (!_event.sender.isDestroyed()) {
-      _event.sender.send("game:automation-log", `AUDIO|Phase=Gameplay|Match=${matchId}|${audioResult}`);
-    }
-    if (!audioResult.includes("Verified=True") || !audioResult.includes("ResultingMuted=0")) {
-      throw new Error(`AoE2 audio could not be verified for gameplay: ${audioResult}`);
-    }
+    let gameplayAudioVerificationPending = false;
+    const beginGameplayAudioInBackground = (phase: "initial" | "post-handoff") => {
+      if (gameplayAudioVerificationPending) return;
+      gameplayAudioVerificationPending = true;
+      void beginAoe2GameplayAudio().then((audioResult) => {
+        console.info(`[AoE2 audio] GAMEPLAY_VERIFY|Match=${matchId}|Phase=${phase}|${audioResult}`);
+        if (!_event.sender.isDestroyed()) {
+          _event.sender.send(
+            "game:automation-log",
+            `AUDIO|Phase=Gameplay|HandoffPhase=${phase}|Match=${matchId}|${audioResult}`
+          );
+        }
+        if (!audioResult.includes("Verified=True") || !audioResult.includes("ResultingMuted=0")) {
+          console.warn(`[AoE2 audio] GAMEPLAY_VERIFY_FAILED|Match=${matchId}|Phase=${phase}|${audioResult}`);
+        }
+      }).catch((error) => {
+        console.warn(
+          `[AoE2 audio] GAMEPLAY_VERIFY_ERROR|Match=${matchId}|Phase=${phase}`
+          + `|${error instanceof Error ? error.message : String(error)}`
+        );
+      }).finally(() => {
+        gameplayAudioVerificationPending = false;
+      });
+    };
+    // Audio-session discovery can take several seconds while AoE2 transitions
+    // through loading. It is useful recovery work, but must never gate the
+    // cover removal or the vital Windows foreground handoff.
+    beginGameplayAudioInBackground("initial");
     void setObsCaptureMode("game");
     let focused = false;
     let lastPid: number | undefined;
@@ -3018,7 +3038,7 @@ export function registerGameHandlers(): void {
       // removed. That focus event intentionally remutes AoE2, so make the
       // completed explicit gameplay handoff the final audio authority after
       // every focus/topmost transition has settled.
-      beginAoe2GameplayAudio();
+      beginGameplayAudioInBackground("post-handoff");
       await appendGameplayHandoffLog({
         matchId,
         phase: "complete",
