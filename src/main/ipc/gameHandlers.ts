@@ -3000,6 +3000,11 @@ export function registerGameHandlers(): void {
       return { focused: false };
     } finally {
       releaseAllInputSuppression("GameplayHandoff");
+      // Electron can briefly regain focus while its fullscreen cover is being
+      // removed. That focus event intentionally remutes AoE2, so make the
+      // completed explicit gameplay handoff the final audio authority after
+      // every focus/topmost transition has settled.
+      beginAoe2GameplayAudio();
       await appendGameplayHandoffLog({
         matchId,
         phase: "complete",

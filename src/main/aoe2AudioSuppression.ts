@@ -82,8 +82,12 @@ function applyDesiredMute(): void {
   activeWorker.stdin.write(`${pid}|${desiredMuted ? 1 : 0}\n`);
 }
 
-function setDesiredMute(muted: boolean): void {
+function setDesiredMute(muted: boolean, source: string): void {
   desiredMuted = muted;
+  console.info(
+    `[AoE2 audio] STATE|Muted=${muted}|Source=${source}`
+    + `|Managed=${matchAudioManaged}|GameplayStarted=${gameplayStarted}`
+  );
   applyDesiredMute();
   if (refreshTimer) clearInterval(refreshTimer);
   // Audio sessions can be recreated while AoE2 changes screens. Poll quickly
@@ -94,13 +98,13 @@ function setDesiredMute(muted: boolean): void {
 export function beginAoe2MatchAudioSuppression(): void {
   matchAudioManaged = true;
   gameplayStarted = false;
-  setDesiredMute(true);
+  setDesiredMute(true, "MatchSuppression");
 }
 
 export function beginAoe2GameplayAudio(): void {
   if (!matchAudioManaged) return;
   gameplayStarted = true;
-  setDesiredMute(false);
+  setDesiredMute(false, "GameplayHandoff");
 }
 
 export function handleEmpireLeagueAudioFocus(focused: boolean): void {
@@ -108,13 +112,13 @@ export function handleEmpireLeagueAudioFocus(focused: boolean): void {
   // Leaving Electron may mean an external link, Alt+Tab, or another utility;
   // none of those is permission to restore game audio. Only the explicit
   // gameplay handoff above may unmute AoE2.
-  if (focused) setDesiredMute(true);
+  if (focused) setDesiredMute(true, "ElectronFocus");
 }
 
 export function endAoe2MatchAudioSuppression(): void {
   matchAudioManaged = false;
   gameplayStarted = false;
-  setDesiredMute(false);
+  setDesiredMute(false, "MatchSuppressionEnded");
 }
 
 export async function restoreAoe2AudioOnShutdown(): Promise<void> {
