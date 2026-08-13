@@ -496,20 +496,15 @@ export function QueuePage() {
                     const Icon = mode.icon;
                     return (
                       <div
-                        className={
-                          civilizationMode === mode.id || (preferRandom && civilizationMode === "pick" && mode.id === "random")
-                            ? "civilization-option-card active"
-                            : "civilization-option-card"
-                        }
+                        className={civilizationMode === mode.id
+                          ? "civilization-option-card active"
+                          : "civilization-option-card"}
                         key={mode.id}
                       >
                         <button
                           className="civilization-mode-choice"
                           type="button"
-                          aria-pressed={
-                            civilizationMode === mode.id
-                              || (preferRandom && civilizationMode === "pick" && mode.id === "random")
-                          }
+                          aria-pressed={civilizationMode === mode.id}
                           disabled={preferencesLocked}
                           onClick={() => selectCivilizationMode(mode.id)}
                         >
