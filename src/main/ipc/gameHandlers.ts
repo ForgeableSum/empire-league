@@ -2926,7 +2926,14 @@ export function registerGameHandlers(): void {
       throw new Error("A match ID is required for the gameplay handoff.");
     }
     const startedAt = Date.now();
-    beginAoe2GameplayAudio();
+    const audioResult = await beginAoe2GameplayAudio();
+    console.info(`[AoE2 audio] GAMEPLAY_VERIFY|Match=${matchId}|${audioResult}`);
+    if (!_event.sender.isDestroyed()) {
+      _event.sender.send("game:automation-log", `AUDIO|Phase=Gameplay|Match=${matchId}|${audioResult}`);
+    }
+    if (!audioResult.includes("Verified=True") || !audioResult.includes("ResultingMuted=0")) {
+      throw new Error(`AoE2 audio could not be verified for gameplay: ${audioResult}`);
+    }
     void setObsCaptureMode("game");
     let focused = false;
     let lastPid: number | undefined;

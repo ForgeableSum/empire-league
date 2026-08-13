@@ -9,6 +9,8 @@ let refreshTimer: NodeJS.Timeout | undefined;
 let lastManagedPid: number | undefined;
 let shuttingDown = false;
 let workerGeneration = 0;
+let nextRequestId = 0;
+const pendingRequests = new Map<number, { resolve: (message: string) => void; timer: NodeJS.Timeout }>();
 
 // Core Audio exposes per-process mute through audio sessions, but not through a
 // regular Win32 function. Keep one lightweight PowerShell worker alive so the
@@ -44,19 +46,18 @@ public static class SessionMute {
   }
   private static readonly List<Lease> leases = new List<Lease>();
 
-  private static void RestoreAll() {
+  private static int RestoreAll() {
     Guid context = Guid.Empty;
+    int restored = 0;
     foreach (Lease lease in leases) {
-      try { lease.Volume.SetMute(lease.OriginalMute, ref context); } catch { }
+      try { lease.Volume.SetMute(lease.OriginalMute, ref context); restored++; } catch { }
     }
     leases.Clear();
+    return restored;
   }
 
-  public static void Reconcile(uint pid, bool muted) {
-    // Unmuting means releasing our lease and restoring exactly what the user
-    // had before Empire League touched the session. PID 0 also restores a
-    // dead/replaced AoE2 process through the COM objects retained below.
-    if (!muted || pid == 0) { RestoreAll(); return; }
+  public static string Apply(uint pid, string mode) {
+    if (mode == "RESTORE") return "Restored=" + RestoreAll().ToString();
     for (int i = leases.Count - 1; i >= 0; i--) {
       if (leases[i].ProcessId != pid) {
         Guid restoreContext = Guid.Empty;
@@ -64,23 +65,37 @@ public static class SessionMute {
         leases.RemoveAt(i);
       }
     }
+    if (pid == 0) return "Sessions=0|Changed=0|Verified=False";
     IMMDevice d; ((IMMDeviceEnumerator)new MMDeviceEnumerator()).GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out d);
     Guid id = typeof(IAudioSessionManager2).GUID; object o; d.Activate(ref id, 23, IntPtr.Zero, out o);
     IAudioSessionEnumerator e; ((IAudioSessionManager2)o).GetSessionEnumerator(out e); int count; e.GetCount(out count);
     Guid context = Guid.Empty;
+    int sessions = 0, changed = 0, originallyMuted = 0, resultingMuted = 0;
     for (int i = 0; i < count; i++) {
       IAudioSessionControl c; e.GetSession(i, out c); var c2 = (IAudioSessionControl2)c; uint p; c2.GetProcessId(out p);
       if (p == pid) {
+        sessions++;
         IntPtr instancePointer; c2.GetSessionInstanceIdentifier(out instancePointer);
         string instanceId = Marshal.PtrToStringUni(instancePointer) ?? (pid.ToString() + ":" + i.ToString());
         if (instancePointer != IntPtr.Zero) Marshal.FreeCoTaskMem(instancePointer);
         var volume = (ISimpleAudioVolume)c; bool current; volume.GetMute(out current);
         bool known = false;
         foreach (Lease lease in leases) { if (lease.InstanceId == instanceId) { known = true; break; } }
-        if (!known) leases.Add(new Lease { ProcessId = pid, InstanceId = instanceId, Volume = volume, OriginalMute = current });
-        if (!current) volume.SetMute(true, ref context);
+        if (!known) {
+          leases.Add(new Lease { ProcessId = pid, InstanceId = instanceId, Volume = volume, OriginalMute = current });
+          if (current) originallyMuted++;
+        } else {
+          foreach (Lease lease in leases) { if (lease.InstanceId == instanceId && lease.OriginalMute) { originallyMuted++; break; } }
+        }
+        bool target = mode == "MUTE";
+        if (current != target) { volume.SetMute(target, ref context); changed++; }
+        bool result; volume.GetMute(out result); if (result) resultingMuted++;
       }
     }
+    bool verified = sessions > 0 && (mode == "MUTE" ? resultingMuted == sessions : resultingMuted == 0);
+    return "Sessions=" + sessions.ToString() + "|Changed=" + changed.ToString()
+      + "|OriginallyMuted=" + originallyMuted.ToString() + "|ResultingMuted=" + resultingMuted.ToString()
+      + "|Verified=" + verified.ToString();
   }
   public static void Restore() { RestoreAll(); }
 }
@@ -88,9 +103,11 @@ public static class SessionMute {
 try {
   while (($line = [Console]::ReadLine()) -ne $null) {
     try {
-      $parts = $line.Split('|')
-      [SessionMute]::Reconcile([uint32]$parts[0], $parts[1] -eq '1')
-    } catch { [Console]::Error.WriteLine($_.Exception.Message) }
+      $parts = $line -split '\|'
+      $result = [SessionMute].GetMethod('Apply').Invoke($null, @([uint32]$parts[1], [string]$parts[2]))
+      [Console]::WriteLine("AUDIO_RESULT|" + $parts[0] + "|Mode=" + $parts[2] + "|Pid=" + $parts[1] + "|" + $result)
+      [Console]::Out.Flush()
+    } catch { [Console]::WriteLine("AUDIO_RESULT|" + $parts[0] + "|Error=" + $_.Exception.Message); [Console]::Out.Flush() }
   }
 } finally {
   # Held COM session objects let us restore even after AoE2's PID disappears.
@@ -117,17 +134,49 @@ function ensureWorker(): ChildProcessWithoutNullStreams | null {
     console.info(`[AoE2 audio] WORKER_EXIT|Generation=${generation}|Code=${code ?? "null"}`);
     if (worker === activeWorker) worker = null;
   });
+  let stdoutBuffer = "";
+  activeWorker.stdout.on("data", (data: Buffer) => {
+    stdoutBuffer += data.toString();
+    const lines = stdoutBuffer.split(/\r?\n/);
+    stdoutBuffer = lines.pop() ?? "";
+    for (const message of lines.filter(Boolean)) {
+      console.info(`[AoE2 audio] ${message}`);
+      const match = /^AUDIO_RESULT\|(\d+)\|/.exec(message);
+      if (!match) continue;
+      const request = pendingRequests.get(Number(match[1]));
+      if (!request) continue;
+      clearTimeout(request.timer);
+      pendingRequests.delete(Number(match[1]));
+      request.resolve(message);
+    }
+  });
   activeWorker.stderr.on("data", (data: Buffer) => console.warn(`[AoE2 audio] ${data.toString().trim()}`));
   return activeWorker;
 }
 
-function applyDesiredMute(): void {
+function sendAudioCommand(mode: "MUTE" | "AUDIBLE" | "RESTORE", waitForResult = false): Promise<string> {
   const pid = detectAoe2NativeProcess().pid;
   const activeWorker = ensureWorker();
-  if (!activeWorker?.stdin.writable) return;
+  if (!activeWorker?.stdin.writable) return Promise.resolve("AUDIO_RESULT|0|Error=WorkerUnavailable");
   if (pid) lastManagedPid = pid;
-  // PID 0 tells the worker to restore its retained lease after a manual exit.
-  activeWorker.stdin.write(`${pid ?? 0}|${desiredMuted ? 1 : 0}\n`);
+  const requestId = ++nextRequestId;
+  if (!waitForResult) {
+    activeWorker.stdin.write(`${requestId}|${pid ?? 0}|${mode}\n`);
+    return Promise.resolve(`AUDIO_RESULT|${requestId}|Queued=True`);
+  }
+  const result = new Promise<string>((resolve) => {
+    const timer = setTimeout(() => {
+      pendingRequests.delete(requestId);
+      resolve(`AUDIO_RESULT|${requestId}|Mode=${mode}|Pid=${pid ?? 0}|Error=Timeout`);
+    }, 2_000);
+    pendingRequests.set(requestId, { resolve, timer });
+  });
+  activeWorker.stdin.write(`${requestId}|${pid ?? 0}|${mode}\n`);
+  return result;
+}
+
+function applyDesiredMute(): void {
+  void sendAudioCommand(desiredMuted ? "MUTE" : "AUDIBLE");
 }
 
 function setDesiredMute(muted: boolean, source: string): void {
@@ -150,10 +199,27 @@ export function beginAoe2MatchAudioSuppression(): void {
   setDesiredMute(true, "MatchSuppression");
 }
 
-export function beginAoe2GameplayAudio(): void {
-  if (!matchAudioManaged) return;
+export async function beginAoe2GameplayAudio(): Promise<string> {
+  if (!matchAudioManaged) return "AUDIO_RESULT|0|Mode=AUDIBLE|Error=AudioNotManaged";
   gameplayStarted = true;
-  setDesiredMute(false, "GameplayHandoff");
+  desiredMuted = false;
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = undefined;
+  console.info("[AoE2 audio] STATE|Muted=false|Source=GameplayHandoff|Managed=true|GameplayStarted=true");
+  let result = "AUDIO_RESULT|0|Mode=AUDIBLE|Error=NotAttempted";
+  for (let attempt = 1; attempt <= 20; attempt += 1) {
+    result = await sendAudioCommand("AUDIBLE", true);
+    console.info(`[AoE2 audio] GAMEPLAY_ATTEMPT|Attempt=${attempt}|${result}`);
+    if (result.includes("Verified=True") && result.includes("ResultingMuted=0")) {
+      // AoE2 may replace its session while moving from loading into gameplay.
+      // Read-before-write in the worker makes this guard silent and idempotent.
+      refreshTimer = setInterval(() => void sendAudioCommand("AUDIBLE"), 250);
+      refreshTimer.unref();
+      return result;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 250));
+  }
+  return result;
 }
 
 export function handleEmpireLeagueAudioFocus(focused: boolean): void {
@@ -184,7 +250,7 @@ export async function restoreAoe2AudioOnShutdown(): Promise<void> {
   if (pid && activeWorker?.stdin.writable) {
     // Preserve ordering on the worker's stdin: this unmute is processed after
     // every queued mute, then EOF triggers its independent finally safeguard.
-    activeWorker.stdin.write(`0|0\n`);
+    await sendAudioCommand("RESTORE", true);
     activeWorker.stdin.end();
     await Promise.race([
       new Promise<void>((resolve) => activeWorker.once("exit", () => resolve())),

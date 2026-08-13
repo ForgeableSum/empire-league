@@ -244,6 +244,9 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
       setStartRequestPending(false);
     }
     if (room.status === "launching") {
+      // Custom rooms can reuse an already-running AoE2 process, so launchAoe2
+      // is not guaranteed to arm audio management for this attempt.
+      void window.electronApi?.beginAoe2MatchAudioSuppression();
       setLobbyAutomationActive(true);
       if (isCustomRoom) setCustomLobbyAutomationActive(true);
       return;
