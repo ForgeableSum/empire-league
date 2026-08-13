@@ -129,7 +129,7 @@ export function DiagnosticLogWindow() {
           </div>
           <button type="button" className="icon-button" onClick={() => setOpen(false)} aria-label="Close diagnostic log"><X size={20} /></button>
         </header>
-        <p className="diagnostic-log-help">If you’re having an issue, download this log and share the file on Discord with <strong>Forgeable</strong> to help diagnose it.</p>
+        <p className="diagnostic-log-help">If you’re having an issue, download this log and share the file on Discord with <strong data-ui-translation="off">Forgeable</strong> to help diagnose it.</p>
         <pre ref={logRef}>{[
           ...environment,
           "",
