@@ -5,11 +5,11 @@ import { installBundledAoe2Maps } from "./aoe2MapInstaller.js";
 import { createMainWindow } from "./window.js";
 import { registerIpcHandlers } from "./ipc/registerIpcHandlers.js";
 import { startAutoUpdates } from "./autoUpdate.js";
+import { getLoginItemSettings, loginLaunchArgument, setLoginItemOpenAtLogin } from "./loginItem.js";
 
 registerIpcHandlers();
 app.setAppUserModelId("community.empireleague.aoe2");
 
-const loginLaunchArgument = "--minimized-at-login";
 const launchedAtLogin = process.argv.includes(loginLaunchArgument);
 
 app.whenReady().then(async () => {
@@ -19,14 +19,14 @@ app.whenReady().then(async () => {
     const startupPreferenceInitialized = join(app.getPath("userData"), ".startup-default-initialized");
     if (!existsSync(startupPreferenceInitialized)) {
       try {
-        app.setLoginItemSettings({ openAtLogin: true, args: [loginLaunchArgument] });
+        setLoginItemOpenAtLogin(true);
         writeFileSync(startupPreferenceInitialized, "enabled\n", "utf8");
       } catch (error) {
         console.error("[Startup] Failed to enable launch at login", error);
       }
-    } else if (app.getLoginItemSettings().openAtLogin) {
+    } else if (getLoginItemSettings().executableWillLaunchAtLogin) {
       // Keep existing enabled login items up to date with the startup-only flag.
-      app.setLoginItemSettings({ openAtLogin: true, args: [loginLaunchArgument] });
+      setLoginItemOpenAtLogin(true);
     }
   }
 

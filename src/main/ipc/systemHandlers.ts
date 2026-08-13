@@ -3,6 +3,7 @@ import { readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { focusMainWindow, minimizeMainWindowToTaskbar } from "../window.js";
 import { getPendingUpdate, installDownloadedUpdate, retryPendingUpdate, setAutoUpdateChecksPaused } from "../autoUpdate.js";
+import { getLoginItemSettings as getSystemLoginItemSettings, setLoginItemOpenAtLogin } from "../loginItem.js";
 
 let steamLoginParent: BrowserWindow | null = null;
 
@@ -81,7 +82,7 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:set-login-item-open-at-login", async (_event, openAtLogin: boolean) => {
     if (typeof openAtLogin !== "boolean") throw new TypeError("Startup preference must be a boolean.");
     if (!supportsLoginItems()) return getLoginItemSettings();
-    app.setLoginItemSettings({ openAtLogin, args: ["--minimized-at-login"] });
+    setLoginItemOpenAtLogin(openAtLogin);
     return getLoginItemSettings();
   });
   ipcMain.handle("system:restart", async () => {
@@ -133,7 +134,9 @@ function getLoginItemSettings(): { supported: boolean; openAtLogin: boolean } {
   const supported = supportsLoginItems();
   return {
     supported,
-    openAtLogin: supported && app.getLoginItemSettings().openAtLogin
+    // This reflects whether Windows will actually launch this executable,
+    // including registrations made with startup arguments.
+    openAtLogin: supported && getSystemLoginItemSettings().executableWillLaunchAtLogin
   };
 }
 
