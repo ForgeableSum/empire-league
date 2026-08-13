@@ -14,9 +14,9 @@ import {
   waitForFreshAoe2WindowCapture
 } from "../aoe2WindowCapture.js";
 import {
+  disableEmpireLeagueSplash,
   empireLeagueMapsModName,
-  ensureEmpireLeagueMapsEnabled,
-  setEmpireLeagueSplashEnabled
+  ensureEmpireLeagueMapsEnabled
 } from "../aoe2MapInstaller.js";
 import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings } from "../../shared/contracts/customLobby.js";
@@ -2770,7 +2770,7 @@ export function registerGameHandlers(): void {
         ownedAoe2WindowReady = false;
         if (pid) await forceCloseAoe2Process(pid);
       } finally {
-        const disabledProfiles = await setEmpireLeagueSplashEnabled(false);
+        const disabledProfiles = await disableEmpireLeagueSplash();
         console.info(`[AoE2 splash] Disabled=${disabledProfiles.join(",") || "none"}`);
       }
     })().catch((error) => {

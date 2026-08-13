@@ -91,6 +91,26 @@ export async function setEmpireLeagueSplashEnabled(enabled: boolean): Promise<st
   return changedProfiles;
 }
 
+export async function disableEmpireLeagueSplash(): Promise<string[]> {
+  if (process.platform !== "win32") return [];
+  const profilesRoot = join(homedir(), "Games", "Age of Empires 2 DE");
+  const entries = await readdir(profilesRoot, { withFileTypes: true }).catch(() => []);
+  const disabledProfiles: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
+    const profileRoot = join(profilesRoot, entry.name);
+    const statusChanged = await setManagedModEnabled(profileRoot, empireLeagueSplashModName, false);
+    const splashRoot = join(profileRoot, "mods", "local", empireLeagueSplashModName);
+    const splashInstalled = await filesMatch(
+      join(bundledMapsDirectory(), bundledSplashFiles[0].source),
+      join(splashRoot, ...bundledSplashFiles[0].target)
+    );
+    await rm(splashRoot, { recursive: true, force: true });
+    if (statusChanged || splashInstalled) disabledProfiles.push(entry.name);
+  }
+  return disabledProfiles;
+}
+
 export async function installBundledAoe2Maps(): Promise<Aoe2MapInstallResult> {
   if (process.platform !== "win32") {
     return { installedProfiles: [], skippedProfiles: [], enabledProfiles: [] };
