@@ -3276,7 +3276,10 @@ export function registerGameHandlers(): void {
         if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
         const result = await postAoe2DesignClick(process.pid as number, x, y, {
           ...timing,
-          requireMove: timing?.requireMove ?? !isCustomAutomation
+          // Ranked and custom lobbies render the same AoE2 controls. Keep one
+          // input contract for both: a click is successful only when its move,
+          // down, and up messages were all dispatched.
+          requireMove: timing?.requireMove ?? true
         });
         if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
         emitLog(`STEP|${name}|DesignPoint=${x},${y}|${result.detail}`);
@@ -3395,14 +3398,11 @@ export function registerGameHandlers(): void {
       await actionStep("createLobby");
       await clickStep("Reset Settings", 3101, 1976);
       await delay(lobbySetupTiming.resetFocusMs);
-      // Resetting custom content can briefly stall AoE2's window thread. Queue
-      // this confirmation so a processed-but-timed-out SendMessage cannot abort
-      // the otherwise successful lobby setup.
-      const reset = isCustomAutomation
-        ? await postAoe2Enter(process.pid)
-        : await sendAoe2Enter(process.pid);
+      // Use the same verified keyboard path as ranked. Custom-only settling and
+      // state verification remain below, but input dispatch must not diverge.
+      const reset = await sendAoe2Enter(process.pid);
       emitLog(`STEP|Confirm Reset|Key=ENTER|${reset.detail}`);
-      if (!reset.sent) throw new Error(`The reset confirmation could not be ${isCustomAutomation ? "queued" : "sent"}.`);
+      if (!reset.sent) throw new Error("The reset confirmation could not be sent.");
       await delay(lobbySetupTiming.resetConfirmationMs);
 
       if (contentKind === "scenario") {
@@ -3420,7 +3420,7 @@ export function registerGameHandlers(): void {
         if (!acceptRecommended.sent) throw new Error("Recommended scenario settings could not be accepted.");
         await delay(picker.recommendedSettingsSettleMs);
         await clickStep("Set Scenario", picker.setScenarioPoint[0], picker.setScenarioPoint[1], {
-          synchronous: !isCustomAutomation
+          synchronous: true
         });
         if (isCustomAutomation) {
           let scenarioPickerState = readAoe2HostSetupState(process.pid, { contentPickerExpected: true });
@@ -3480,13 +3480,10 @@ export function registerGameHandlers(): void {
         emitLog(`MAP_SELECT|Step=RecommendedSettings|Key=ENTER|${acceptRecommended.detail}`);
         if (!acceptRecommended.sent) throw new Error("Recommended random-map settings could not be accepted.");
         await delay(modePicker.recommendedSettingsSettleMs);
-        // A reset can keep AoE2's window thread busy for several seconds while
-        // custom content is reloaded. Queue the picker click behind that work,
-        // then wait for the lobby pixels to change instead of requiring an
-        // immediate synchronous response from the game.
+        // Ranked and custom use the same synchronous picker activation. Custom
+        // keeps the additional state wait below for slow UGC reloads.
         await clickStep("Open Map Picker", mapPicker.openPoint[0], mapPicker.openPoint[1], {
-          synchronous: !isCustomAutomation,
-          requireMove: false
+          synchronous: true
         });
         if (isCustomAutomation) {
           let mapPickerState = readAoe2HostSetupState(process.pid, { contentPickerExpected: true });
@@ -3511,6 +3508,9 @@ export function registerGameHandlers(): void {
         await clickStep(`Select ${mapStyle} Map Style`, mapStylePoint[0], mapStylePoint[1], { synchronous: true });
         await delay(mapPicker.styleSelectionSettleMs);
         await clickStep("Focus Map Search", mapPicker.searchPoint[0], mapPicker.searchPoint[1], { synchronous: true });
+        const clearMapSearch = await clearAoe2TextField(process.pid);
+        emitLog(`MAP_SELECT|Step=ClearSearch|${clearMapSearch.detail}`);
+        if (!clearMapSearch.sent) throw new Error("The previous map search could not be cleared.");
         const mapSearchText = isCustomMap ? normalizedMapName : localizedMapName;
         const mapSearch = await sendAoe2Text(process.pid, mapSearchText);
         emitLog(`MAP_SELECT|Step=Search|Map=${normalizedMapName}|Localized=${mapSearchText}|Language=${localization.languageCode}|${mapSearch.detail}`);
@@ -3589,7 +3589,6 @@ export function registerGameHandlers(): void {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    const isCustomAutomation = automationContext === "custom";
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
@@ -3668,8 +3667,8 @@ export function registerGameHandlers(): void {
             : await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
                 hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
                 holdMs: "holdMs" in action ? action.holdMs : undefined,
-                synchronous: !isCustomAutomation,
-                requireMove: !isCustomAutomation
+                synchronous: true,
+                requireMove: true
               });
 
       if (target === "start" && result.sent) startLoadingScreenWatch(process.pid, event.sender);
@@ -3707,14 +3706,7 @@ export function registerGameHandlers(): void {
       if (verifiesReady) {
         readyState = readAoe2ReadyState(process.pid, action.point[1]);
         emitVerification("1", readyState.detail);
-        if (isCustomAutomation) {
-          const readyVerificationDeadline = Date.now() + 10_000;
-          while (readyState.state === "not-ready" && Date.now() < readyVerificationDeadline) {
-            await delay(250);
-            readyState = readAoe2ReadyState(process.pid, action.point[1]);
-          }
-          emitVerification("settled", readyState.detail);
-        } else if (readyState.state === "not-ready") {
+        if (readyState.state === "not-ready") {
           result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
             hoverMs: "hoverMs" in action ? action.hoverMs : undefined,
             holdMs: "holdMs" in action ? action.holdMs : undefined,
@@ -4065,7 +4057,6 @@ export function registerGameHandlers(): void {
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    const isCustomAutomation = automationContext === "custom";
     if (appWindow) showMainWindowAsGameCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
@@ -4078,10 +4069,10 @@ export function registerGameHandlers(): void {
       const clicks = team + 1;
       for (let index = 0; index < clicks; index += 1) {
         const result = await postAoe2DesignClick(gameProcess.pid, x, y, {
-          synchronous: !isCustomAutomation,
+          synchronous: true,
           hoverMs: 100,
           holdMs: 100,
-          requireMove: !isCustomAutomation
+          requireMove: true
         });
         emitLog(`TEAM_SELECT|Slot=${slot}|Team=${team}|Click=${index + 1}/${clicks}|${result.detail}`);
         if (!result.sent) throw new Error(`Team ${team} could not be selected for lobby slot ${slot}.`);
