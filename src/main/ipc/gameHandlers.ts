@@ -730,17 +730,21 @@ async function startReplayEndDetection(
 
   const emitReplayEnded = (replay: ReplaySnapshot, reason: "FileGrowth" | "QuietFallback"): void => {
     if (window.webContents.isDestroyed()) {
-      console.warn(
-        `[AoE2 replay] NOTIFY_SKIPPED|Reason=${reason}|RendererDestroyed=True`
-        + `|File=${replay.path}|Size=${replay.size}|ModifiedMs=${replay.modifiedMs}`
-      );
+      if (reason !== "FileGrowth") {
+        console.warn(
+          `[AoE2 replay] NOTIFY_SKIPPED|Reason=${reason}|RendererDestroyed=True`
+          + `|File=${replay.path}|Size=${replay.size}|ModifiedMs=${replay.modifiedMs}`
+        );
+      }
       return;
     }
     window.webContents.send("game:replay-ended", replay.path);
-    console.info(
-      `[AoE2 replay] NOTIFY|Reason=${reason}|RendererDestroyed=False`
-      + `|File=${replay.path}|Size=${replay.size}|ModifiedMs=${replay.modifiedMs}`
-    );
+    if (reason !== "FileGrowth") {
+      console.info(
+        `[AoE2 replay] NOTIFY|Reason=${reason}|RendererDestroyed=False`
+        + `|File=${replay.path}|Size=${replay.size}|ModifiedMs=${replay.modifiedMs}`
+      );
+    }
   };
 
   const poll = async (): Promise<void> => {

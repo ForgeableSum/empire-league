@@ -237,6 +237,27 @@ export function createMainWindow({ startMinimized = false }: { startMinimized?: 
 export function showMainWindowAsGameCover(window: BrowserWindow): void {
   if (window.isDestroyed()) return;
   logWindowLifecycle(window, "CALL showMainWindowAsGameCover");
+  const presentCover = (): void => {
+    if (window.isMinimized()) {
+      window.restore();
+    }
+    if (!window.isFullScreen()) {
+      window.setFullScreen(true);
+    }
+    if (!window.isVisible()) {
+      window.show();
+    }
+    if (window.isFocused() && !window.isAlwaysOnTop()) {
+      window.setAlwaysOnTop(true, "screen-saver");
+    }
+    // show(), moveTop(), and focus() all touch native presentation/z-order.
+    // Once the fullscreen topmost cover already owns focus, repeating them can
+    // visibly re-present Chromium over a borderless DirectX window.
+    if (!window.isFocused()) {
+      window.moveTop();
+      window.focus();
+    }
+  };
   const alreadyActive = coveredMainWindow === window && coveredMainWindowState !== null;
   if (!alreadyActive) {
     coveredMainWindow = window;
@@ -247,16 +268,13 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
     mainCoverManuallyVisible = true;
     window.setIgnoreMouseEvents(false);
     window.setOpacity(reducedOpacityEnabled ? 0.8 : 1);
-    window.setFullScreen(true);
+    if (!window.isFullScreen()) window.setFullScreen(true);
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     // Automation blocks physical input while this cover is visible. The cover
     // must therefore own the foreground window; showInactive leaves whatever
     // application the player was using (for example Discord) focused while the
     // input guard swallows its keyboard input.
-    if (window.isMinimized()) window.restore();
-    window.show();
-    window.moveTop();
-    window.focus();
+    presentCover();
     if (mouseCoordinateOverlayEnabled) {
       showMouseTestOverlay();
     } else {
@@ -276,10 +294,7 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   }
   window.setIgnoreMouseEvents(false);
   if (mainCoverManuallyVisible && taskbarMinimizedWindow !== window) {
-    if (window.isMinimized()) window.restore();
-    window.show();
-    window.moveTop();
-    window.focus();
+    presentCover();
   }
 }
 
