@@ -4,16 +4,20 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 export const empireLeagueMapsModName = "Empire League Maps";
-const bundledFiles = [
+export const empireLeagueSplashModName = "Empire League Splash";
+const bundledMapFiles = [
   { source: "KotD6 Arabia EL.rms", target: ["resources", "_common", "random-map-scripts", "KotD6 Arabia EL.rms"] },
   { source: "KotD6 Arabia EL.png", target: ["resources", "_common", "random-map-scripts", "KotD6 Arabia EL.png"] },
   { source: "Land Nomad EL.rms", target: ["resources", "_common", "random-map-scripts", "Land Nomad EL.rms"] },
-  { source: "Land Nomad EL.png", target: ["resources", "_common", "random-map-scripts", "Land Nomad EL.png"] },
+  { source: "Land Nomad EL.png", target: ["resources", "_common", "random-map-scripts", "Land Nomad EL.png"] }
+] as const;
+const bundledSplashFiles = [
   { source: "loading_slash.png", target: ["resources", "_common", "wpfg", "resources", "loading_slash.png"] },
   { source: "loading_slash.png", target: ["resources", "_common", "wpfg", "resources", "loading_slash_alt.png"] },
   { source: "aoe_logo_large.png", target: ["resources", "_common", "wpfg", "resources", "aoe_logo_large.png"] }
 ] as const;
 const legacyMapFiles = ["KotD6, Arabia.rms", "KotD6, Arabia.png"] as const;
+const legacySplashTargets = bundledSplashFiles.map((file) => file.target);
 
 export interface Aoe2MapInstallResult {
   installedProfiles: string[];
@@ -36,7 +40,7 @@ async function filesMatch(left: string, right: string): Promise<boolean> {
   }
 }
 
-async function enableManagedMapMod(profileRoot: string): Promise<boolean> {
+async function setManagedModEnabled(profileRoot: string, modName: string, enabled: boolean): Promise<boolean> {
   const statusPath = join(profileRoot, "mods", "mod-status.json");
   let parsed: { Mods?: Array<{ Path?: string; Enabled?: boolean; Title?: string }> };
   try {
@@ -48,12 +52,12 @@ async function enableManagedMapMod(profileRoot: string): Promise<boolean> {
 
   const managedMod = (parsed.Mods ?? []).find((mod) => {
     const folder = String(mod.Path ?? "").replace(/\\/g, "/").split("/").filter(Boolean).at(-1);
-    return String(mod.Title ?? "").trim().toLowerCase() === empireLeagueMapsModName.toLowerCase()
-      || folder?.toLowerCase() === empireLeagueMapsModName.toLowerCase();
+    return String(mod.Title ?? "").trim().toLowerCase() === modName.toLowerCase()
+      || folder?.toLowerCase() === modName.toLowerCase();
   });
-  if (!managedMod || managedMod.Enabled !== false) return false;
+  if (!managedMod || managedMod.Enabled === enabled) return false;
 
-  managedMod.Enabled = true;
+  managedMod.Enabled = enabled;
   const temporaryPath = `${statusPath}.empire-league-tmp`;
   await copyFile(statusPath, `${statusPath}.empire-league-backup`);
   await writeFile(temporaryPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
@@ -68,9 +72,23 @@ export async function ensureEmpireLeagueMapsEnabled(): Promise<string[]> {
   const enabledProfiles: string[] = [];
   for (const entry of entries) {
     if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
-    if (await enableManagedMapMod(join(profilesRoot, entry.name))) enabledProfiles.push(entry.name);
+    if (await setManagedModEnabled(join(profilesRoot, entry.name), empireLeagueMapsModName, true)) enabledProfiles.push(entry.name);
   }
   return enabledProfiles;
+}
+
+export async function setEmpireLeagueSplashEnabled(enabled: boolean): Promise<string[]> {
+  if (process.platform !== "win32") return [];
+  const profilesRoot = join(homedir(), "Games", "Age of Empires 2 DE");
+  const entries = await readdir(profilesRoot, { withFileTypes: true }).catch(() => []);
+  const changedProfiles: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
+    if (await setManagedModEnabled(join(profilesRoot, entry.name), empireLeagueSplashModName, enabled)) {
+      changedProfiles.push(entry.name);
+    }
+  }
+  return changedProfiles;
 }
 
 export async function installBundledAoe2Maps(): Promise<Aoe2MapInstallResult> {
@@ -92,7 +110,8 @@ export async function installBundledAoe2Maps(): Promise<Aoe2MapInstallResult> {
       join(mapDirectory, fileName),
       { force: true }
     )));
-    const current = await Promise.all(bundledFiles.map((file) => filesMatch(
+    await Promise.all(legacySplashTargets.map((target) => rm(join(modRoot, ...target), { force: true })));
+    const current = await Promise.all(bundledMapFiles.map((file) => filesMatch(
       join(bundledMapsDirectory(), file.source),
       join(modRoot, ...file.target)
     )));
@@ -104,18 +123,37 @@ export async function installBundledAoe2Maps(): Promise<Aoe2MapInstallResult> {
     }));
     if (current.every(Boolean)) {
       result.skippedProfiles.push(profileId);
-      continue;
+    } else {
+      await Promise.all(bundledMapFiles.map(async (file) => {
+        const target = join(modRoot, ...file.target);
+        await mkdir(dirname(target), { recursive: true });
+        await copyFile(join(bundledMapsDirectory(), file.source), target);
+      }));
+      result.installedProfiles.push(profileId);
     }
 
-    await Promise.all(bundledFiles.map(async (file) => {
-      const target = join(modRoot, ...file.target);
-      await mkdir(dirname(target), { recursive: true });
-      await copyFile(join(bundledMapsDirectory(), file.source), target);
+    const splashRoot = join(profilesRoot, profileId, "mods", "local", empireLeagueSplashModName);
+    const splashCurrent = await Promise.all(bundledSplashFiles.map((file) => filesMatch(
+      join(bundledMapsDirectory(), file.source),
+      join(splashRoot, ...file.target)
+    )));
+    await mkdir(splashRoot, { recursive: true });
+    await writeFile(join(splashRoot, "info.json"), JSON.stringify({
+      Author: "Empire League",
+      Description: "Startup branding enabled while Empire League is running.",
+      Title: empireLeagueSplashModName
     }));
-    result.installedProfiles.push(profileId);
+    if (!splashCurrent.every(Boolean)) {
+      await Promise.all(bundledSplashFiles.map(async (file) => {
+        const target = join(splashRoot, ...file.target);
+        await mkdir(dirname(target), { recursive: true });
+        await copyFile(join(bundledMapsDirectory(), file.source), target);
+      }));
+    }
   }
 
   result.enabledProfiles = await ensureEmpireLeagueMapsEnabled();
+  await setEmpireLeagueSplashEnabled(true);
 
   return result;
 }

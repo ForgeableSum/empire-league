@@ -13,7 +13,11 @@ import {
   stopAoe2WindowCapture,
   waitForFreshAoe2WindowCapture
 } from "../aoe2WindowCapture.js";
-import { empireLeagueMapsModName, ensureEmpireLeagueMapsEnabled } from "../aoe2MapInstaller.js";
+import {
+  empireLeagueMapsModName,
+  ensureEmpireLeagueMapsEnabled,
+  setEmpireLeagueSplashEnabled
+} from "../aoe2MapInstaller.js";
 import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings } from "../../shared/contracts/customLobby.js";
 import {
@@ -2753,18 +2757,25 @@ export function registerGameHandlers(): void {
     event.preventDefault();
     quittingAfterGameCleanup = true;
     void (async () => {
-      await restoreAoe2AudioOnShutdown();
-      if (!ownedAoe2Pid || !ownedAoe2WindowReady) {
-        if ((ownedAoe2Pid || launchRequested) && !ownedAoe2WindowReady) {
-          console.info("[AoE2 process] SHUTDOWN_CLEANUP_SKIPPED|Reason=WindowNotReady");
+      try {
+        await restoreAoe2AudioOnShutdown();
+        if (!ownedAoe2Pid || !ownedAoe2WindowReady) {
+          if ((ownedAoe2Pid || launchRequested) && !ownedAoe2WindowReady) {
+            console.info("[AoE2 process] SHUTDOWN_CLEANUP_SKIPPED|Reason=WindowNotReady");
+          }
+          return;
         }
-        return;
+        const pid = ownedAoe2Pid;
+        ownedAoe2Pid = undefined;
+        ownedAoe2WindowReady = false;
+        if (pid) await forceCloseAoe2Process(pid);
+      } finally {
+        const disabledProfiles = await setEmpireLeagueSplashEnabled(false);
+        console.info(`[AoE2 splash] Disabled=${disabledProfiles.join(",") || "none"}`);
       }
-      const pid = ownedAoe2Pid;
-      ownedAoe2Pid = undefined;
-      ownedAoe2WindowReady = false;
-      if (pid) await forceCloseAoe2Process(pid);
-    })().finally(() => app.quit());
+    })().catch((error) => {
+      console.error("[AoE2 shutdown] Cleanup failed", error);
+    }).finally(() => app.quit());
   });
   app.on("will-quit", () => releaseAllInputSuppression("WillQuit"));
   process.once("exit", () => {
