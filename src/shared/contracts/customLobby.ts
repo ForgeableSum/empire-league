@@ -96,6 +96,7 @@ export interface CustomLobbyRoom {
   gameSettings: CustomLobbyGameSettings;
   maxPlayers: number;
   status: "open" | "launching" | "started";
+  automationAttemptId?: string;
   automationStartedAt?: string;
   gameStartedAt?: string;
   platformLobbyId?: string;

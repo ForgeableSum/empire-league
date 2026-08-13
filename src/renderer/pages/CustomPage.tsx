@@ -217,14 +217,20 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const replayResultInFlight = useRef(false);
   const gameStartRevealRef = useRef<Promise<void> | null>(null);
+  const activeAutomationAttemptRef = useRef(room.automationAttemptId);
   const startRequestInFlight = useRef(false);
   const [startRequestPending, setStartRequestPending] = useState(false);
   const me = room.players.find((player) => player.id === currentPlayerId)!;
   const isHost = room.hostId === currentPlayerId;
+  activeAutomationAttemptRef.current = room.automationAttemptId;
   const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => room.players.find((player) => player.slot === index + 1)), [room]);
   const latestMessageId = room.messages.at(-1)?.id;
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
+
+  useEffect(() => () => {
+    activeAutomationAttemptRef.current = undefined;
+  }, [room.id]);
 
   useEffect(() => {
     const messageList = chatMessagesRef.current;
@@ -274,6 +280,8 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
       return;
     }
     if (room.status !== "launching" || !window.electronApi) return;
+    const automationAttemptId = room.automationAttemptId;
+    if (!automationAttemptId) return;
     const content = room.map;
     const customContentFlow = requiresCustomContentTransfer(room);
     const hostSetupKey = `${room.id}:host-setup`;
@@ -294,10 +302,11 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
             context: "custom",
             gameSettings: room.gameSettings
           });
+          if (activeAutomationAttemptRef.current !== automationAttemptId) return;
           if (!result.sent || !result.lobbyUri) throw new Error(result.message || "AoE2 lobby creation failed.");
-          await customLobbyService.publish(room.id, result.lobbyUri);
+          await customLobbyService.publish(room.id, result.lobbyUri, automationAttemptId);
         } catch (error) {
-          await customLobbyService.failStart(room.id, messageFor(error));
+          await customLobbyService.failStart(room.id, messageFor(error), automationAttemptId);
           releaseCustomLobbyAutomationStep(hostSetupKey);
         }
       })();
@@ -360,35 +369,27 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     }
 
     const guestsJoined = room.players.filter((player) => !player.host).every((player) => player.aoeJoined);
-    const hostReadyKey = `${room.id}:host-ready:${room.platformLobbyId ?? "pending"}`;
+    const acceptedContentCount = room.players.filter((player) => !player.host && player.aoeContentAccepted).length;
+    const hostReadyKey = `${room.id}:host-ready:${room.platformLobbyId ?? "pending"}:accepted-${acceptedContentCount}`;
     if (isHost && room.platformLobbyId && guestsJoined && !me.aoeReady && claimCustomLobbyAutomationStep(hostReadyKey)) {
       void (async () => {
         try {
+          // Content acceptance temporarily removes the host's ready state.
+          // The accepted-content phase in the step key permits this same
+          // workflow to run again without introducing a second delayed task.
+          if (acceptedContentCount > 0) {
+            await new Promise((resolve) => window.setTimeout(resolve, customContentHostRecoveryMs));
+          }
+          if (activeAutomationAttemptRef.current !== automationAttemptId) return;
           if (content?.kind !== "scenario" || room.source === "weekly") await applyMapPlayerSettings(me);
+          if (activeAutomationAttemptRef.current !== automationAttemptId) return;
           const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready", "custom");
+          if (activeAutomationAttemptRef.current !== automationAttemptId) return;
           if (!ready.sent) throw new Error(ready.message || "AoE2 could not ready the host.");
           await customLobbyService.reportAoeReady(room.id);
         } catch (error) {
-          await customLobbyService.failStart(room.id, messageFor(error));
+          await customLobbyService.failStart(room.id, messageFor(error), automationAttemptId);
           releaseCustomLobbyAutomationStep(hostReadyKey);
-        }
-      })();
-      return;
-    }
-
-    const guestsAcceptedContent = customContentFlow
-      && room.players.filter((player) => !player.host).every((player) => player.aoeContentAccepted);
-    const hostContentRecoveryKey = `${room.id}:host-content-recovery:${room.platformLobbyId ?? "pending"}`;
-    if (isHost && guestsAcceptedContent && !me.aoeReady && claimCustomLobbyAutomationStep(hostContentRecoveryKey)) {
-      void (async () => {
-        try {
-          await new Promise((resolve) => window.setTimeout(resolve, customContentHostRecoveryMs));
-          const ready = await window.electronApi!.runAoe2LobbyCursorAction("host-ready", "custom");
-          if (!ready.sent) throw new Error(ready.message || "The host could not resume the lobby file transfer.");
-          await customLobbyService.reportAoeReady(room.id);
-        } catch (error) {
-          await customLobbyService.failStart(room.id, messageFor(error));
-          releaseCustomLobbyAutomationStep(hostContentRecoveryKey);
         }
       })();
       return;
@@ -407,7 +408,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
             new Date(Date.now() - lobbySetupTiming.startGameSettleMs).toISOString()
           );
         } catch (error) {
-          await customLobbyService.failStart(room.id, messageFor(error));
+          await customLobbyService.failStart(room.id, messageFor(error), automationAttemptId);
           releaseCustomLobbyAutomationStep(startKey);
         }
       })();

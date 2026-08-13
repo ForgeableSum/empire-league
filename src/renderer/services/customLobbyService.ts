@@ -61,9 +61,9 @@ export const customLobbyService = {
     if (isPreviewMode) return;
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/start`, { method: "POST" });
   },
-  async publish(roomId: string, platformLobbyId: string): Promise<void> {
+  async publish(roomId: string, platformLobbyId: string, automationAttemptId: string): Promise<void> {
     if (isPreviewMode) return;
-    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/publish`, { method: "POST", body: { platformLobbyId } });
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/publish`, { method: "POST", body: { platformLobbyId, automationAttemptId } });
   },
   async reportJoined(roomId: string): Promise<void> {
     if (isPreviewMode) return;
@@ -88,9 +88,9 @@ export const customLobbyService = {
     if (isPreviewMode) return;
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/finish`, { method: "POST" });
   },
-  async failStart(roomId: string, error: string): Promise<void> {
+  async failStart(roomId: string, error: string, automationAttemptId: string): Promise<void> {
     if (isPreviewMode) return;
-    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/fail-start`, { method: "POST", body: { error } });
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/fail-start`, { method: "POST", body: { error, automationAttemptId } });
   },
   onEvent(listener: Parameters<typeof matchmakerTransport.onCustomLobbyEvent>[0]) {
     if (isPreviewMode) return () => undefined;

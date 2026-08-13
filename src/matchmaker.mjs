@@ -209,6 +209,8 @@ function assembleWeeklyRooms() {
       },
       maxPlayers: weeklyPlayersRequired,
       status: "launching",
+      automationAttemptId: randomUUID(),
+      automationStartedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       source: "weekly",
       locked: true,
@@ -1560,6 +1562,7 @@ async function handleRequest(request, response) {
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can start the lobby." });
       if (!room.players.length || room.players.some((player) => !player.ready)) return send(response, 409, { error: "Every player must be ready." });
       room.status = "launching";
+      room.automationAttemptId = randomUUID();
       room.automationStartedAt = new Date().toISOString();
       room.gameStartedAt = undefined;
       room.platformLobbyId = undefined;
@@ -1577,10 +1580,13 @@ async function handleRequest(request, response) {
     const publishCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/publish$/);
     if (request.method === "POST" && publishCustomLobby) {
       const room = customLobbies.get(decodeURIComponent(publishCustomLobby[1]));
+      const body = await readJson(request);
       if (!room || room.hostId !== authenticatedPlayer.id || room.status !== "launching") {
         return send(response, 403, { error: "Only the launching host can publish the AoE2 lobby." });
       }
-      const body = await readJson(request);
+      if (body.automationAttemptId !== room.automationAttemptId) {
+        return send(response, 409, { error: "That lobby automation attempt is no longer active." });
+      }
       if (!/^aoe2de:\/\/0\/\d+$/.test(body.platformLobbyId ?? "")) return send(response, 400, { error: "A valid AoE2 lobby URI is required." });
       room.platformLobbyId = body.platformLobbyId;
       const host = room.players.find((player) => player.id === room.hostId);
@@ -1673,6 +1679,9 @@ async function handleRequest(request, response) {
       const room = customLobbies.get(decodeURIComponent(failCustomLobby[1]));
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can report automation failure." });
       const body = await readJson(request);
+      if (room.status !== "launching" || body.automationAttemptId !== room.automationAttemptId) {
+        return send(response, 200, { reset: false, stale: true });
+      }
       room.status = "open";
       room.gameStartedAt = undefined;
       room.automationError = String(body.error ?? "AoE2 lobby automation failed.").slice(0, 300);
