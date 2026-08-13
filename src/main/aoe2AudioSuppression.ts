@@ -10,6 +10,8 @@ let lastManagedPid: number | undefined;
 let shuttingDown = false;
 let workerGeneration = 0;
 let nextRequestId = 0;
+let observedPid: number | undefined;
+let missingProcessRestored = false;
 const pendingRequests = new Map<number, { resolve: (message: string) => void; timer: NodeJS.Timeout }>();
 
 // Core Audio exposes per-process mute through audio sessions, but not through a
@@ -50,7 +52,10 @@ public static class SessionMute {
     Guid context = Guid.Empty;
     int restored = 0;
     foreach (Lease lease in leases) {
-      try { lease.Volume.SetMute(lease.OriginalMute, ref context); restored++; } catch { }
+      // Empire League must never leave Windows' persisted AoE2 session mute
+      // enabled after releasing ownership, even if it inherited a stale mute
+      // from an older or interrupted Empire League session.
+      try { lease.Volume.SetMute(false, ref context); restored++; } catch { }
     }
     leases.Clear();
     return restored;
@@ -61,7 +66,7 @@ public static class SessionMute {
     for (int i = leases.Count - 1; i >= 0; i--) {
       if (leases[i].ProcessId != pid) {
         Guid restoreContext = Guid.Empty;
-        try { leases[i].Volume.SetMute(leases[i].OriginalMute, ref restoreContext); } catch { }
+        try { leases[i].Volume.SetMute(false, ref restoreContext); } catch { }
         leases.RemoveAt(i);
       }
     }
@@ -140,10 +145,17 @@ function ensureWorker(): ChildProcessWithoutNullStreams | null {
     const lines = stdoutBuffer.split(/\r?\n/);
     stdoutBuffer = lines.pop() ?? "";
     for (const message of lines.filter(Boolean)) {
-      console.info(`[AoE2 audio] ${message}`);
       const match = /^AUDIO_RESULT\|(\d+)\|/.exec(message);
-      if (!match) continue;
+      if (!match) {
+        console.info(`[AoE2 audio] ${message}`);
+        continue;
+      }
       const request = pendingRequests.get(Number(match[1]));
+      // Periodic guards are intentionally quiet when they are successful
+      // no-ops. Awaited transitions, actual changes, and errors remain visible.
+      if (request || /Changed=[1-9]/.test(message) || message.includes("Error=")) {
+        console.info(`[AoE2 audio] ${message}`);
+      }
       if (!request) continue;
       clearTimeout(request.timer);
       pendingRequests.delete(Number(match[1]));
@@ -176,6 +188,20 @@ function sendAudioCommand(mode: "MUTE" | "AUDIBLE" | "RESTORE", waitForResult = 
 }
 
 function applyDesiredMute(): void {
+  const pid = detectAoe2NativeProcess().pid;
+  if (!pid) {
+    observedPid = undefined;
+    if (!missingProcessRestored) {
+      missingProcessRestored = true;
+      void sendAudioCommand("RESTORE");
+    }
+    return;
+  }
+  if (observedPid !== pid) {
+    observedPid = pid;
+    missingProcessRestored = false;
+    console.info(`[AoE2 audio] PROCESS|Pid=${pid}|DesiredMuted=${desiredMuted}`);
+  }
   void sendAudioCommand(desiredMuted ? "MUTE" : "AUDIBLE");
 }
 
@@ -260,4 +286,6 @@ export async function restoreAoe2AudioOnShutdown(): Promise<void> {
   shuttingDown = true;
   worker = null;
   lastManagedPid = undefined;
+  observedPid = undefined;
+  missingProcessRestored = false;
 }
