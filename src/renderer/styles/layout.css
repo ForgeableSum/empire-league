@@ -4643,14 +4643,18 @@
 }
 
 .lobby-chat-messages p {
-  display: grid;
-  gap: 2px;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
   font-size: 13px;
+  line-height: 1.45;
 }
 
 .lobby-chat-messages p strong {
+  margin-right: 6px;
   color: var(--accent-2);
+}
+
+.lobby-chat-messages p strong::after {
+  content: ":";
 }
 
 .lobby-chat-messages p.system span {
