@@ -277,9 +277,15 @@ export function showMainWindowAsGameCover(window: BrowserWindow): void {
   window.setIgnoreMouseEvents(false);
   if (mainCoverManuallyVisible && taskbarMinimizedWindow !== window) {
     if (window.isMinimized()) window.restore();
-    window.show();
-    window.moveTop();
-    window.focus();
+    // Host automation re-enters this function for each lobby action. Avoid
+    // reactivating an already-visible, focused fullscreen window: show(),
+    // moveTop(), and focus() can each trigger a compositor/z-order transition
+    // and caused intermittent flashes at countdown milestones.
+    if (!window.isVisible()) window.show();
+    if (!window.isFocused()) {
+      window.moveTop();
+      window.focus();
+    }
   }
 }
 
