@@ -8,6 +8,7 @@ let worker: ChildProcessWithoutNullStreams | null = null;
 let refreshTimer: NodeJS.Timeout | undefined;
 let lastManagedPid: number | undefined;
 let shuttingDown = false;
+let workerGeneration = 0;
 
 // Core Audio exposes per-process mute through audio sessions, but not through a
 // regular Win32 function. Keep one lightweight PowerShell worker alive so the
@@ -15,6 +16,7 @@ let shuttingDown = false;
 const workerScript = String.raw`
 Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumerator {}
 enum EDataFlow { eRender, eCapture, eAll }
@@ -34,7 +36,34 @@ interface IAudioSessionControl2 { int GetState(out int s); int GetDisplayName(ou
 [ComImport, InterfaceType(ComInterfaceType.InterfaceIsIUnknown), Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8")]
 interface ISimpleAudioVolume { int SetMasterVolume(float v, ref Guid c); int GetMasterVolume(out float v); int SetMute([MarshalAs(UnmanagedType.Bool)] bool m, ref Guid c); int GetMute(out bool m); }
 public static class SessionMute {
-  public static void Set(uint pid, bool muted) {
+  private sealed class Lease {
+    public uint ProcessId;
+    public string InstanceId;
+    public ISimpleAudioVolume Volume;
+    public bool OriginalMute;
+  }
+  private static readonly List<Lease> leases = new List<Lease>();
+
+  private static void RestoreAll() {
+    Guid context = Guid.Empty;
+    foreach (Lease lease in leases) {
+      try { lease.Volume.SetMute(lease.OriginalMute, ref context); } catch { }
+    }
+    leases.Clear();
+  }
+
+  public static void Reconcile(uint pid, bool muted) {
+    // Unmuting means releasing our lease and restoring exactly what the user
+    // had before Empire League touched the session. PID 0 also restores a
+    // dead/replaced AoE2 process through the COM objects retained below.
+    if (!muted || pid == 0) { RestoreAll(); return; }
+    for (int i = leases.Count - 1; i >= 0; i--) {
+      if (leases[i].ProcessId != pid) {
+        Guid restoreContext = Guid.Empty;
+        try { leases[i].Volume.SetMute(leases[i].OriginalMute, ref restoreContext); } catch { }
+        leases.RemoveAt(i);
+      }
+    }
     IMMDevice d; ((IMMDeviceEnumerator)new MMDeviceEnumerator()).GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out d);
     Guid id = typeof(IAudioSessionManager2).GUID; object o; d.Activate(ref id, 23, IntPtr.Zero, out o);
     IAudioSessionEnumerator e; ((IAudioSessionManager2)o).GetSessionEnumerator(out e); int count; e.GetCount(out count);
@@ -42,23 +71,30 @@ public static class SessionMute {
     for (int i = 0; i < count; i++) {
       IAudioSessionControl c; e.GetSession(i, out c); var c2 = (IAudioSessionControl2)c; uint p; c2.GetProcessId(out p);
       if (p == pid) {
+        IntPtr instancePointer; c2.GetSessionInstanceIdentifier(out instancePointer);
+        string instanceId = Marshal.PtrToStringUni(instancePointer) ?? (pid.ToString() + ":" + i.ToString());
+        if (instancePointer != IntPtr.Zero) Marshal.FreeCoTaskMem(instancePointer);
         var volume = (ISimpleAudioVolume)c; bool current; volume.GetMute(out current);
-        if (current != muted) volume.SetMute(muted, ref context);
+        bool known = false;
+        foreach (Lease lease in leases) { if (lease.InstanceId == instanceId) { known = true; break; } }
+        if (!known) leases.Add(new Lease { ProcessId = pid, InstanceId = instanceId, Volume = volume, OriginalMute = current });
+        if (!current) volume.SetMute(true, ref context);
       }
     }
   }
+  public static void Restore() { RestoreAll(); }
 }
 '@
 try {
   while (($line = [Console]::ReadLine()) -ne $null) {
     try {
-      $parts = $line.Split('|'); $lastPid = [uint32]$parts[0]
-      [SessionMute]::Set($lastPid, $parts[1] -eq '1')
+      $parts = $line.Split('|')
+      [SessionMute]::Reconcile([uint32]$parts[0], $parts[1] -eq '1')
     } catch { [Console]::Error.WriteLine($_.Exception.Message) }
   }
 } finally {
-  # Closing the IPC pipe must never leave Windows' persisted app mute enabled.
-  if ($null -ne $lastPid) { try { [SessionMute]::Set($lastPid, $false) } catch {} }
+  # Held COM session objects let us restore even after AoE2's PID disappears.
+  try { [SessionMute]::Restore() } catch {}
 }
 `;
 
@@ -69,17 +105,29 @@ function ensureWorker(): ChildProcessWithoutNullStreams | null {
     windowsHide: true,
     stdio: "pipe"
   });
-  worker.on("exit", () => { worker = null; });
-  worker.stderr.on("data", (data: Buffer) => console.warn(`[AoE2 audio] ${data.toString().trim()}`));
-  return worker;
+  const activeWorker = worker;
+  const generation = ++workerGeneration;
+  const handleFailure = (error: Error) => {
+    console.warn(`[AoE2 audio] WORKER_PIPE_ERROR|Generation=${generation}|${error.message}`);
+    if (worker === activeWorker) worker = null;
+  };
+  activeWorker.on("error", handleFailure);
+  activeWorker.stdin.on("error", handleFailure);
+  activeWorker.on("exit", (code) => {
+    console.info(`[AoE2 audio] WORKER_EXIT|Generation=${generation}|Code=${code ?? "null"}`);
+    if (worker === activeWorker) worker = null;
+  });
+  activeWorker.stderr.on("data", (data: Buffer) => console.warn(`[AoE2 audio] ${data.toString().trim()}`));
+  return activeWorker;
 }
 
 function applyDesiredMute(): void {
   const pid = detectAoe2NativeProcess().pid;
   const activeWorker = ensureWorker();
-  if (!pid || !activeWorker?.stdin.writable) return;
-  lastManagedPid = pid;
-  activeWorker.stdin.write(`${pid}|${desiredMuted ? 1 : 0}\n`);
+  if (!activeWorker?.stdin.writable) return;
+  if (pid) lastManagedPid = pid;
+  // PID 0 tells the worker to restore its retained lease after a manual exit.
+  activeWorker.stdin.write(`${pid ?? 0}|${desiredMuted ? 1 : 0}\n`);
 }
 
 function setDesiredMute(muted: boolean, source: string): void {
@@ -93,6 +141,7 @@ function setDesiredMute(muted: boolean, source: string): void {
   // Audio sessions can be recreated while AoE2 changes screens. Poll quickly
   // enough that a replacement session cannot leak an audible second.
   refreshTimer = muted ? setInterval(applyDesiredMute, 100) : undefined;
+  refreshTimer?.unref();
 }
 
 export function beginAoe2MatchAudioSuppression(): void {
@@ -135,7 +184,7 @@ export async function restoreAoe2AudioOnShutdown(): Promise<void> {
   if (pid && activeWorker?.stdin.writable) {
     // Preserve ordering on the worker's stdin: this unmute is processed after
     // every queued mute, then EOF triggers its independent finally safeguard.
-    activeWorker.stdin.write(`${pid}|0\n`);
+    activeWorker.stdin.write(`0|0\n`);
     activeWorker.stdin.end();
     await Promise.race([
       new Promise<void>((resolve) => activeWorker.once("exit", () => resolve())),
