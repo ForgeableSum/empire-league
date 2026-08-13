@@ -4503,6 +4503,11 @@
   overflow: hidden;
 }
 
+.lobby-chat::before,
+.lobby-chat::after {
+  display: none;
+}
+
 .lobby-roster {
   overflow: visible;
 }
@@ -4616,7 +4621,8 @@
 }
 
 .lobby-chat {
-  min-height: 540px;
+  height: 540px;
+  min-height: 0;
   display: grid;
   grid-template-rows: auto 1fr auto;
 }

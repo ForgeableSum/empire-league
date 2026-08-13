@@ -213,6 +213,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     localizeAoe2Name
   } = useAppStore();
   const [draft, setDraft] = useState("");
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
   const replayResultInFlight = useRef(false);
   const gameStartRevealRef = useRef<Promise<void> | null>(null);
   const startRequestInFlight = useRef(false);
@@ -220,8 +221,14 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const me = room.players.find((player) => player.id === currentPlayerId)!;
   const isHost = room.hostId === currentPlayerId;
   const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => room.players.find((player) => player.slot === index + 1)), [room]);
+  const latestMessageId = room.messages.at(-1)?.id;
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
+
+  useEffect(() => {
+    const messageList = chatMessagesRef.current;
+    if (messageList) messageList.scrollTop = messageList.scrollHeight;
+  }, [room.id, latestMessageId]);
 
   useEffect(() => {
     const isCustomRoom = room.source !== "weekly";
@@ -535,7 +542,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
         </article>
         <aside className="panel lobby-chat">
           <div className="lobby-chat-title"><MessageSquare size={18} /><strong>Lobby chat</strong></div>
-          <div className="lobby-chat-messages" aria-live="polite">{room.messages.map((message) => <p className={message.system ? "system" : ""} data-ui-translation={message.system ? undefined : "off"} key={message.id}><strong>{message.author}</strong><span>{message.text}</span></p>)}</div>
+          <div className="lobby-chat-messages" aria-live="polite" ref={chatMessagesRef}>{room.messages.map((message) => <p className={message.system ? "system" : ""} data-ui-translation={message.system ? undefined : "off"} key={message.id}><strong>{message.author}</strong><span>{message.text}</span></p>)}</div>
           <form onSubmit={submitChat}><input placeholder="Message lobby…" value={draft} onChange={(event) => setDraft(event.target.value)} /><button className="primary" aria-label="Send"><Send size={17} /></button></form>
         </aside>
       </div>
