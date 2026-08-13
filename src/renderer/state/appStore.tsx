@@ -975,7 +975,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }));
       setPage("ranked");
       log(`Joined queue ${queue.id}`);
-      unsubscribeRef.current = services.matchmaking.subscribeToQueue(ticket.id, (event) => {
+      unsubscribeRef.current = services.matchmaking.subscribeToQueue(ticket.id, async (event) => {
         if (event.type === "range") {
           setState((previous) => ({ ...previous, searchRange: { min: event.minRating, max: event.maxRating } }));
         }
@@ -1017,6 +1017,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             acceptedByOpponent: true,
             status: event.role === "host" ? "creating_lobby" as const : "waiting_for_opponent" as const
           };
+          const inputLock = await window.electronApi?.setLobbyInputLock(true)
+            .catch(() => ({ locked: false }));
+          if (!inputLock?.locked) {
+            await handleLobbySetupFailure(
+              acceptedSession.queue,
+              "Empire League could not secure the lobby automation input lock.",
+              { criticalFailure: { code: "LOBBY_INPUT_LOCK_FAILED", phase: "lobby_setup" } }
+            );
+            return;
+          }
           const setupEstimateMs = estimateLobbySetupMs(acceptedSession);
           startRoomSetupWatchdog(event.role === "guest"
             ? Math.max(roomSetupTimeoutMs, setupEstimateMs + roomSetupEstimateMarginMs)

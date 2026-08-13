@@ -1669,7 +1669,14 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
         if (window && !window.isDestroyed() && !window.webContents.isDestroyed()) {
           window.webContents.send("game:automation-log", `INPUT_GUARD|${diagnostic}`);
         }
-        if (message.includes("GUARD_READY")) finish(true);
+        if (message.includes("GUARD_READY")) {
+          const foregroundReady = !window || window.isDestroyed() ? false : window.isFocused();
+          if (!foregroundReady) {
+            console.error("[AoE2 automation] INPUT_GUARD|READY_FOREGROUND_LOST|ElectronFocused=false");
+            stopInputGuard();
+          }
+          finish(foregroundReady);
+        }
         if (message.includes("GUARD_ERROR")) finish(false);
       });
     });
