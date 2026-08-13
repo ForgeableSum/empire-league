@@ -4283,12 +4283,7 @@ export function registerGameHandlers(): void {
     const keepGameBehind = setInterval(() => {
       if (isAoe2NativeWindowForeground(game.pid!)) {
         keepAoe2NativeWindowBehind(game.pid!);
-        // The cover was already shown before the handoff. Re-running its
-        // show/moveTop/focus sequence here made Windows alternate activated
-        // surfaces while Steam repeatedly raised AoE2, producing visible
-        // flicker during the countdown. Moving AoE2 to HWND_BOTTOM with
-        // SWP_NOACTIVATE reveals the existing cover without another focus
-        // transition.
+        if (appWindow && !appWindow.isDestroyed()) showMainWindowAsGameCover(appWindow);
       }
     }, 25);
     keepGameBehind.unref();
