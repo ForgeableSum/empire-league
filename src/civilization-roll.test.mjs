@@ -117,6 +117,14 @@ test("prefer-random becomes random when the 1v1 opponent selects random", () => 
   );
 });
 
+test("both players become random when both select prefer-random", () => {
+  const first = { mode: "pick", civilization: "Byzantines", preferRandom: true };
+  const second = { mode: "pick", civilization: "Mayans", preferRandom: true };
+
+  assert.equal(effectiveCivilizationPreference(first, [second]).mode, "random");
+  assert.equal(effectiveCivilizationPreference(second, [first]).mode, "random");
+});
+
 test("normalization limits each map-style list to five known unique civilizations", () => {
   const normalized = normalizeCivilizationPreference({
     mode: "random",
