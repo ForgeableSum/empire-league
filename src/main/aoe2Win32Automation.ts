@@ -640,6 +640,36 @@ export async function sendAoe2Down(processId: number): Promise<NativeInputResult
   };
 }
 
+export async function sendAoe2Digit(processId: number, digit: number): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  if (!Number.isInteger(digit) || digit < 0 || digit > 9) {
+    return { sent: false, detail: "INVALID_DIGIT" };
+  }
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+  const virtualKey = 0x30 + digit;
+  const scanCode = digit === 0 ? 0x0b : digit + 1;
+  const downLParam = (scanCode << 16) | 1;
+  const upLParam = (0xc0000000 | downLParam) | 0;
+  const down = sendWindowMessage(window, 0x0100, virtualKey, downLParam);
+  await delay(15);
+  const up = sendWindowMessage(window, 0x0101, virtualKey, upLParam);
+  const sent = down.dispatched && up.dispatched;
+  return {
+    sent,
+    detail: [
+      sent ? "SENT" : "SEND_FAILED",
+      "Mode=WindowMessageSync",
+      `Key=${digit}`,
+      `Window=${String(window)}`,
+      `Down=${down.dispatched}`,
+      `DownMs=${down.elapsedMs}`,
+      `Up=${up.dispatched}`,
+      `UpMs=${up.elapsedMs}`
+    ].join("|")
+  };
+}
+
 export async function sendAoe2Tab(processId: number): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);

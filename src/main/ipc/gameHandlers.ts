@@ -72,7 +72,7 @@ import {
   readAoe2HostSetupState,
   readAoe2ReadyState,
   sendAoe2End,
-  sendAoe2Down,
+  sendAoe2Digit,
   sendAoe2Enter,
   sendAoe2Escape,
   sendAoe2Home,
@@ -3224,6 +3224,7 @@ export function registerGameHandlers(): void {
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", sequencedMessage);
     };
     emitLog("Started=True");
+    emitLog(`PLAYER_COUNT_REQUEST|Value=${playerCount}`);
     emitLog(`GAME_SETTINGS_PAYLOAD|${JSON.stringify(requestedGameSettings ?? null)}`);
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showMainWindowAsGameCover(appWindow);
@@ -3388,16 +3389,17 @@ export function registerGameHandlers(): void {
       if (!confirmVisibility.sent) throw new Error("Private lobby visibility could not be confirmed.");
       await delay(250);
       await actionStep("playerCount");
-      const firstPlayerCount = await sendAoe2Home(process.pid);
-      emitLog(`STEP|Select Player Count Base|Key=HOME|${firstPlayerCount.detail}`);
-      if (!firstPlayerCount.sent) throw new Error("The lobby player-count menu could not be reset.");
-      for (let count = 2; count < playerCount; count += 1) {
-        const nextPlayerCount = await sendAoe2Down(process.pid);
-        emitLog(`STEP|Select ${count + 1} Players|Key=DOWN|${nextPlayerCount.detail}`);
-        if (!nextPlayerCount.sent) throw new Error(`The ${playerCount}-player lobby size could not be selected.`);
-        await delay(75);
+      if (playerCount === 8) {
+        // END commits the final entry and closes this AoE2 dropdown.
+        const lastPlayerCount = await sendAoe2End(process.pid);
+        emitLog(`STEP|Select 8 Players|Key=END|${lastPlayerCount.detail}`);
+        if (!lastPlayerCount.sent) throw new Error("The 8-player lobby size could not be selected.");
+      } else {
+        const requestedPlayerCount = await sendAoe2Digit(process.pid, playerCount);
+        emitLog(`STEP|Select ${playerCount} Players|Key=${playerCount}|${requestedPlayerCount.detail}`);
+        if (!requestedPlayerCount.sent) throw new Error(`The ${playerCount}-player lobby size could not be selected.`);
       }
-      await delay(100);
+      await delay(300);
       const confirmPlayerCount = await sendAoe2Enter(process.pid);
       emitLog(`STEP|Confirm ${playerCount} Players|Key=ENTER|${confirmPlayerCount.detail}`);
       if (!confirmPlayerCount.sent) throw new Error(`The ${playerCount}-player lobby size could not be confirmed.`);
