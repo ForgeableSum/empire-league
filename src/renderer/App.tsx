@@ -288,16 +288,25 @@ function initialsFor(name: string): string {
 }
 
 function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; manageNativeLock: boolean }) {
-  const [pointer, setPointer] = useState<{ x: number; y: number; sequence: number } | null>(null);
+  const pointerElementRef = useRef<HTMLSpanElement | null>(null);
+  const latestPointerRef = useRef<{ x: number; y: number; sequence: number } | null>(null);
+  const pointerFrameRef = useRef<number | null>(null);
   const { notify } = useAppStore();
+
+  const clearPointer = () => {
+    latestPointerRef.current = null;
+    if (pointerFrameRef.current !== null) window.cancelAnimationFrame(pointerFrameRef.current);
+    pointerFrameRef.current = null;
+    pointerElementRef.current?.classList.remove("visible");
+    document.documentElement.classList.remove("game-transition-input-forwarded");
+  };
 
   useEffect(() => {
     const restoreNativeCursor = () => {
       // Alt-Tab can race the native game/app handoff. Clear the renderer's
       // synthetic cursor immediately on blur so Electron can never return
       // with both the native cursor hidden and no guarded pointer frames.
-      document.documentElement.classList.remove("game-transition-input-forwarded");
-      setPointer(null);
+      clearPointer();
     };
     window.addEventListener("blur", restoreNativeCursor);
     return () => window.removeEventListener("blur", restoreNativeCursor);
@@ -305,16 +314,27 @@ function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; m
 
   useEffect(() => {
     if (!active) {
-      setPointer(null);
+      clearPointer();
       return;
     }
     if (manageNativeLock) void window.electronApi?.setLobbyInputLock(true);
     const removePointerListener = window.electronApi?.onLobbyGuardPointer((point) => {
-      setPointer(point);
+      latestPointerRef.current = point;
       window.electronApi?.acknowledgeLobbyGuardPointer(point.sequence);
+      if (pointerFrameRef.current !== null) return;
+      pointerFrameRef.current = window.requestAnimationFrame(() => {
+        pointerFrameRef.current = null;
+        const latest = latestPointerRef.current;
+        const element = pointerElementRef.current;
+        if (!latest || !element) return;
+        element.style.transform = `translate3d(${latest.x}px, ${latest.y}px, 0)`;
+        element.classList.add("visible");
+        document.documentElement.classList.add("game-transition-input-forwarded");
+      });
     });
     (document.activeElement as HTMLElement | null)?.blur?.();
     return () => {
+      clearPointer();
       if (manageNativeLock) void window.electronApi?.setLobbyInputLock(false);
       removePointerListener?.();
     };
@@ -335,17 +355,11 @@ function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; m
     return removeShortcutListener;
   }, [active, notify]);
 
-  useEffect(() => {
-    const forwarding = active && pointer !== null;
-    document.documentElement.classList.toggle("game-transition-input-forwarded", forwarding);
-    return () => document.documentElement.classList.remove("game-transition-input-forwarded");
-  }, [active, pointer]);
-
-  if (!active || !pointer) return null;
+  if (!active) return null;
   return (
     <span
+      ref={pointerElementRef}
       className="lobby-guard-pointer"
-      style={{ left: pointer.x, top: pointer.y }}
       aria-hidden="true"
     />
   );

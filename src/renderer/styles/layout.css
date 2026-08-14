@@ -3345,6 +3345,8 @@
 
 .lobby-guard-pointer {
   position: fixed;
+  left: 0;
+  top: 0;
   z-index: 10000;
   width: 12px;
   height: 18px;
@@ -3352,6 +3354,12 @@
   background: white;
   clip-path: polygon(0 0, 0 100%, 30% 72%, 52% 100%, 68% 91%, 47% 65%, 100% 65%);
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.9));
+  opacity: 0;
+  will-change: transform;
+}
+
+.lobby-guard-pointer.visible {
+  opacity: 1;
 }
 
 .spin {

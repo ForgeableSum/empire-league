@@ -439,15 +439,15 @@ export async function postAoe2DesignClick(
   const send = synchronous
     ? (message: number, wParam: number, messagePosition = position) => sendMouseMessage(window, message, wParam, messagePosition)
     : (message: number, wParam: number, messagePosition = position) => postMouseMessage(window, message, wParam, messagePosition);
-  const prime = primeMove ? send(0x0200, 0, (1 << 16) | 1) : null;
+  const prime = primeMove ? await send(0x0200, 0, (1 << 16) | 1) : null;
   if (prime) await delay(50);
-  const moved = send(0x0200, 0);
+  const moved = await send(0x0200, 0);
   await delay(hoverMs);
   const pixelAfterMove = readWindowRgb(window, x, y);
-  const down = send(0x0201, 1);
+  const down = await send(0x0201, 1);
   await delay(holdMs);
   const pixelAfterDown = readWindowRgb(window, x, y);
-  const up = send(0x0202, 0);
+  const up = await send(0x0202, 0);
   const pixelAfterUp = readWindowRgb(window, x, y);
   const sent = (!requireMove || moved.dispatched) && down.dispatched && up.dispatched;
 
@@ -1268,8 +1268,33 @@ function sendMouseMessage(
   message: number,
   wParam: number,
   lParam: number
-): MessageDispatchResult {
-  return sendWindowMessage(window, message, wParam, lParam);
+): Promise<MessageDispatchResult> {
+  const result: [number | null] = [null];
+  const started = performance.now();
+  SetLastError!(0);
+  return new Promise((resolve) => {
+    // Koffi's async dispatch runs the potentially one-second Win32 wait on its
+    // native worker pool. Pointer IPC and Electron painting stay responsive.
+    SendMessageTimeoutW!.async(
+      window,
+      message,
+      wParam,
+      lParam,
+      0x0002,
+      1000,
+      result,
+      (error: Error | null, nativeResult: bigint | number | null) => {
+        const win32Error = Number(GetLastError!());
+        resolve({
+          dispatched: !error && Boolean(nativeResult),
+          elapsedMs: Math.round((performance.now() - started) * 10) / 10,
+          result: String(result[0] ?? 0),
+          error: win32Error,
+          foreground: sameHandle(GetForegroundWindow!(), window)
+        });
+      }
+    );
+  });
 }
 
 function sendWindowMessage(
