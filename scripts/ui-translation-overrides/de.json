@@ -82,7 +82,6 @@
   "Elo ratings and match data will be reset when the platform fully launches.": "Elo-Wertungen und Matchdaten werden beim vollständigen Start der Plattform zurückgesetzt.",
   "When the queue fills, everyone moves into a locked lobby. Choose a civilization, ready up, and Empire League handles the existing AoE2 lobby automation.": "Sobald die Warteschlange voll ist, wechseln alle in eine geschlossene Lobby. Wähle deine Zivilisation, markiere dich als bereit und Empire League übernimmt die AoE2-Lobbyautomatisierung.",
   "Accept Unverified Lobby Content": "Nicht verifizierte Lobby-Inhalte akzeptieren",
-  "Continue anyway": "Trotzdem fortfahren",
   "Keep automatic detection": "Automatische Erkennung beibehalten",
   "Match Empire League to AoE2": "Sprache von Empire League an AoE2 anpassen",
   "Check Age of Empires II → Options → Interface → Game Language. If the languages do not match, automated map and civilization selection can fail and your lobby may not be created.": "Prüfe in Age of Empires II unter Optionen → Benutzeroberfläche → Spielsprache, welche Sprache eingestellt ist. Stimmen die Sprachen nicht überein, kann die automatische Karten- und Zivilisationsauswahl fehlschlagen und deine Lobby wird möglicherweise nicht erstellt.",
