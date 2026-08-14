@@ -45,6 +45,7 @@ interface AppContextValue {
   setWeeklyQueueActive: (active: boolean) => void;
   page: AppPage;
   setPage: (page: AppPage) => void;
+  retireCompletedRankedSession: () => Promise<void>;
   selectedProfileId: string | null;
   openPlayerProfile: (playerId: string) => void;
   returnFromPlayerProfile: () => void;
@@ -161,7 +162,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [weeklyQueueActive, setWeeklyQueueActive] = useState(false);
   const [incompatibleUiMods, setIncompatibleUiMods] = useState<string[]>([]);
   const [disablingUiMods, setDisablingUiMods] = useState(false);
-  const [page, setPage] = useState<AppPage>(() => isAppPage(previewPage) ? previewPage : "home");
+  const [page, setCurrentPage] = useState<AppPage>(() => isAppPage(previewPage) ? previewPage : "home");
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [profileReturnPage, setProfileReturnPage] = useState<AppPage>("leaderboard");
   const profileReturnScrollRef = useRef(0);
@@ -302,6 +303,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const replayResultInFlightRef = useRef(false);
   const gameRevealInFlightRef = useRef<Promise<void> | null>(null);
   const gameStartSignalInFlightRef = useRef<Promise<boolean> | null>(null);
+  const rankedSessionRetirementRef = useRef<Promise<void> | null>(null);
   const lobbyTimingAuditRef = useRef<{ matchId: string; startedAt: number; previousAt: number; expectedMs: number; role: "host" | "guest" } | null>(null);
   const familySharingNoticeShownRef = useRef(false);
   useEffect(() => {
@@ -925,6 +927,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (state.gameStatus === "loading" || !canStartQueue || queueJoinInFlightRef.current) return;
     queueJoinInFlightRef.current = true;
     try {
+      if (stateRef.current.queueStatus === "completed") await retireRankedTransport();
       if (await blockQueueForPendingUpdate()) return;
       if (!(await ensureAoe2Ready())) {
         queueJoinInFlightRef.current = false;
@@ -1673,7 +1676,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   function completeResult(result: MatchResult): void {
     queueJoinInFlightRef.current = false;
     replayResultInFlightRef.current = false;
-    void window.electronApi?.stopReplayEndDetection();
+    // The result remains available for presentation, but the ranked transport
+    // no longer owns listeners, a ticket, timers, or AoE automation state.
+    // Retire it at the terminal lifecycle boundary so every future queue type
+    // starts clean without needing to know how ranked sessions are dismantled.
+    void retireRankedTransport();
     setState((previous) => {
       const activeMatch = previous.activeMatch ? { ...previous.activeMatch, result, status: "completed" as const } : null;
       const isTeamRating = result.ratingPool === "team";
@@ -1744,15 +1751,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function returnToMatchmaking(): Promise<void> {
-    unsubscribeRef.current?.();
-    unsubscribeRef.current = null;
-    if (ticketRef.current) {
-      await services.matchmaking.leaveQueue(ticketRef.current).catch(() => undefined);
-      ticketRef.current = null;
-    }
     queueJoinInFlightRef.current = false;
     replayResultInFlightRef.current = false;
-    matchedSessionRef.current = null;
+    await retireRankedTransport();
     setState((previous) => ({
       ...previous,
       queueStatus: "idle",
@@ -1762,6 +1763,59 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       error: null
     }));
     setPage("ranked");
+  }
+
+  async function retireRankedTransport(): Promise<void> {
+    if (rankedSessionRetirementRef.current) return rankedSessionRetirementRef.current;
+
+    // Detach all synchronous ownership before the first await. This prevents a
+    // late event from the completed ranked ticket racing the result screen or
+    // a subsequently selected queue.
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    const ticketId = ticketRef.current;
+    ticketRef.current = null;
+    matchedSessionRef.current = null;
+    lobbyAutomationRef.current = null;
+    lobbyTimingAuditRef.current = null;
+    replayResultInFlightRef.current = false;
+    clearRoomSetupWatchdog();
+
+    rankedSessionRetirementRef.current = (async () => {
+      await window.electronApi?.stopReplayEndDetection().catch(() => undefined);
+      await window.electronApi?.setLobbyInputLock(false).catch(() => ({ locked: false }));
+      if (ticketId) await services.matchmaking.leaveQueue(ticketId).catch(() => undefined);
+    })().finally(() => {
+      rankedSessionRetirementRef.current = null;
+    });
+    return rankedSessionRetirementRef.current;
+  }
+
+  async function retireCompletedRankedSession(): Promise<void> {
+    if (stateRef.current.queueStatus !== "completed") return;
+    await retireRankedTransport();
+    // Moving to another queue dismisses only the completed result presentation;
+    // transport cleanup already occurred when the match became terminal.
+    setState((previous) => previous.queueStatus === "completed" ? {
+      ...previous,
+      queueStatus: "idle",
+      selectedQueue: null,
+      queueStartedAt: null,
+      activeMatch: null,
+      roomSetupStartedAt: null,
+      roomSetupEstimateMs: null,
+      roomSetupMilestone: null,
+      transitionInputLocked: false,
+      error: null
+    } : previous);
+  }
+
+  function setPage(nextPage: AppPage): void {
+    if ((nextPage === "custom" || nextPage === "weekly") && stateRef.current.queueStatus === "completed") {
+      void retireCompletedRankedSession().finally(() => setCurrentPage(nextPage));
+      return;
+    }
+    setCurrentPage(nextPage);
   }
 
   function updateMockConfig(patch: Partial<MockServiceConfig>): void {
@@ -1932,6 +1986,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setWeeklyQueueActive,
     page,
     setPage,
+    retireCompletedRankedSession,
     selectedProfileId,
     openPlayerProfile: (playerId) => {
       if (page !== "profile") {

@@ -11,7 +11,7 @@ import { AnimatedEllipsis, NetworkLobby } from "./CustomPage";
 export function WeeklyPage() {
   const {
     state, ensureAoe2Ready, notify, setWeeklyQueueActive, localizeAoe2Name,
-    setLobbyAutomationActive, clearCustomLobbyAutomationSteps
+    setLobbyAutomationActive, clearCustomLobbyAutomationSteps, retireCompletedRankedSession
   } = useAppStore();
   const [status, setStatus] = useState<WeeklyQueueStatus | null>(null);
   const [room, setRoom] = useState<CustomLobbyRoom>();
@@ -95,6 +95,13 @@ export function WeeklyPage() {
       if (status.queued) {
         setStatus(await weeklyQueueService.leave());
       } else {
+        const canEnterWeeklyQueue = ["idle", "cancelled", "completed"].includes(state.queueStatus)
+          && (!state.activeMatch || state.queueStatus === "completed");
+        if (!canEnterWeeklyQueue) {
+          notify("Leave matchmaking before entering the weekly queue.", "warning");
+          return;
+        }
+        await retireCompletedRankedSession();
         if (!(await ensureAoe2Ready("custom"))) return;
         const next = await weeklyQueueService.join(civilization);
         setStatus(next);

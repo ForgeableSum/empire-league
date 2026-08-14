@@ -15,7 +15,7 @@ import { useAppStore } from "../state/appStore";
 const emptyCatalog: LocalCustomContentCatalog = { maps: [], dataMods: [], scannedRoots: [], scannedAt: new Date(0).toISOString() };
 
 export function CustomPage() {
-  const { state, notify, ensureAoe2Ready, localizeAoe2Name } = useAppStore();
+  const { state, notify, ensureAoe2Ready, localizeAoe2Name, retireCompletedRankedSession } = useAppStore();
   const [rooms, setRooms] = useState<CustomLobbyRoom[]>([]);
   const [catalog, setCatalog] = useState(emptyCatalog);
   const [loadingRooms, setLoadingRooms] = useState(true);
@@ -34,8 +34,11 @@ export function CustomPage() {
   const canEnterCustomLobby = ["idle", "cancelled", "completed"].includes(state.queueStatus)
     && (!state.activeMatch || state.queueStatus === "completed");
 
-  function guardCustomLobbyEntry(): boolean {
-    if (canEnterCustomLobby) return true;
+  async function guardCustomLobbyEntry(): Promise<boolean> {
+    if (canEnterCustomLobby) {
+      await retireCompletedRankedSession();
+      return true;
+    }
     notify("Leave matchmaking before entering a custom lobby.", "warning");
     return false;
   }
@@ -85,7 +88,7 @@ export function CustomPage() {
   }, []);
 
   async function createRoom() {
-    if (!guardCustomLobbyEntry()) return;
+    if (!(await guardCustomLobbyEntry())) return;
     setPending(true);
     try {
       const contentId = contentKind === "map" ? mapId : scenarioId;
@@ -104,12 +107,12 @@ export function CustomPage() {
   }
 
   async function openCreateRoom() {
-    if (!guardCustomLobbyEntry()) return;
+    if (!(await guardCustomLobbyEntry())) return;
     if (await ensureAoe2Ready("custom")) setCreating(true);
   }
 
   async function joinRoom(roomId: string) {
-    if (!guardCustomLobbyEntry()) return;
+    if (!(await guardCustomLobbyEntry())) return;
     if (!(await ensureAoe2Ready("custom"))) return;
     setPending(true);
     try {
