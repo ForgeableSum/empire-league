@@ -45,7 +45,7 @@ function RatingChart({ matches, currentRating, possessive = "Your" }: { matches:
   const [activePointId, setActivePointId] = useState<string | null>(null);
   const points = buildRatingHistory(matches, currentRating);
   if (points.length === 0) {
-    return <div className="empty-state">{possessive} Elo progress will appear after the first 1v1 match.</div>;
+    return <div className="empty-state rating-chart-empty">{possessive} Elo progress will appear after the first 1v1 match.</div>;
   }
 
   const width = 800;
@@ -262,7 +262,11 @@ export function ProfilePage({
             </div>
           ))}
           {matches.length === 0 && (
-            <div className="empty-state">You haven't played any matches yet.</div>
+            <div className="empty-state">
+              {viewingOwnProfile
+                ? "You haven't played any matches yet."
+                : `${user.displayName} hasn't played any matches yet.`}
+            </div>
           )}
         </div>
       </div>

@@ -3917,6 +3917,10 @@
   font-size: 13px;
 }
 
+.rating-chart-empty {
+  padding: 18px 2px 8px;
+}
+
 .rating-chart-summary strong {
   font-size: 18px;
 }
