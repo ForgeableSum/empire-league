@@ -345,13 +345,12 @@ export function showReturnToMenuOverlay(): void {
   }
 
   const display = screen.getPrimaryDisplay();
-  const width = 720;
-  const height = 190;
-  const bottomMargin = 56;
+  const width = 554;
+  const height = 146;
   const overlay = new BrowserWindow({
     show: false,
     x: display.workArea.x + Math.round((display.workArea.width - width) / 2),
-    y: display.workArea.y + display.workArea.height - height - bottomMargin,
+    y: display.bounds.y + display.bounds.height - height,
     width,
     height,
     frame: false,
@@ -382,22 +381,22 @@ export function showReturnToMenuOverlay(): void {
   * { box-sizing: border-box; }
   html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
   body {
-    padding: 3px;
+    padding: 2px 2px 0;
     color: #f8f2e7;
     font-family: "Segoe UI", sans-serif;
   }
   section {
     height: 100%;
-    padding: 26px 32px;
-    border: 3px solid #d8b25b;
-    border-radius: 18px;
+    padding: 14px 22px 12px;
+    border: 2px solid #d8b25b;
+    border-radius: 13px 13px 0 0;
     background: rgba(15, 14, 13, .97);
     box-shadow: 0 16px 48px rgba(0, 0, 0, .72), 0 0 28px rgba(216, 178, 91, .24);
     text-align: center;
   }
-  strong { display: block; color: #d8b25b; font-size: 16px; letter-spacing: .16em; text-transform: uppercase; }
-  p { margin: 14px 0 7px; font-size: 30px; font-weight: 700; line-height: 1.2; }
-  span { color: #d4ccbe; font-size: 17px; }
+  strong { display: block; color: #d8b25b; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
+  p { margin: 8px 0 4px; font-size: 24px; font-weight: 700; line-height: 1.15; }
+  span { color: #d4ccbe; font-size: 14px; }
 </style>
 </head>
 <body>
