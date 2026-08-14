@@ -145,7 +145,7 @@ export function ProfilePage({
   outgoingRequestIds: string[];
   onAddFriend: (displayName: string) => Promise<void>;
 }) {
-  const { state, selectedProfileId } = useAppStore();
+  const { state, selectedProfileId, openPlayerProfile, localizeAoe2Name } = useAppStore();
   const viewingOwnProfile = !selectedProfileId || selectedProfileId === state.currentUser.id;
   const [profile, setProfile] = useState<{ player: PlayerProfile; matches: MatchSummary[] } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -202,20 +202,16 @@ export function ProfilePage({
           <h2 data-ui-translation="off">{user.displayName}</h2>
           <span>{user.steamId ? `Steam ID ${user.steamId}` : "Steam account"}</span>
         </div>
-        <div className="profile-card-status">
-          {recentForm.length > 0 && (
-            <div className="profile-recent-form">
-              <span>Recent W/L</span>
-              <FormPips form={recentForm} />
-            </div>
-          )}
-        {!viewingOwnProfile && !isFriend && (
-          <button className="primary profile-friend-button" type="button" disabled={addingFriend || isPending} onClick={() => void addFriend()}>
-            {isPending ? "Friend request sent" : addingFriend ? "Sending…" : "Add friend"}
-          </button>
+        {!viewingOwnProfile && (
+          <div className="profile-card-status">
+            {!isFriend && (
+              <button className="primary profile-friend-button" type="button" disabled={addingFriend || isPending} onClick={() => void addFriend()}>
+                {isPending ? "Friend request sent" : addingFriend ? "Sending…" : "Add friend"}
+              </button>
+            )}
+            {isFriend && <span className="profile-friend-status">Friends</span>}
+          </div>
         )}
-          {!viewingOwnProfile && isFriend && <span className="profile-friend-status">Friends</span>}
-        </div>
       </div>
       <div className="metrics-grid">
         <Metric
@@ -232,6 +228,43 @@ export function ProfilePage({
         />
         <Metric label="Team RM Peak" value={user.teamPeakRating} />
         <Metric label="Season Record" value={`${user.wins}-${user.losses}`} />
+      </div>
+      <div className="panel span-2">
+        <div className="panel-title">
+          <h2>Recent Matches</h2>
+          {recentForm.length > 0 && <FormPips form={recentForm} />}
+        </div>
+        <div className="table recent-matches-table">
+          <div className="table-row table-header">
+            <strong>Result</strong>
+            <span>Opponent</span>
+            <span>Map</span>
+            <span>Civilization</span>
+            <span>Rating</span>
+            <span>Duration</span>
+          </div>
+          {matches.slice(0, 5).map((match) => (
+            <div className="table-row" key={match.id}>
+              <strong className={match.outcome}>
+                {match.outcome === "win" ? "Victory" : match.outcome === "loss" ? "Defeat" : "No Contest"}
+              </strong>
+              <button className="player-link" type="button" onClick={() => openPlayerProfile(match.opponentId)}>
+                {match.opponent}
+              </button>
+              <span>{localizeAoe2Name(match.map)}</span>
+              <span>{match.civilization && match.opponentCivilization
+                ? `${localizeAoe2Name(match.civilization)} vs. ${localizeAoe2Name(match.opponentCivilization)}`
+                : "Unknown civilizations"}</span>
+              <span className={match.ratingChange >= 0 ? "win" : "loss"}>
+                {match.ratingChange > 0 ? "+" : ""}{match.ratingChange}
+              </span>
+              <span>{match.durationMinutes}m</span>
+            </div>
+          ))}
+          {matches.length === 0 && (
+            <div className="empty-state">You haven't played any matches yet.</div>
+          )}
+        </div>
       </div>
       <div className="panel span-2">
         <h2>Elo Progress</h2>
