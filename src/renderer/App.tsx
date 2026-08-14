@@ -292,6 +292,18 @@ function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; m
   const { notify } = useAppStore();
 
   useEffect(() => {
+    const restoreNativeCursor = () => {
+      // Alt-Tab can race the native game/app handoff. Clear the renderer's
+      // synthetic cursor immediately on blur so Electron can never return
+      // with both the native cursor hidden and no guarded pointer frames.
+      document.documentElement.classList.remove("game-transition-input-forwarded");
+      setPointer(null);
+    };
+    window.addEventListener("blur", restoreNativeCursor);
+    return () => window.removeEventListener("blur", restoreNativeCursor);
+  }, []);
+
+  useEffect(() => {
     if (!active) {
       setPointer(null);
       return;
