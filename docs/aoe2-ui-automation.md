@@ -61,7 +61,7 @@ wrong screen.
 
 1. Receive the published `aoe2de://0/<digits>` URI.
 2. Pass the URI directly to AoE2's bundled `Tools_Builds/AOEURLHelper.exe`; do not depend on Windows having the optional `aoe2de://` protocol association. The helper performs the Steam handoff required by an already-running game.
-3. Wait 7 seconds for AoE2 to process the asynchronous handoff and settle in the lobby. Join-time pixel polling is intentionally avoided because transient and resolution-dependent lobby colors can reject successful joins.
+3. Wait 13 seconds for AoE2 to process the asynchronous handoff and settle in the lobby. Join-time pixel polling is intentionally avoided because transient and resolution-dependent lobby colors can reject successful joins.
 4. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), a cleared search field, and the filtered result coordinate. A persistent white outline proves selection; a gray outline proves the requested tile acquired hover/focus and permits Enter activation. Unverified input falls back immediately instead of repeating the same click. Random fallback clears the filter, makes one selection attempt, and verifies the picker closed.
 5. Report that the guest joined so the host can ready and release custom lobby files.
 6. After the host-ready report, poll `guestReady`.
@@ -76,7 +76,7 @@ AoE2's unverified-content modal is accepted with one window-local Tab followed b
 
 `lobbyTimingService.ts` is the countdown's source of truth. Its baseline follows the same manifest and runtime timing constants used by automation, including map-picker actions, optional civilization selection for both players, Ready ordering, WebSocket-delivered matchmaker events, custom-content confirmation, the second custom-map Host Ready, Start, and reveal.
 
-The baseline also includes measured allowances for AoE2 UI verification work that is not reducible to click/settle constants. August 2026 host and guest audits established a 9-second host setup allowance and longer civilization search/verification settles. The actual guest lobby-open delay is 7 seconds, while the countdown retains its separate 5-second estimate. These apply before the guest-joined milestone for both standard and custom-map flows.
+The baseline also includes measured allowances for AoE2 UI verification work that is not reducible to click/settle constants. August 2026 host and guest audits established a 9-second host setup allowance, a 13-second guest lobby-open allowance, and longer civilization search/verification settles. These apply before the guest-joined milestone for both standard and custom-map flows.
 
 Adaptive calibration is controlled by `adaptiveLobbyTimingEnabled` in `runtimeConfig.ts` and is disabled by default, so countdowns use the deterministic match-specific baseline. When enabled, the client stores the difference between a successful match's calculated baseline and its measured end-to-end duration. Standard and custom-map histories are kept separately, and future estimates add the rolling median of the latest successful residuals to the baseline.
 
