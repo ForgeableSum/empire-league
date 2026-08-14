@@ -2049,9 +2049,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         <div className="modal-backdrop ui-mod-warning-backdrop" role="presentation">
           <section className="match-modal ui-mod-warning-modal" role="alertdialog" aria-modal="true" aria-labelledby="ui-mod-warning-title">
             <div className="ui-mod-warning-icon"><AlertTriangle size={34} strokeWidth={2.4} aria-hidden="true" /></div>
-            <span className="eyebrow danger">Lobby automation blocked</span>
             <h2 id="ui-mod-warning-title">These UI mods will break lobby automation</h2>
-            <p>Empire League detected mods that replace the exact AoE2 menu screens or buttons it must control. Disable them before matchmaking.</p>
+            <p>Empire League detected mods that will interfere with automated lobby setups. Disable them before continuing.</p>
             <ul className="ui-mod-warning-list">
               {incompatibleUiMods.map((mod) => <li key={mod}>{mod}</li>)}
             </ul>
@@ -2061,7 +2060,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 {disablingUiMods && <Loader2 className="spin" size={17} aria-hidden="true" />}
                 {disablingUiMods ? "Disabling…" : "Disable mods"}
               </button>
-              <button className="secondary" type="button" disabled={disablingUiMods} onClick={() => setIncompatibleUiMods([])}>Continue anyway</button>
             </div>
           </section>
         </div>
