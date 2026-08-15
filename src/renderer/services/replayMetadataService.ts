@@ -9,9 +9,13 @@ export class ReplayNotFinishedError extends Error {
   }
 }
 
-export async function replayHasEnded(filePath: string): Promise<boolean> {
+export async function replayHasEnded(
+  filePath: string,
+  mode: "standard" | "ffa" | "team" = "standard",
+  expectedPlayerCount?: number
+): Promise<boolean> {
   if (!window.electronApi) return false;
-  const { parse_rec } = await import("aoe2rec-js");
+  const { parse_rec, parse_rec_summary } = await import("aoe2rec-js");
   const bytes = await window.electronApi.readReplayFile(filePath);
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   let replay: { operations?: Array<Record<string, unknown>> };
@@ -19,6 +23,36 @@ export async function replayHasEnded(filePath: string): Promise<boolean> {
     replay = parse_rec(buffer) as { operations?: Array<Record<string, unknown>> };
   } catch {
     return false;
+  }
+  if (mode !== "standard") {
+    // Multiplayer replays contain a Resign operation whenever any participant
+    // is eliminated. Only the final PostGame summary can prove that the last
+    // two players (or teams) have finished their contest.
+    const hasPostGame = replay.operations?.some((operation) => "PostGame" in operation) ?? false;
+    if (!hasPostGame) return false;
+    try {
+      const summary = parse_rec_summary(buffer);
+      const players = summary.teams
+        .flatMap((team) => team.players)
+        .filter((player) => player.profile_id > 0);
+      const winners = summary.teams
+        .filter((team) => team.winner)
+        .flatMap((team) => team.players)
+        .filter((player) => player.profile_id > 0);
+      const losers = summary.teams
+        .filter((team) => !team.winner)
+        .flatMap((team) => team.players)
+        .filter((player) => player.profile_id > 0);
+      const requiredPlayers = expectedPlayerCount ?? players.length;
+      return players.length === requiredPlayers
+        && winners.length >= 1
+        && (mode !== "ffa" || winners.length === 1)
+        && winners.length + losers.length === requiredPlayers;
+    } catch {
+      // PostGame can be written before the final summary has settled. The
+      // replay watcher will notify us again after the next write/stable edge.
+      return false;
+    }
   }
   return replay.operations?.some((operation) => {
     if ("PostGame" in operation) return true;

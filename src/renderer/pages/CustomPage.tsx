@@ -228,6 +228,11 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   activeAutomationAttemptRef.current = room.automationAttemptId;
   const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => room.players.find((player) => player.slot === index + 1)), [room]);
   const latestMessageId = room.messages.at(-1)?.id;
+  const replayCompletionMode = (() => {
+    if (room.players.length <= 2) return "standard" as const;
+    const sides = room.players.map((player) => player.team === 0 ? `player:${player.id}` : `team:${player.team}`);
+    return new Set(sides).size === room.players.length ? "ffa" as const : "team" as const;
+  })();
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
 
@@ -438,7 +443,11 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     return window.electronApi.onReplayEnded((filePath) => {
       if (replayResultInFlight.current) return;
       replayResultInFlight.current = true;
-      void replayHasEnded(filePath)
+      void replayHasEnded(
+        filePath,
+        replayCompletionMode,
+        replayCompletionMode === "standard" ? undefined : room.maxPlayers
+      )
         .then(async (ended) => {
           if (!ended) {
             replayResultInFlight.current = false;
@@ -452,7 +461,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           notify("The finished custom game could not be detected.", "danger", { detail: messageFor(error) });
         });
     });
-  }, [room.id, room.status, notify]);
+  }, [room.id, room.maxPlayers, room.status, replayCompletionMode, notify]);
 
   async function ensureAoe2Running() {
     const process = await window.electronApi!.detectAoe2Process();
