@@ -3677,13 +3677,12 @@ export function registerGameHandlers(): void {
       const verifiesReady = target === "guest-ready" || target === "host-ready";
       let readyState = verifiesReady ? readAoe2ReadyState(process.pid, action.point[1]) : null;
       if (readyState) emitVerification("before", readyState.detail);
-      if (target === "host-ready" && readyState?.state === "unknown") {
-        // Accepting transferred custom content temporarily disables the host's
-        // Ready button and renders it neutral gray. That is a settling state,
-        // not evidence that the lobby is broken. Wait for AoE2 to restore the
-        // red/green actionable state before deciding whether input is needed.
-        const hostReadyDeadline = Date.now() + 10_000;
-        while (readyState.state === "unknown" && Date.now() < hostReadyDeadline) {
+      if (verifiesReady && readyState?.state === "unknown") {
+        // Lobby transitions can temporarily render either Ready button neutral
+        // gray or leave capture unavailable. Wait for a confident red/green
+        // state before deciding whether input is needed; never click unknown.
+        const readyDeadline = Date.now() + 10_000;
+        while (readyState.state === "unknown" && Date.now() < readyDeadline) {
           await delay(250);
           readyState = readAoe2ReadyState(process.pid, action.point[1]);
         }

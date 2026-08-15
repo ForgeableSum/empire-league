@@ -29,7 +29,10 @@ const captureRequests = new Map<number, {
 }>();
 
 const captureIntervalMs = 500;
-const captureIdleTimeoutMs = 2_000;
+// Lobby state transitions intentionally pause for up to several seconds. Keep
+// the worker warm across those pauses so the next verification does not begin
+// with an empty capture cache.
+const captureIdleTimeoutMs = 10_000;
 
 export function startAoe2WindowCapture(): void {
   if (process.platform !== "win32") return;
@@ -51,8 +54,10 @@ export function stopAoe2WindowCapture(): void {
   captureTimer = undefined;
   captureTargetHandle = undefined;
   captureFrame = undefined;
-  captureInFlight = false;
-  captureInFlightPromise = undefined;
+  // Do not clear the in-flight state while the worker still owns a request.
+  // Its generation is invalid now, so it cannot publish a frame, but allowing
+  // another request to overlap would let the older request's finally block
+  // reset the newer request's state.
 }
 
 export function hasFreshAoe2WindowCapture(windowHandle: string): boolean {
