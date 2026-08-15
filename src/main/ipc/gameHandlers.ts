@@ -1302,10 +1302,9 @@ public static class AoeInputGuard {
       Release();
       return 3;
     }
-    // The mouse hook can receive thousands of movement callbacks per second.
-    // Keep those callbacks lightweight and publish only the newest position at
-    // display cadence; buttons and wheel events remain immediate.
-    movementPublishTimer = new Timer(PublishLatestMovement, null, 4, 4);
+    // Keep stdout out of the global hook while preserving up to 1,000 Hz input.
+    // Higher-rate mice coalesce to their newest absolute virtual position.
+    movementPublishTimer = new Timer(PublishLatestMovement, null, 1, 1);
     lastUsableMovementTimestamp = Stopwatch.GetTimestamp();
     healthPublishTimer = new Timer(PublishHealth, null, 1000, 1000);
     processWatchTimer = new Timer(WatchProcesses, null, 100, 100);
