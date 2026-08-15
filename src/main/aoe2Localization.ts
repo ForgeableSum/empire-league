@@ -10,6 +10,7 @@ import civBonuses from "../shared/civBonuses.json" with { type: "json" };
 
 let rememberedLanguageId: number | null | undefined;
 let languageOverrideId: number | null = null;
+const localizationResourceCache = new Map<string, Omit<Aoe2Localization, "languageId">>();
 
 function validLanguageId(value: unknown): value is number {
   return isAoe2LanguageId(value);
@@ -103,6 +104,8 @@ export async function loadAoe2Localization(gamePath: string, currentSessionOnly 
     ? detectedLanguageId
     : languageOverrideId ?? await activeLanguageId(false);
   const language = aoe2Languages[languageId ?? 2] ?? aoe2Languages[2];
+  const cachedResources = localizationResourceCache.get(language[0]);
+  if (cachedResources) return { languageId, ...cachedResources };
   const stringsPath = (code: string) => join(gamePath, "resources", code, "strings", "key-value", "key-value-strings-utf8.txt");
   try {
     const [englishText, localizedText] = await Promise.all([
@@ -162,7 +165,9 @@ export async function loadAoe2Localization(gamePath: string, currentSessionOnly 
         civilizationBonuses[civilization] = { bonuses, teamBonus: localizedTeamBonus };
       }
     }
-    return { languageId, languageCode: language[0], languageName: language[1], names, mapDescriptions, civilizationBonuses };
+    const resources = { languageCode: language[0], languageName: language[1], names, mapDescriptions, civilizationBonuses };
+    localizationResourceCache.set(language[0], resources);
+    return { languageId, ...resources };
   } catch {
     return { languageId, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
   }
