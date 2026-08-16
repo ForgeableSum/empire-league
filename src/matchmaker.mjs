@@ -2507,7 +2507,7 @@ async function handleRequest(request, response) {
         const replayError = body.error.trim().slice(0, 500);
         match.resultReportErrors ??= new Map();
         match.resultReportErrors.set(body.ticketId, replayError);
-        if (match.resultReportErrors.size === matchTickets(match).length) {
+        if (match.matchType !== "tournament" && match.resultReportErrors.size === matchTickets(match).length) {
           const reports = Object.fromEntries(
             [...match.resultReportErrors].map(([ticketId, error]) => [ticketId, { error }])
           );
@@ -2519,13 +2519,22 @@ async function handleRequest(request, response) {
         }
         console.warn(
           `[matchmaker] ${match.id}: replay error from ${body.ticketId};`
-          + ` waiting for another participant's report: ${replayError}`
+          + ` waiting for a valid participant report: ${replayError}`
         );
         return send(response, 202, { accepted: true, resolved: false });
       }
       try {
         await reconcileReplayPlayerLinks(match, actingTicket, body.replay);
       } catch (error) {
+        if (match.matchType === "tournament") {
+          const replayError = error instanceof Error ? error.message : "replay identity linking failed";
+          match.resultReportErrors ??= new Map();
+          match.resultReportErrors.set(body.ticketId, replayError);
+          console.warn(
+            `[matchmaker] ${match.id}: ignored tournament replay identity failure from ${body.ticketId}: ${replayError}`
+          );
+          return send(response, 202, { accepted: false, resolved: false });
+        }
         if (match.teamSize === 1) {
           await resolveContestedResult(match, {
             reason: error instanceof Error ? error.message : "replay identity linking failed",
@@ -2542,6 +2551,12 @@ async function handleRequest(request, response) {
       }
       const invalid = validateReplayReport(match, actingTicket, body.replay);
       if (invalid) {
+        if (match.matchType === "tournament") {
+          match.resultReportErrors ??= new Map();
+          match.resultReportErrors.set(body.ticketId, invalid);
+          console.warn(`[matchmaker] ${match.id}: ignored invalid tournament replay from ${body.ticketId}: ${invalid}`);
+          return send(response, 202, { accepted: false, resolved: false });
+        }
         if (match.teamSize === 1) {
           await resolveContestedResult(match, {
             reason: invalid,
@@ -2572,6 +2587,13 @@ async function handleRequest(request, response) {
         [teamTwoReport.ticketId]: teamTwoReport.replay
       };
       if (!replayReportsAgree(teamOneReport.replay, teamTwoReport.replay)) {
+        if (match.matchType === "tournament") {
+          console.warn(
+            `[matchmaker] ${match.id}: tournament replay reports disagreed;`
+            + ` preserving the first valid report from ${match.firstResultReport.ticketId}`
+          );
+          return send(response, 202, { accepted: true, resolved: false });
+        }
         await resolveContestedResult(match, {
           reason: "the qualifying Team 1 and Team 2 replay metadata did not agree",
           reports: qualifyingReports

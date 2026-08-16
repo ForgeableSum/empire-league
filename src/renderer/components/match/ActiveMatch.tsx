@@ -19,7 +19,7 @@ export function ActiveMatch() {
       {state.queueStatus === "verifying_result" && (
         <div className="button-row">
           <button className="primary" type="button" onClick={() => void returnToMatchmaking()}>
-            Return to matchmaking
+            {match.matchType === "tournament" ? "Return to Tournament" : "Return to Matchmaking"}
           </button>
         </div>
       )}

@@ -766,7 +766,14 @@ export async function recordNoContestMatch(match) {
          winner_player_id = NULL, result = 'no_contest', verification_status = 'no_contest', verified_at = VALUES(verified_at)`,
       [match.id, completedAt]
     );
-    await resetTournamentGameWithinTransaction(connection, match.tournamentMatchId);
+    if (match.tournamentMatchId) {
+      await resolveTournamentGameResultWithinTransaction(
+        connection,
+        match.tournamentMatchId,
+        null,
+        "no_contest"
+      );
+    }
     await connection.commit();
   } catch (error) {
     await connection.rollback();
