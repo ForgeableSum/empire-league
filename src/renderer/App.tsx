@@ -66,12 +66,14 @@ export function App() {
         match.status === "waiting"
         && (match.playerOneId === state.currentUser.id || match.playerTwoId === state.currentUser.id)
       );
-      if (!readyMatch || notifiedTournamentMatchesRef.current.has(readyMatch.id)) return;
+      if (!readyMatch) return;
+      const notificationKey = `${readyMatch.id}:${readyMatch.readyDeadline ?? "waiting"}`;
+      if (notifiedTournamentMatchesRef.current.has(notificationKey)) return;
       const playerReady = readyMatch.playerOneId === state.currentUser.id
         ? readyMatch.playerOneReady
         : readyMatch.playerTwoReady;
       if (playerReady) return;
-      notifiedTournamentMatchesRef.current.add(readyMatch.id);
+      notifiedTournamentMatchesRef.current.add(notificationKey);
       notify("Your tournament match is ready.", "warning", {
         detail: `${tournament.name} is waiting for you. Ready up before the deadline.`,
         durationMs: 15_000,

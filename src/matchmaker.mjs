@@ -2044,22 +2044,24 @@ async function handleRequest(request, response) {
           || playerHasRankedActivity(authenticatedPlayer.id);
         if (alreadyActive) return send(response, 409, { error: "player already has an active queue or match" });
         playersJoiningQueue.add(authenticatedPlayer.id);
+        let tournamentContext = null;
+        let tournamentTicket = null;
         try {
-          const context = await readyTournamentMatch(body.queue.tournamentId, authenticatedPlayer.id);
-          const catalogMap = publicMapCatalog.maps.find((map) => map.id === context.mapId);
-          if (!catalogMap) return send(response, 409, { error: "The tournament map is no longer available." });
+          tournamentContext = await readyTournamentMatch(body.queue.tournamentId, authenticatedPlayer.id);
+          const catalogMap = publicMapCatalog.maps.find((map) => map.id === tournamentContext.mapId);
+          if (!catalogMap) throw new TournamentOperationError("The tournament map is no longer available.");
           let civilizationPreference;
-          if (context.civilizationMode === "pick") {
+          if (tournamentContext.civilizationMode === "pick") {
             civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
             if (civilizationPreference.mode !== "pick" || !civilizationPreference.civilization) {
-              return send(response, 400, { error: "Choose a civilization before readying for this match." });
+              throw new TournamentOperationError("Choose a civilization before readying for this match.", 400);
             }
           } else {
             civilizationPreference = { mode: "random" };
           }
           const queue = normalizeQueueMapPreferences({
-            id: `tournament:${context.tournamentId}`,
-            name: `${context.tournamentName} Tournament`,
+            id: `tournament:${tournamentContext.tournamentId}`,
+            name: `${tournamentContext.tournamentName} Tournament`,
             description: "Single-elimination tournament match.",
             format: "1v1",
             ruleset: "Random Map",
@@ -2068,10 +2070,10 @@ async function handleRequest(request, response) {
             ranked: false,
             estimatedWaitSeconds: 0,
             playersSearching: 0,
-            tournamentId: context.tournamentId
+            tournamentId: tournamentContext.tournamentId
           });
           delete queue.ignoredMapIds;
-          const ticket = {
+          tournamentTicket = {
             id: `ticket-${randomUUID()}`,
             queueId: queue.id,
             queue,
@@ -2081,19 +2083,33 @@ async function handleRequest(request, response) {
             matchId: null,
             events: [],
             source: "tournament",
-            tournamentId: context.tournamentId,
-            tournamentMatchId: context.tournamentMatchId
+            tournamentId: tournamentContext.tournamentId,
+            tournamentMatchId: tournamentContext.tournamentMatchId
           };
-          tickets.set(ticket.id, ticket);
-          await tryLaunchTournamentMatch(context.tournamentMatchId);
-          broadcastTournamentChanged(context.tournamentId);
+          tickets.set(tournamentTicket.id, tournamentTicket);
+          await tryLaunchTournamentMatch(tournamentContext.tournamentMatchId);
+          broadcastTournamentChanged(tournamentContext.tournamentId);
           return send(response, 201, {
-            id: ticket.id,
-            queueId: ticket.queueId,
-            joinedAt: ticket.joinedAt,
+            id: tournamentTicket.id,
+            queueId: tournamentTicket.queueId,
+            joinedAt: tournamentTicket.joinedAt,
             ignoredMapIds: []
           });
         } catch (error) {
+          if (!tournamentTicket?.matchId && tournamentContext) {
+            if (tournamentTicket && tickets.get(tournamentTicket.id) === tournamentTicket) {
+              tickets.delete(tournamentTicket.id);
+            }
+            try {
+              const tournamentId = await unreadyTournamentMatch(
+                tournamentContext.tournamentMatchId,
+                authenticatedPlayer.id
+              );
+              if (tournamentId) broadcastTournamentChanged(tournamentId);
+            } catch (cleanupError) {
+              console.error("[matchmaker] Failed to roll back tournament readiness:", cleanupError);
+            }
+          }
           if (error instanceof TournamentOperationError) return send(response, error.status, { error: error.message });
           throw error;
         } finally {
