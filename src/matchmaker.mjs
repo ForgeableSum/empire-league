@@ -1499,6 +1499,10 @@ async function handleRequest(request, response) {
       if (!Number.isFinite(startsAtMs) || startsAtMs <= Date.now()) {
         return send(response, 400, { error: "Tournament start time must be in the future." });
       }
+      const password = typeof body.password === "string" ? body.password : "";
+      if (password.length > 64) {
+        return send(response, 400, { error: "Tournament passwords can be at most 64 characters." });
+      }
       try {
         const tournament = await createTournament({
           id: randomUUID(),
@@ -1509,7 +1513,8 @@ async function handleRequest(request, response) {
           minimumElo,
           mapId: map.id,
           mapName: map.name,
-          startsAt: new Date(startsAtMs)
+          startsAt: new Date(startsAtMs),
+          password: password || undefined
         });
         broadcastTournamentChanged(tournament.id);
         return send(response, 201, { tournament });
@@ -1541,9 +1546,14 @@ async function handleRequest(request, response) {
     const tournamentJoin = url.pathname.match(/^\/tournaments\/([^/]+)\/join$/);
     if (tournamentJoin && (request.method === "POST" || request.method === "DELETE")) {
       const tournamentId = decodeURIComponent(tournamentJoin[1]);
+      const body = request.method === "POST" ? await readJson(request) : {};
       try {
         const tournament = request.method === "POST"
-          ? await joinTournament(tournamentId, authenticatedPlayer.id)
+          ? await joinTournament(
+            tournamentId,
+            authenticatedPlayer.id,
+            typeof body.password === "string" ? body.password : ""
+          )
           : await leaveTournament(tournamentId, authenticatedPlayer.id);
         broadcastTournamentChanged(tournamentId);
         return send(response, 200, { tournament });

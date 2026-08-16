@@ -2,6 +2,7 @@ import mysql from "mysql2/promise";
 import { civilizationNameFromId } from "./civilization-roll.mjs";
 import { ratingFieldsForQueue } from "./rating-pool.mjs";
 import { chooseRandomBracketSlot } from "./tournament-bracket.mjs";
+import { hashTournamentPassword, tournamentPasswordMatches } from "./tournament-password.mjs";
 
 const databaseName = process.env.DB_NAME ?? "empire_league";
 
@@ -52,7 +53,8 @@ export async function getTournaments(playerId) {
   const [tournamentRows] = await database.query(
     `SELECT t.id, t.creator_player_id, creator.display_name AS creator_display_name,
             t.name, t.format, t.civilization_mode, t.participant_capacity,
-            t.minimum_elo, t.map_id, t.map_name, t.status, t.starts_at, t.started_at,
+            t.minimum_elo, t.map_id, t.map_name, (t.password_hash IS NOT NULL) AS password_protected,
+            t.status, t.starts_at, t.started_at,
             t.completed_at, t.created_at
      FROM tournaments t
      JOIN players creator ON creator.id = t.creator_player_id
@@ -73,7 +75,8 @@ export async function getTournamentById(tournamentId) {
   const [rows] = await database.execute(
     `SELECT t.id, t.creator_player_id, creator.display_name AS creator_display_name,
             t.name, t.format, t.civilization_mode, t.participant_capacity,
-            t.minimum_elo, t.map_id, t.map_name, t.status, t.starts_at, t.started_at,
+            t.minimum_elo, t.map_id, t.map_name, (t.password_hash IS NOT NULL) AS password_protected,
+            t.status, t.starts_at, t.started_at,
             t.completed_at, t.created_at
      FROM tournaments t
      JOIN players creator ON creator.id = t.creator_player_id
@@ -151,6 +154,7 @@ async function tournamentsWithEntries(tournamentRows) {
     minimumElo: Number(row.minimum_elo),
     mapId: row.map_id,
     mapName: row.map_name,
+    passwordProtected: Boolean(row.password_protected),
     status: row.status,
     startsAt: dateToIso(row.starts_at),
     ...(row.started_at ? { startedAt: dateToIso(row.started_at) } : {}),
@@ -162,6 +166,9 @@ async function tournamentsWithEntries(tournamentRows) {
 }
 
 export async function createTournament(input) {
+  const passwordCredentials = input.password
+    ? await hashTournamentPassword(input.password)
+    : null;
   const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
@@ -182,8 +189,8 @@ export async function createTournament(input) {
     await connection.execute(
       `INSERT INTO tournaments
         (id, creator_player_id, name, format, civilization_mode, participant_capacity,
-         minimum_elo, map_id, map_name, status, starts_at)
-       VALUES (?, ?, ?, 'single_elimination', ?, ?, ?, ?, ?, 'registration', ?)`,
+         minimum_elo, map_id, map_name, password_hash, password_salt, status, starts_at)
+       VALUES (?, ?, ?, 'single_elimination', ?, ?, ?, ?, ?, ?, ?, 'registration', ?)`,
       [
         input.id,
         input.creatorPlayerId,
@@ -193,6 +200,8 @@ export async function createTournament(input) {
         input.minimumElo,
         input.mapId,
         input.mapName,
+        passwordCredentials?.hash ?? null,
+        passwordCredentials?.salt ?? null,
         input.startsAt
       ]
     );
@@ -249,12 +258,12 @@ export async function cancelTournament(tournamentId, playerId) {
   }
 }
 
-export async function joinTournament(tournamentId, playerId) {
+export async function joinTournament(tournamentId, playerId, password = "") {
   const connection = await database.getConnection();
   try {
     await connection.beginTransaction();
     const [tournamentRows] = await connection.execute(
-      `SELECT participant_capacity, minimum_elo, status,
+      `SELECT participant_capacity, minimum_elo, password_hash, password_salt, status,
               (starts_at <= UTC_TIMESTAMP(3)) AS already_started
        FROM tournaments WHERE id = ? FOR UPDATE`,
       [tournamentId]
@@ -272,6 +281,13 @@ export async function joinTournament(tournamentId, playerId) {
     }
     if (tournament.status !== "registration" || tournament.already_started) {
       throw new TournamentOperationError("Registration for this tournament is closed.");
+    }
+    if (tournament.password_hash && !(await tournamentPasswordMatches(
+      password,
+      tournament.password_salt,
+      tournament.password_hash
+    ))) {
+      throw new TournamentOperationError("Incorrect tournament password.", 403);
     }
 
     const [playerRows] = await connection.execute("SELECT rating FROM players WHERE id = ?", [playerId]);

@@ -40,6 +40,7 @@ export interface Tournament {
   minimumElo: number;
   mapId: string;
   mapName: string;
+  passwordProtected: boolean;
   status: TournamentStatus;
   startsAt: string;
   startedAt?: string;
@@ -56,4 +57,5 @@ export interface CreateTournamentInput {
   minimumElo: number;
   mapId: string;
   startsAt: string;
+  password?: string;
 }

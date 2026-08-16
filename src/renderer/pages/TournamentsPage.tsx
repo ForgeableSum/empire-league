@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Map as MapIcon, Plus, RefreshCw, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Lock, Map as MapIcon, Plus, RefreshCw, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import type { Tournament, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
 import { civilizations } from "../../shared/civilizations";
@@ -26,6 +26,8 @@ export function TournamentsPage() {
   const [mapId, setMapId] = useState(enabledMapCatalogEntries.find((map) => map.id === "arabia")?.id ?? enabledMapCatalogEntries[0]?.id ?? "");
   const [civilizationMode, setCivilizationMode] = useState<TournamentCivilizationMode>("pick");
   const [matchCivilization, setMatchCivilization] = useState<string>(civilizations[0] ?? "Britons");
+  const [createPassword, setCreatePassword] = useState("");
+  const [joinPassword, setJoinPassword] = useState("");
 
   const refreshTournaments = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -49,6 +51,8 @@ export function TournamentsPage() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => setJoinPassword(""), [selectedTournamentId]);
+
   async function submitTournament(event: FormEvent) {
     event.preventDefault();
     setPendingAction("create");
@@ -59,11 +63,13 @@ export function TournamentsPage() {
         minimumElo: Number(minimumElo),
         mapId,
         civilizationMode,
-        startsAt: new Date(beginsAt).toISOString()
+        startsAt: new Date(beginsAt).toISOString(),
+        password: createPassword || undefined
       });
       setTournaments((current) => [...current.filter((item) => item.id !== tournament.id), tournament]
         .sort(compareTournaments));
       setCreating(false);
+      setCreatePassword("");
       setSelectedTournamentId(tournament.id);
       notify("Tournament created.", "success", { detail: `${tournament.name} is open for registration.` });
     } catch (error) {
@@ -75,15 +81,20 @@ export function TournamentsPage() {
 
   async function toggleTournamentEntry(tournament: Tournament) {
     const joined = tournament.entries.some((entry) => entry.playerId === state.currentUser.id);
+    if (!joined && tournament.passwordProtected && !joinPassword) {
+      notify("Enter the tournament password to join.", "warning");
+      return;
+    }
     setPendingAction(`entry:${tournament.id}`);
     try {
       const updated = joined
         ? await tournamentService.leave(tournament.id)
-        : await tournamentService.join(tournament.id);
+        : await tournamentService.join(tournament.id, tournament.passwordProtected ? joinPassword : undefined);
       setTournaments((current) => current.map((item) => item.id === updated.id ? updated : item));
       notify(joined ? "You left the tournament." : "You joined the tournament.", joined ? "info" : "success", {
         detail: joined ? undefined : "Your first-round bracket position is now reserved."
       });
+      if (!joined) setJoinPassword("");
     } catch (error) {
       notify(joined ? "Could not leave the tournament." : "Could not join the tournament.", "danger", { detail: messageFor(error) });
     } finally {
@@ -160,8 +171,10 @@ export function TournamentsPage() {
           cancelling={cancelling}
           queueStatus={state.queueStatus}
           selectedCivilization={matchCivilization}
+          joinPassword={joinPassword}
           civilizationOptions={civilizations.map((name) => ({ value: name, label: localizeAoe2Name(name) }))}
           onCivilizationChange={setMatchCivilization}
+          onJoinPasswordChange={setJoinPassword}
           onBack={() => setSelectedTournamentId(null)}
           onToggleJoin={() => void toggleTournamentEntry(selectedTournament)}
           onReady={() => void readyForTournamentMatch(selectedTournament)}
@@ -203,6 +216,7 @@ export function TournamentsPage() {
             <label>Minimum Elo<input min="0" max="5000" step="50" type="number" value={minimumElo} onChange={(event) => setMinimumElo(event.target.value)} /></label>
             <ThemedSelect label="Map" value={mapId} onChange={setMapId} options={enabledMapCatalogEntries.map((map) => ({ value: map.id, label: map.name }))} />
           </div>
+          <label className="tournament-create-password"><span>Tournament password <small>Optional</small></span><input type="password" maxLength={64} autoComplete="new-password" value={createPassword} onChange={(event) => setCreatePassword(event.target.value)} /></label>
           <fieldset className="tournament-civ-fieldset">
             <legend>Civilizations</legend>
             <div className="tournament-civ-options">
@@ -235,7 +249,7 @@ export function TournamentsPage() {
             <button className="tournament-row" key={tournament.id} type="button" onClick={() => setSelectedTournamentId(tournament.id)}>
               <div className="tournament-identity"><span className="tournament-emblem"><Trophy size={18} /></span><span><strong>{tournament.name}</strong><small>{index === 0 ? "Next tournament" : `Hosted by ${tournament.creatorDisplayName}`}</small></span></div>
               <div><strong>{tournament.mapName}</strong><small>Fixed map</small></div>
-              <div><strong>{tournament.civilizationMode === "pick" ? "Pick civilizations" : "Random civilizations"}</strong><small>{tournament.minimumElo > 0 ? `${tournament.minimumElo}+ Elo` : "Open rating"}</small></div>
+              <div><strong>{tournament.civilizationMode === "pick" ? "Pick civilizations" : "Random civilizations"}</strong><small>{tournamentAccessLabel(tournament)}</small></div>
               <div className="tournament-player-count"><Users size={16} /><span><strong>{tournament.entries.length}/{tournament.participantCapacity}</strong><small>{Math.max(0, tournament.participantCapacity - tournament.entries.length)} spots left</small></span></div>
               <div className="tournament-begins"><strong>{tournament.status === "started" ? "In progress" : tournament.status === "completed" ? "Complete" : formatCountdown(Date.parse(tournament.startsAt) - now)}</strong><small>{formatStartTime(tournament.startsAt)}</small></div>
               <span className="tournament-row-action" aria-hidden="true"><ChevronRight size={20} /></span>
@@ -275,7 +289,7 @@ function TournamentCancelConfirmation({ tournament, pending, onDismiss, onConfir
   );
 }
 
-function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, cancelling, queueStatus, selectedCivilization, civilizationOptions, onCivilizationChange, onBack, onToggleJoin, onReady, onCancel }: {
+function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, cancelling, queueStatus, selectedCivilization, joinPassword, civilizationOptions, onCivilizationChange, onJoinPasswordChange, onBack, onToggleJoin, onReady, onCancel }: {
   tournament: Tournament;
   now: number;
   currentPlayerId: string;
@@ -284,8 +298,10 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
   cancelling: boolean;
   queueStatus: string;
   selectedCivilization: string;
+  joinPassword: string;
   civilizationOptions: Array<{ value: string; label: string }>;
   onCivilizationChange: (civilization: string) => void;
+  onJoinPasswordChange: (password: string) => void;
   onBack: () => void;
   onToggleJoin: () => void;
   onReady: () => void;
@@ -329,6 +345,9 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           {tournament.status === "registration" ? (
             <>
               <p>{joinedEntry ? `You are in bracket slot ${joinedEntry.bracketSlot}` : spotsLeft === 0 ? "Registration is full" : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} remaining`}</p>
+              {!joinedEntry && tournament.passwordProtected && (
+                <label className="tournament-join-password"><span><Lock size={14} /> Tournament password</span><input type="password" maxLength={64} autoComplete="current-password" value={joinPassword} disabled={pending} onChange={(event) => onJoinPasswordChange(event.target.value)} /></label>
+              )}
               <button className={joinedEntry ? "secondary wide" : "primary wide"} type="button" disabled={pending || cancelling || (!joinedEntry && (!spotsLeft || !ratingEligible))} onClick={onToggleJoin}>
                 {pending ? "Updating…" : joinedEntry ? "Leave Tournament" : !ratingEligible ? `Requires ${tournament.minimumElo} Elo` : spotsLeft === 0 ? "Tournament Full" : "Join Tournament"}
               </button>
@@ -427,6 +446,11 @@ function compareTournaments(left: Tournament, right: Tournament): number {
   const order: Record<Tournament["status"], number> = { started: 0, registration: 1, completed: 2, cancelled: 3 };
   return order[left.status] - order[right.status]
     || Date.parse(left.startsAt) - Date.parse(right.startsAt);
+}
+
+function tournamentAccessLabel(tournament: Tournament): string {
+  const rating = tournament.minimumElo > 0 ? `${tournament.minimumElo}+ Elo` : "Open rating";
+  return tournament.passwordProtected ? `Password · ${rating}` : rating;
 }
 
 function bracketRoundName(playersInRound: number): string {

@@ -491,6 +491,9 @@
 
 .tournament-name-field { grid-column: span 2; }
 
+.tournament-create-password { max-width: 420px; }
+.tournament-create-password small { margin-left: 5px; color: var(--faint); font-weight: 500; }
+
 .tournament-civ-fieldset {
   min-width: 0;
   margin: 0;
@@ -725,6 +728,17 @@
 .tournament-entry-card > strong { margin: 7px 0 3px; color: #f0c66e; font-size: 27px; font-variant-numeric: tabular-nums; }
 .tournament-entry-card > small { color: var(--muted); font-size: 11px; }
 .tournament-entry-card > p { margin: 7px 0 13px; font-size: 11px; }
+
+.tournament-join-password {
+  margin: 0 0 12px;
+  text-align: left;
+}
+
+.tournament-join-password > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 
 .tournament-cancel-button {
   display: inline-flex;

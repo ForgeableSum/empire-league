@@ -3,6 +3,7 @@ import { matchmakerTransport } from "./matchmakerTransport";
 import { isPreviewMode } from "../previewMode";
 
 let previewTournaments: Tournament[] = [previewTournament()];
+const previewPasswords = new Map<string, string>();
 
 export const tournamentService = {
   async list(): Promise<Tournament[]> {
@@ -33,12 +34,14 @@ export const tournamentService = {
         minimumElo: input.minimumElo,
         mapId: input.mapId,
         mapName: input.mapId,
+        passwordProtected: Boolean(input.password),
         status: "registration",
         startsAt: input.startsAt,
         createdAt: new Date().toISOString(),
         entries: [],
         matches: []
       };
+      if (input.password) previewPasswords.set(tournament.id, input.password);
       previewTournaments = [...previewTournaments, tournament];
       return structuredClone(tournament);
     }
@@ -49,6 +52,7 @@ export const tournamentService = {
     if (isPreviewMode) {
       const tournament = requirePreviewTournament(tournamentId);
       const cancelled = { id: tournament.id, name: tournament.name, unregisteredPlayers: tournament.entries.length };
+      previewPasswords.delete(tournamentId);
       previewTournaments = previewTournaments.filter((item) => item.id !== tournamentId);
       return cancelled;
     }
@@ -58,9 +62,12 @@ export const tournamentService = {
     )).cancelled;
   },
 
-  async join(tournamentId: string): Promise<Tournament> {
+  async join(tournamentId: string, password?: string): Promise<Tournament> {
     if (isPreviewMode) {
       const tournament = requirePreviewTournament(tournamentId);
+      if (tournament.passwordProtected && previewPasswords.get(tournamentId) !== password) {
+        throw new Error("Incorrect tournament password.");
+      }
       if (!tournament.entries.some((entry) => entry.playerId === "user-1")) {
         const occupied = new Set(tournament.entries.map((entry) => entry.bracketSlot));
         const bracketSlot = Array.from({ length: tournament.participantCapacity }, (_, index) => index + 1).find((slot) => !occupied.has(slot))!;
@@ -68,7 +75,10 @@ export const tournamentService = {
       }
       return structuredClone(tournament);
     }
-    return (await matchmakerTransport.request<{ tournament: Tournament }>(`/tournaments/${encodeURIComponent(tournamentId)}/join`, { method: "POST" })).tournament;
+    return (await matchmakerTransport.request<{ tournament: Tournament }>(`/tournaments/${encodeURIComponent(tournamentId)}/join`, {
+      method: "POST",
+      body: { password }
+    })).tournament;
   },
 
   async leave(tournamentId: string): Promise<Tournament> {
@@ -118,6 +128,7 @@ function previewTournament(): Tournament {
     minimumElo: 1200,
     mapId: "arabia",
     mapName: "KotD6 Arabia EL",
+    passwordProtected: false,
     status: "registration",
     startsAt: new Date(Date.now() + 42 * 60_000).toISOString(),
     createdAt: new Date().toISOString(),
