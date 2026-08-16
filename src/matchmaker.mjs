@@ -23,7 +23,13 @@ import {
   recordPendingMatch,
   recordNoContestMatch,
   recordMatchResultConflict,
-  recordVerifiedMatchResult
+  recordVerifiedMatchResult,
+  getTournaments,
+  getTournamentById,
+  createTournament,
+  joinTournament,
+  leaveTournament,
+  TournamentOperationError
 } from "./database.mjs";
 import { replaySettingsAgree, validateRankedReplaySettings } from "./replayRules.mjs";
 import { authenticate, beginSteamLogin, completeSteamLogin, pollSteamLogin, revokeSession } from "./auth.mjs";
@@ -405,6 +411,13 @@ function send(response, status, body) {
 function sendHtml(response, status, body) {
   response.writeHead(status, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
   response.end(body);
+}
+
+function broadcastTournamentChanged(tournamentId) {
+  const message = { type: "tournament_event", event: { type: "tournaments_changed", tournamentId } };
+  for (const socket of webSocketServer.clients) {
+    if (socket.readyState === WebSocket.OPEN && socketSessions.get(socket)?.player) sendSocket(socket, message);
+  }
 }
 
 function adminTokenMatches(candidate) {
@@ -1368,6 +1381,70 @@ async function handleRequest(request, response) {
           .filter(Boolean)
       );
       return send(response, 200, { onlinePlayers: playerIds.size });
+    }
+
+    if (request.method === "GET" && url.pathname === "/tournaments") {
+      return send(response, 200, { tournaments: await getTournaments() });
+    }
+
+    if (request.method === "POST" && url.pathname === "/tournaments") {
+      const body = await readJson(request);
+      const name = String(body.name ?? "").trim().slice(0, 64);
+      if (!name) return send(response, 400, { error: "A tournament name is required." });
+      const participantCapacity = Number(body.participantCapacity);
+      if (![8, 16, 32, 64].includes(participantCapacity)) {
+        return send(response, 400, { error: "Tournament capacity must be 8, 16, 32, or 64 players." });
+      }
+      const minimumElo = Number(body.minimumElo);
+      if (!Number.isInteger(minimumElo) || minimumElo < 0 || minimumElo > 5000) {
+        return send(response, 400, { error: "Minimum Elo must be a whole number between 0 and 5000." });
+      }
+      const civilizationMode = body.civilizationMode;
+      if (civilizationMode !== "pick" && civilizationMode !== "random") {
+        return send(response, 400, { error: "Civilization mode must be pick or random." });
+      }
+      const map = publicMapCatalog.maps.find((candidate) => candidate.id === body.mapId);
+      if (!map) return send(response, 400, { error: "Choose an available tournament map." });
+      const startsAtMs = Date.parse(String(body.startsAt ?? ""));
+      if (!Number.isFinite(startsAtMs) || startsAtMs <= Date.now()) {
+        return send(response, 400, { error: "Tournament start time must be in the future." });
+      }
+      const tournament = await createTournament({
+        id: randomUUID(),
+        creatorPlayerId: authenticatedPlayer.id,
+        name,
+        civilizationMode,
+        participantCapacity,
+        minimumElo,
+        mapId: map.id,
+        mapName: map.name,
+        startsAt: new Date(startsAtMs)
+      });
+      broadcastTournamentChanged(tournament.id);
+      return send(response, 201, { tournament });
+    }
+
+    const tournamentDetail = url.pathname.match(/^\/tournaments\/([^/]+)$/);
+    if (request.method === "GET" && tournamentDetail) {
+      const tournament = await getTournamentById(decodeURIComponent(tournamentDetail[1]));
+      return tournament
+        ? send(response, 200, { tournament })
+        : send(response, 404, { error: "Tournament not found." });
+    }
+
+    const tournamentJoin = url.pathname.match(/^\/tournaments\/([^/]+)\/join$/);
+    if (tournamentJoin && (request.method === "POST" || request.method === "DELETE")) {
+      const tournamentId = decodeURIComponent(tournamentJoin[1]);
+      try {
+        const tournament = request.method === "POST"
+          ? await joinTournament(tournamentId, authenticatedPlayer.id)
+          : await leaveTournament(tournamentId, authenticatedPlayer.id);
+        broadcastTournamentChanged(tournamentId);
+        return send(response, 200, { tournament });
+      } catch (error) {
+        if (error instanceof TournamentOperationError) return send(response, error.status, { error: error.message });
+        throw error;
+      }
     }
 
     if (request.method === "GET" && url.pathname === "/custom-lobbies") {

@@ -37,6 +37,7 @@ export type CustomLobbyEvent = {
   closedRoomId?: string;
   closeReason?: string;
 };
+export type TournamentEvent = { type: "tournaments_changed"; tournamentId: string };
 export type AdminMessage = { message: string; sentAt: string };
 
 class MatchmakerTransport {
@@ -52,6 +53,7 @@ class MatchmakerTransport {
   private deliberatelyClosed = false;
   private socialListeners = new Set<(event: SocialEvent) => void>();
   private customLobbyListeners = new Set<(event: CustomLobbyEvent) => void>();
+  private tournamentListeners = new Set<(event: TournamentEvent) => void>();
   private adminMessageListeners = new Set<(event: AdminMessage) => void>();
   private connectionStatus: MatchmakerConnectionStatus = "disconnected";
   private connectionStatusListeners = new Set<() => void>();
@@ -112,6 +114,11 @@ class MatchmakerTransport {
     return () => this.customLobbyListeners.delete(listener);
   }
 
+  onTournamentEvent(listener: (event: TournamentEvent) => void): UnsubscribeFunction {
+    this.tournamentListeners.add(listener);
+    return () => this.tournamentListeners.delete(listener);
+  }
+
   onAdminMessage(listener: (event: AdminMessage) => void): UnsubscribeFunction {
     this.adminMessageListeners.add(listener);
     return () => this.adminMessageListeners.delete(listener);
@@ -152,7 +159,7 @@ class MatchmakerTransport {
       message?: string;
       ticketId?: string;
       sequence?: number;
-      event?: Parameters<QueueEventListener>[0] | SocialEvent | CustomLobbyEvent;
+      event?: Parameters<QueueEventListener>[0] | SocialEvent | CustomLobbyEvent | TournamentEvent;
       sentAt?: string;
     };
     try {
@@ -171,6 +178,10 @@ class MatchmakerTransport {
     }
     if (message.type === "custom_lobby_event" && message.event) {
       for (const listener of this.customLobbyListeners) listener(message.event as CustomLobbyEvent);
+      return;
+    }
+    if (message.type === "tournament_event" && message.event) {
+      for (const listener of this.tournamentListeners) listener(message.event as TournamentEvent);
       return;
     }
     if (message.type === "admin_message" && typeof message.message === "string") {

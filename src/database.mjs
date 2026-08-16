@@ -1,6 +1,7 @@
 import mysql from "mysql2/promise";
 import { civilizationNameFromId } from "./civilization-roll.mjs";
 import { ratingFieldsForQueue } from "./rating-pool.mjs";
+import { chooseRandomBracketSlot } from "./tournament-bracket.mjs";
 
 const databaseName = process.env.DB_NAME ?? "empire_league";
 
@@ -37,6 +38,192 @@ export async function getOnlinePlayerCount(activeWithinSeconds = 90) {
        AND last_used_at >= DATE_SUB(NOW(3), INTERVAL ${safeSeconds} SECOND)`
   );
   return Number(rows[0]?.online_player_count ?? 0);
+}
+
+export class TournamentOperationError extends Error {
+  constructor(message, status = 409) {
+    super(message);
+    this.name = "TournamentOperationError";
+    this.status = status;
+  }
+}
+
+export async function getTournaments() {
+  const [tournamentRows] = await database.query(
+    `SELECT t.id, t.creator_player_id, creator.display_name AS creator_display_name,
+            t.name, t.format, t.civilization_mode, t.participant_capacity,
+            t.minimum_elo, t.map_id, t.map_name, t.status, t.starts_at, t.created_at
+     FROM tournaments t
+     JOIN players creator ON creator.id = t.creator_player_id
+     WHERE t.status = 'registration' AND t.starts_at >= NOW(3)
+     ORDER BY t.starts_at ASC, t.created_at ASC`
+  );
+  return tournamentsWithEntries(tournamentRows);
+}
+
+export async function getTournamentById(tournamentId) {
+  const [rows] = await database.execute(
+    `SELECT t.id, t.creator_player_id, creator.display_name AS creator_display_name,
+            t.name, t.format, t.civilization_mode, t.participant_capacity,
+            t.minimum_elo, t.map_id, t.map_name, t.status, t.starts_at, t.created_at
+     FROM tournaments t
+     JOIN players creator ON creator.id = t.creator_player_id
+     WHERE t.id = ?`,
+    [tournamentId]
+  );
+  if (!rows.length) return null;
+  return (await tournamentsWithEntries(rows))[0];
+}
+
+async function tournamentsWithEntries(tournamentRows) {
+  if (!tournamentRows.length) return [];
+  const ids = tournamentRows.map((row) => row.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const [entryRows] = await database.query(
+    `SELECT e.tournament_id, e.player_id, e.bracket_slot, e.rating_at_join, e.joined_at,
+            p.display_name, p.avatar_url, p.rating
+     FROM tournament_entries e
+     JOIN players p ON p.id = e.player_id
+     WHERE e.tournament_id IN (${placeholders})
+     ORDER BY e.tournament_id, e.bracket_slot`,
+    ids
+  );
+  const entriesByTournament = new Map();
+  for (const row of entryRows) {
+    const entries = entriesByTournament.get(row.tournament_id) ?? [];
+    entries.push({
+      playerId: row.player_id,
+      displayName: row.display_name,
+      ...(row.avatar_url ? { avatarUrl: row.avatar_url } : {}),
+      rating: Number(row.rating),
+      ratingAtJoin: Number(row.rating_at_join),
+      bracketSlot: Number(row.bracket_slot),
+      joinedAt: dateToIso(row.joined_at)
+    });
+    entriesByTournament.set(row.tournament_id, entries);
+  }
+  return tournamentRows.map((row) => ({
+    id: row.id,
+    creatorPlayerId: row.creator_player_id,
+    creatorDisplayName: row.creator_display_name,
+    name: row.name,
+    format: row.format,
+    civilizationMode: row.civilization_mode,
+    participantCapacity: Number(row.participant_capacity),
+    minimumElo: Number(row.minimum_elo),
+    mapId: row.map_id,
+    mapName: row.map_name,
+    status: row.status,
+    startsAt: dateToIso(row.starts_at),
+    createdAt: dateToIso(row.created_at),
+    entries: entriesByTournament.get(row.id) ?? []
+  }));
+}
+
+export async function createTournament(input) {
+  await database.execute(
+    `INSERT INTO tournaments
+      (id, creator_player_id, name, format, civilization_mode, participant_capacity,
+       minimum_elo, map_id, map_name, status, starts_at)
+     VALUES (?, ?, ?, 'single_elimination', ?, ?, ?, ?, ?, 'registration', ?)`,
+    [
+      input.id,
+      input.creatorPlayerId,
+      input.name,
+      input.civilizationMode,
+      input.participantCapacity,
+      input.minimumElo,
+      input.mapId,
+      input.mapName,
+      input.startsAt
+    ]
+  );
+  return getTournamentById(input.id);
+}
+
+export async function joinTournament(tournamentId, playerId) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [tournamentRows] = await connection.execute(
+      `SELECT participant_capacity, minimum_elo, status, starts_at
+       FROM tournaments WHERE id = ? FOR UPDATE`,
+      [tournamentId]
+    );
+    const tournament = tournamentRows[0];
+    if (!tournament) throw new TournamentOperationError("Tournament not found.", 404);
+
+    const [existingRows] = await connection.execute(
+      "SELECT bracket_slot FROM tournament_entries WHERE tournament_id = ? AND player_id = ?",
+      [tournamentId, playerId]
+    );
+    if (existingRows.length) {
+      await connection.commit();
+      return getTournamentById(tournamentId);
+    }
+    if (tournament.status !== "registration" || new Date(tournament.starts_at).getTime() <= Date.now()) {
+      throw new TournamentOperationError("Registration for this tournament is closed.");
+    }
+
+    const [playerRows] = await connection.execute("SELECT rating FROM players WHERE id = ?", [playerId]);
+    const playerRating = Number(playerRows[0]?.rating ?? 0);
+    if (playerRating < Number(tournament.minimum_elo)) {
+      throw new TournamentOperationError(`This tournament requires at least ${Number(tournament.minimum_elo)} Elo.`, 403);
+    }
+
+    const [entryRows] = await connection.execute(
+      "SELECT bracket_slot FROM tournament_entries WHERE tournament_id = ? FOR UPDATE",
+      [tournamentId]
+    );
+    const bracketSlot = chooseRandomBracketSlot(
+      Number(tournament.participant_capacity),
+      entryRows.map((row) => Number(row.bracket_slot))
+    );
+    if (bracketSlot === null) throw new TournamentOperationError("This tournament is full.");
+    await connection.execute(
+      `INSERT INTO tournament_entries (tournament_id, player_id, bracket_slot, rating_at_join)
+       VALUES (?, ?, ?, ?)`,
+      [tournamentId, playerId, bracketSlot, playerRating]
+    );
+    await connection.commit();
+    return getTournamentById(tournamentId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function leaveTournament(tournamentId, playerId) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [tournamentRows] = await connection.execute(
+      "SELECT status, starts_at FROM tournaments WHERE id = ? FOR UPDATE",
+      [tournamentId]
+    );
+    const tournament = tournamentRows[0];
+    if (!tournament) throw new TournamentOperationError("Tournament not found.", 404);
+    if (tournament.status !== "registration" || new Date(tournament.starts_at).getTime() <= Date.now()) {
+      throw new TournamentOperationError("You can no longer leave this tournament.");
+    }
+    await connection.execute(
+      "DELETE FROM tournament_entries WHERE tournament_id = ? AND player_id = ?",
+      [tournamentId, playerId]
+    );
+    await connection.commit();
+    return getTournamentById(tournamentId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+function dateToIso(value) {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
 async function insertDurableMatch(connection, match, status, completedAt = null, civilizations = {}) {

@@ -539,6 +539,19 @@
 .tournament-list-title p { font-size: 12px; }
 .tournament-list-title > span { display: flex; align-items: center; gap: 7px; color: var(--faint); font-size: 12px; }
 
+.tournament-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+}
+
+.tournament-refresh:hover { color: var(--accent-2); }
+.tournament-refresh:disabled { opacity: .6; cursor: default; }
+
 .tournament-list {
   overflow: hidden;
   border: 1px solid var(--line);
@@ -606,6 +619,19 @@
 }
 
 .tournament-row:hover .tournament-row-action { color: var(--accent-2); border-color: #6c4c27; background: #2a241d; }
+
+.tournament-empty {
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--faint);
+}
+
+.tournament-empty strong { color: var(--text); }
+.tournament-empty > span:last-child { font-size: 11px; }
 
 .tournament-detail-page {
   display: grid;
@@ -772,7 +798,7 @@
 .tournament-bracket-match > div {
   min-height: 33px;
   display: grid;
-  grid-template-columns: 23px minmax(0, 1fr);
+  grid-template-columns: 23px minmax(0, 1fr) auto;
   align-items: center;
   padding: 0 9px;
   border-bottom: 1px solid var(--line-soft);
@@ -783,6 +809,9 @@
 .tournament-bracket-match > div > strong { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .tournament-bracket-match > div.open > strong { color: #b98b50; font-style: italic; }
 .tournament-bracket-match > div.pending > strong { color: var(--faint); font-weight: 400; }
+.tournament-bracket-match > div.mine { background: rgba(197, 141, 69, .16); box-shadow: inset 3px 0 #d7a956; }
+.tournament-bracket-match > div.mine > strong { color: #f2d798; }
+.tournament-bracket-match > div > em { padding: 2px 5px; color: #17110a; border-radius: 999px; background: var(--accent-2); font-size: 8px; font-style: normal; font-weight: 900; text-transform: uppercase; }
 
 @media (max-width: 1050px) {
   .tournament-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

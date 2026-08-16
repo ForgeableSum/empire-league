@@ -1,63 +1,91 @@
-import { ArrowLeft, CalendarClock, ChevronRight, Map as MapIcon, Plus, Shield, Swords, Trophy, Users, X } from "lucide-react";
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { ArrowLeft, ChevronRight, Map as MapIcon, Plus, RefreshCw, Shield, Swords, Trophy, Users, X } from "lucide-react";
+import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import type { Tournament, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
 import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { previewSection } from "../previewMode";
+import { tournamentService } from "../services/tournamentService";
 import { useAppStore } from "../state/appStore";
 
-type CivilizationMode = "pick" | "random";
-
-interface MockTournament {
-  id: string;
-  name: string;
-  map: string;
-  civilizationMode: CivilizationMode;
-  minimumElo: number;
-  participants: number;
-  capacity: number;
-  beginsAt: number;
-}
-
-const mockTournamentTemplates: Array<Omit<MockTournament, "beginsAt"> & { beginsInMs: number }> = [
-  { id: "arabia-open", name: "Arabia Open", map: "Arabia", civilizationMode: "pick", minimumElo: 1200, participants: 13, capacity: 16, beginsInMs: 42 * 60_000 + 18_000 },
-  { id: "arena-clash", name: "Arena Clash", map: "Arena", civilizationMode: "random", minimumElo: 1000, participants: 8, capacity: 8, beginsInMs: 3 * 60 * 60_000 + 14 * 60_000 },
-  { id: "nomad-cup", name: "Nomad Cup", map: "Land Nomad", civilizationMode: "random", minimumElo: 1400, participants: 21, capacity: 32, beginsInMs: 26 * 60 * 60_000 + 8 * 60_000 },
-  { id: "rookie-rumble", name: "Rookie Rumble", map: "Four Lakes", civilizationMode: "pick", minimumElo: 0, participants: 7, capacity: 16, beginsInMs: 3 * 24 * 60 * 60_000 + 5 * 60 * 60_000 }
-];
-
-const mockEntrants = [
-  "EmpireSum", "WololoJoe", "CastleAge", "MangoShot", "BlueCoffee", "RelicHunter", "TownBell", "FastCastle",
-  "Trebuchet", "ScoutRush", "StoneWall", "KingdomCome", "MonkMicro", "BoarLurer", "GoldMiner", "FeudalFire",
-  "SiegeWorks", "NomadKing", "WoodPlease", "MarketAbuse", "VillagerTwo", "TheCartographer", "DarkAge", "Longbow"
-];
+type BracketPlayer = TournamentEntry | "open" | "tbd";
 
 export function TournamentsPage() {
-  const { notify } = useAppStore();
+  const { state, notify } = useAppStore();
   const [creating, setCreating] = useState(previewSection === "create");
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(previewSection === "detail" ? "arabia-open" : null);
-  const [joinedTournamentIds, setJoinedTournamentIds] = useState<string[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [name, setName] = useState("Weekend Showdown");
   const [capacity, setCapacity] = useState("16");
   const [minimumElo, setMinimumElo] = useState("1000");
   const [beginsAt, setBeginsAt] = useState(() => formatDateTimeInput(Date.now() + 24 * 60 * 60_000));
-  const [mapId, setMapId] = useState(enabledMapCatalogEntries.find((map) => map.name === "Arabia")?.id ?? enabledMapCatalogEntries[0]?.id ?? "");
-  const [civilizationMode, setCivilizationMode] = useState<CivilizationMode>("pick");
-  const tournaments = useMemo(() => {
-    const createdAt = Date.now();
-    return mockTournamentTemplates
-      .map(({ beginsInMs, ...tournament }) => ({ ...tournament, beginsAt: createdAt + beginsInMs }))
-      .sort((left, right) => left.beginsAt - right.beginsAt);
-  }, []);
+  const [mapId, setMapId] = useState(enabledMapCatalogEntries.find((map) => map.id === "arabia")?.id ?? enabledMapCatalogEntries[0]?.id ?? "");
+  const [civilizationMode, setCivilizationMode] = useState<TournamentCivilizationMode>("pick");
+
+  const refreshTournaments = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    try {
+      const next = await tournamentService.list();
+      setTournaments(next.sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt)));
+    } catch (error) {
+      notify("Tournaments could not be loaded.", "danger", { detail: messageFor(error) });
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    void refreshTournaments(true);
+    return tournamentService.onEvent(() => void refreshTournaments());
+  }, [refreshTournaments]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
-  function submitMockTournament(event: FormEvent) {
+  async function submitTournament(event: FormEvent) {
     event.preventDefault();
-    notify("Tournament creation is a visual mockup.", "info", { detail: "No tournament was published or saved." });
+    setPendingAction("create");
+    try {
+      const tournament = await tournamentService.create({
+        name: name.trim(),
+        participantCapacity: Number(capacity),
+        minimumElo: Number(minimumElo),
+        mapId,
+        civilizationMode,
+        startsAt: new Date(beginsAt).toISOString()
+      });
+      setTournaments((current) => [...current.filter((item) => item.id !== tournament.id), tournament]
+        .sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt)));
+      setCreating(false);
+      setSelectedTournamentId(tournament.id);
+      notify("Tournament created.", "success", { detail: `${tournament.name} is open for registration.` });
+    } catch (error) {
+      notify("Tournament could not be created.", "danger", { detail: messageFor(error) });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function toggleTournamentEntry(tournament: Tournament) {
+    const joined = tournament.entries.some((entry) => entry.playerId === state.currentUser.id);
+    setPendingAction(`entry:${tournament.id}`);
+    try {
+      const updated = joined
+        ? await tournamentService.leave(tournament.id)
+        : await tournamentService.join(tournament.id);
+      setTournaments((current) => current.map((item) => item.id === updated.id ? updated : item));
+      notify(joined ? "You left the tournament." : "You joined the tournament.", joined ? "info" : "success", {
+        detail: joined ? undefined : "Your first-round bracket position is now reserved."
+      });
+    } catch (error) {
+      notify(joined ? "Could not leave the tournament." : "Could not join the tournament.", "danger", { detail: messageFor(error) });
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   const selectedTournament = tournaments.find((tournament) => tournament.id === selectedTournamentId);
@@ -66,11 +94,11 @@ export function TournamentsPage() {
       <TournamentDetail
         tournament={selectedTournament}
         now={now}
-        joined={joinedTournamentIds.includes(selectedTournament.id)}
+        currentPlayerId={state.currentUser.id}
+        currentPlayerRating={state.currentUser.rating}
+        pending={pendingAction === `entry:${selectedTournament.id}`}
         onBack={() => setSelectedTournamentId(null)}
-        onToggleJoin={() => setJoinedTournamentIds((current) => current.includes(selectedTournament.id)
-          ? current.filter((id) => id !== selectedTournament.id)
-          : [...current, selectedTournament.id])}
+        onToggleJoin={() => void toggleTournamentEntry(selectedTournament)}
       />
     );
   }
@@ -87,20 +115,18 @@ export function TournamentsPage() {
       </header>
 
       {creating && (
-        <form className="panel tournament-create-panel" onSubmit={submitMockTournament}>
+        <form className="panel tournament-create-panel" onSubmit={(event) => void submitTournament(event)}>
           <div className="tournament-create-heading">
             <div><span className="eyebrow">New tournament</span><h2>Tournament settings</h2></div>
-            <button className="tournament-close" type="button" aria-label="Close tournament form" onClick={() => setCreating(false)}><X size={20} /></button>
+            <button className="tournament-close" type="button" aria-label="Close tournament form" disabled={pendingAction === "create"} onClick={() => setCreating(false)}><X size={20} /></button>
           </div>
-
           <div className="tournament-form-grid">
             <label className="tournament-name-field">Tournament name<input maxLength={64} value={name} onChange={(event) => setName(event.target.value)} /></label>
             <label>Begins<input type="datetime-local" value={beginsAt} onChange={(event) => setBeginsAt(event.target.value)} /></label>
             <ThemedSelect label="Participants" value={capacity} onChange={setCapacity} options={[8, 16, 32, 64].map((count) => ({ value: String(count), label: `${count} players` }))} />
-            <label>Minimum Elo<input min="0" max="3000" step="50" type="number" value={minimumElo} onChange={(event) => setMinimumElo(event.target.value)} /></label>
+            <label>Minimum Elo<input min="0" max="5000" step="50" type="number" value={minimumElo} onChange={(event) => setMinimumElo(event.target.value)} /></label>
             <ThemedSelect label="Map" value={mapId} onChange={setMapId} options={enabledMapCatalogEntries.map((map) => ({ value: map.id, label: map.name }))} />
           </div>
-
           <fieldset className="tournament-civ-fieldset">
             <legend>Civilizations</legend>
             <div className="tournament-civ-options">
@@ -112,12 +138,11 @@ export function TournamentsPage() {
               </button>
             </div>
           </fieldset>
-
           <div className="tournament-create-footer">
             <div><Trophy size={18} /><span><strong>Single elimination</strong><small>{capacity} players · {Math.max(0, Number(capacity) - 1)} matches</small></span></div>
             <div className="tournament-form-actions">
-              <button className="secondary" type="button" onClick={() => setCreating(false)}>Cancel</button>
-              <button className="primary" type="submit" disabled={!name.trim() || !mapId || !beginsAt || minimumElo === ""}>Create Tournament</button>
+              <button className="secondary" type="button" disabled={pendingAction === "create"} onClick={() => setCreating(false)}>Cancel</button>
+              <button className="primary" type="submit" disabled={pendingAction === "create" || !name.trim() || !mapId || !beginsAt || minimumElo === ""}>{pendingAction === "create" ? "Creating…" : "Create Tournament"}</button>
             </div>
           </div>
         </form>
@@ -126,77 +151,69 @@ export function TournamentsPage() {
       <div className="tournament-list-section">
         <div className="tournament-list-title">
           <div><h2>Upcoming tournaments</h2><p>Starting soonest first</p></div>
-          <span><CalendarClock size={15} /> Times shown locally</span>
+          <button className="tournament-refresh" type="button" disabled={loading} onClick={() => void refreshTournaments(true)}><RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh</button>
         </div>
         <div className="tournament-list">
-          <div className="tournament-list-header" aria-hidden="true">
-            <span>Tournament</span><span>Map</span><span>Rules</span><span>Players</span><span>Begins</span><span />
-          </div>
+          <div className="tournament-list-header" aria-hidden="true"><span>Tournament</span><span>Map</span><span>Rules</span><span>Players</span><span>Begins</span><span /></div>
           {tournaments.map((tournament, index) => (
             <button className="tournament-row" key={tournament.id} type="button" onClick={() => setSelectedTournamentId(tournament.id)}>
-              <div className="tournament-identity">
-                <span className="tournament-emblem"><Trophy size={18} /></span>
-                <span><strong>{tournament.name}</strong><small>{index === 0 ? "Next tournament" : "Single elimination"}</small></span>
-              </div>
-              <div><strong>{tournament.map}</strong><small>Fixed map</small></div>
+              <div className="tournament-identity"><span className="tournament-emblem"><Trophy size={18} /></span><span><strong>{tournament.name}</strong><small>{index === 0 ? "Next tournament" : `Hosted by ${tournament.creatorDisplayName}`}</small></span></div>
+              <div><strong>{tournament.mapName}</strong><small>Fixed map</small></div>
               <div><strong>{tournament.civilizationMode === "pick" ? "Pick civilizations" : "Random civilizations"}</strong><small>{tournament.minimumElo > 0 ? `${tournament.minimumElo}+ Elo` : "Open rating"}</small></div>
-              <div className="tournament-player-count"><Users size={16} /><span><strong>{tournament.participants}/{tournament.capacity}</strong><small>{tournament.capacity - tournament.participants} spots left</small></span></div>
-              <div className="tournament-begins"><strong>{formatCountdown(tournament.beginsAt - now)}</strong><small>{formatStartTime(tournament.beginsAt)}</small></div>
+              <div className="tournament-player-count"><Users size={16} /><span><strong>{tournament.entries.length}/{tournament.participantCapacity}</strong><small>{Math.max(0, tournament.participantCapacity - tournament.entries.length)} spots left</small></span></div>
+              <div className="tournament-begins"><strong>{formatCountdown(Date.parse(tournament.startsAt) - now)}</strong><small>{formatStartTime(tournament.startsAt)}</small></div>
               <span className="tournament-row-action" aria-hidden="true"><ChevronRight size={20} /></span>
             </button>
           ))}
+          {!loading && tournaments.length === 0 && <div className="tournament-empty"><Trophy size={25} /><strong>No upcoming tournaments</strong><span>Create the first bracket.</span></div>}
+          {loading && tournaments.length === 0 && <div className="tournament-empty"><span className="medieval-loader" aria-label="Loading tournaments"><span /><span /><span /></span><strong>Loading tournaments…</strong></div>}
         </div>
       </div>
     </section>
   );
 }
 
-function TournamentDetail({ tournament, now, joined, onBack, onToggleJoin }: {
-  tournament: MockTournament;
+function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, onBack, onToggleJoin }: {
+  tournament: Tournament;
   now: number;
-  joined: boolean;
+  currentPlayerId: string;
+  currentPlayerRating: number;
+  pending: boolean;
   onBack: () => void;
   onToggleJoin: () => void;
 }) {
-  const rounds = buildBracket(tournament.capacity, tournament.participants);
-  const spotsLeft = Math.max(0, tournament.capacity - tournament.participants - Number(joined));
-  const displayedParticipants = Math.min(tournament.capacity, tournament.participants + Number(joined));
+  const rounds = buildBracket(tournament);
+  const joinedEntry = tournament.entries.find((entry) => entry.playerId === currentPlayerId);
+  const spotsLeft = Math.max(0, tournament.participantCapacity - tournament.entries.length);
+  const ratingEligible = currentPlayerRating >= tournament.minimumElo;
 
   return (
     <section className="tournament-detail-page">
       <button className="tournament-detail-back" type="button" onClick={onBack}><ArrowLeft size={16} /> All tournaments</button>
-
       <article className="panel tournament-detail-hero">
         <div className="tournament-detail-main">
           <div className="tournament-detail-status"><span /> Registration open</div>
-          <span className="eyebrow">Single elimination</span>
+          <span className="eyebrow">Single elimination · Hosted by {tournament.creatorDisplayName}</span>
           <h2>{tournament.name}</h2>
           <p>Win your match to advance. One loss eliminates you from the tournament.</p>
           <div className="tournament-detail-facts">
-            <div><MapIcon size={18} /><span><small>Map</small><strong>{tournament.map}</strong></span></div>
+            <div><MapIcon size={18} /><span><small>Map</small><strong>{tournament.mapName}</strong></span></div>
             <div><Shield size={18} /><span><small>Civilizations</small><strong>{tournament.civilizationMode === "pick" ? "Players pick" : "Random"}</strong></span></div>
             <div><Swords size={18} /><span><small>Minimum Elo</small><strong>{tournament.minimumElo > 0 ? tournament.minimumElo : "Open"}</strong></span></div>
-            <div><Users size={18} /><span><small>Entrants</small><strong>{displayedParticipants}/{tournament.capacity}</strong></span></div>
+            <div><Users size={18} /><span><small>Entrants</small><strong>{tournament.entries.length}/{tournament.participantCapacity}</strong></span></div>
           </div>
         </div>
-
         <aside className="tournament-entry-card">
-          <span>Begins in</span>
-          <strong>{formatCountdown(tournament.beginsAt - now)}</strong>
-          <small>{formatFullStartTime(tournament.beginsAt)}</small>
-          <div className="tournament-capacity-track"><span style={{ width: `${displayedParticipants / tournament.capacity * 100}%` }} /></div>
-          <p>{spotsLeft === 0 ? "Registration is full" : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} remaining`}</p>
-          <button className={joined ? "secondary wide" : "primary wide"} type="button" disabled={!joined && spotsLeft === 0} onClick={onToggleJoin}>
-            {joined ? "Leave Tournament" : spotsLeft === 0 ? "Tournament Full" : "Join Tournament"}
+          <span>Begins in</span><strong>{formatCountdown(Date.parse(tournament.startsAt) - now)}</strong><small>{formatFullStartTime(tournament.startsAt)}</small>
+          <div className="tournament-capacity-track"><span style={{ width: `${tournament.entries.length / tournament.participantCapacity * 100}%` }} /></div>
+          <p>{joinedEntry ? `You are in bracket slot ${joinedEntry.bracketSlot}` : spotsLeft === 0 ? "Registration is full" : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} remaining`}</p>
+          <button className={joinedEntry ? "secondary wide" : "primary wide"} type="button" disabled={pending || (!joinedEntry && (!spotsLeft || !ratingEligible))} onClick={onToggleJoin}>
+            {pending ? "Updating…" : joinedEntry ? "Leave Tournament" : !ratingEligible ? `Requires ${tournament.minimumElo} Elo` : spotsLeft === 0 ? "Tournament Full" : "Join Tournament"}
           </button>
         </aside>
       </article>
-
       <section className="tournament-bracket-section">
-        <div className="tournament-bracket-heading">
-          <div><span className="eyebrow">The road to victory</span><h2>Bracket</h2></div>
-          <p>Seeds are finalized when registration closes.</p>
-        </div>
+        <div className="tournament-bracket-heading"><div><span className="eyebrow">The road to victory</span><h2>Bracket</h2></div><p>Players are placed into a random open starting slot.</p></div>
         <div className="tournament-bracket-scroll">
           <div className="tournament-bracket" style={{ "--bracket-rounds": rounds.length } as CSSProperties}>
             {rounds.map((round, roundIndex) => (
@@ -206,9 +223,10 @@ function TournamentDetail({ tournament, now, joined, onBack, onToggleJoin }: {
                   {round.matches.map((match, matchIndex) => (
                     <article className="tournament-bracket-match" key={`${round.name}-${matchIndex}`}>
                       {match.map((player, playerIndex) => (
-                        <div className={player === "Open spot" ? "open" : player === "TBD" ? "pending" : ""} key={playerIndex}>
-                          <span>{player === "Open spot" || player === "TBD" ? "—" : seedFor(roundIndex, matchIndex, playerIndex)}</span>
-                          <strong>{player}</strong>
+                        <div className={bracketPlayerClass(player, currentPlayerId)} key={playerIndex}>
+                          <span>{typeof player === "object" ? player.bracketSlot : "—"}</span>
+                          <strong>{typeof player === "object" ? player.displayName : player === "open" ? "Open spot" : "TBD"}</strong>
+                          {typeof player === "object" && player.playerId === currentPlayerId && <em>You</em>}
                         </div>
                       ))}
                     </article>
@@ -223,20 +241,15 @@ function TournamentDetail({ tournament, now, joined, onBack, onToggleJoin }: {
   );
 }
 
-function buildBracket(capacity: number, participants: number): Array<{ name: string; matches: string[][] }> {
-  const normalizedCapacity = Math.max(2, 2 ** Math.ceil(Math.log2(capacity)));
-  const playerSlots = Array.from({ length: normalizedCapacity }, (_, index) => index < participants
-    ? mockEntrants[index % mockEntrants.length]
-    : "Open spot");
-  const rounds: Array<{ name: string; matches: string[][] }> = [];
-
-  for (let playersInRound = normalizedCapacity, roundIndex = 0; playersInRound >= 2; playersInRound /= 2, roundIndex += 1) {
-    const matchCount = playersInRound / 2;
+function buildBracket(tournament: Tournament): Array<{ name: string; matches: BracketPlayer[][] }> {
+  const entrantsBySlot = new Map(tournament.entries.map((entry) => [entry.bracketSlot, entry]));
+  const rounds: Array<{ name: string; matches: BracketPlayer[][] }> = [];
+  for (let playersInRound = tournament.participantCapacity, roundIndex = 0; playersInRound >= 2; playersInRound /= 2, roundIndex += 1) {
     rounds.push({
       name: bracketRoundName(playersInRound),
-      matches: Array.from({ length: matchCount }, (_, matchIndex) => roundIndex === 0
-        ? [playerSlots[matchIndex * 2], playerSlots[matchIndex * 2 + 1]]
-        : ["TBD", "TBD"])
+      matches: Array.from({ length: playersInRound / 2 }, (_, matchIndex) => roundIndex === 0
+        ? [entrantsBySlot.get(matchIndex * 2 + 1) ?? "open", entrantsBySlot.get(matchIndex * 2 + 2) ?? "open"]
+        : ["tbd", "tbd"])
     });
   }
   return rounds;
@@ -249,12 +262,15 @@ function bracketRoundName(playersInRound: number): string {
   return `Round of ${playersInRound}`;
 }
 
-function seedFor(roundIndex: number, matchIndex: number, playerIndex: number): number {
-  return roundIndex === 0 ? matchIndex * 2 + playerIndex + 1 : 0;
+function bracketPlayerClass(player: BracketPlayer, currentPlayerId: string): string {
+  if (player === "open") return "open";
+  if (player === "tbd") return "pending";
+  return player.playerId === currentPlayerId ? "mine" : "";
 }
 
 function formatCountdown(milliseconds: number): string {
-  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
+  if (milliseconds <= 0) return "Starting";
+  const seconds = Math.floor(milliseconds / 1000);
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
@@ -264,16 +280,19 @@ function formatCountdown(milliseconds: number): string {
   return `${minutes}m ${String(remainingSeconds).padStart(2, "0")}s`;
 }
 
-function formatStartTime(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }).format(timestamp);
+function formatStartTime(timestamp: string): string {
+  return new Intl.DateTimeFormat(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
 }
 
-function formatFullStartTime(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(timestamp);
+function formatFullStartTime(timestamp: string): string {
+  return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
 }
 
 function formatDateTimeInput(timestamp: number): string {
   const date = new Date(timestamp);
-  const localTimestamp = timestamp - date.getTimezoneOffset() * 60_000;
-  return new Date(localTimestamp).toISOString().slice(0, 16);
+  return new Date(timestamp - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+function messageFor(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
