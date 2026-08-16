@@ -20,6 +20,7 @@ import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
 import loadingScreenArtwork from "./assets/el5-loading.png";
 import { socialService } from "./services/socialService";
 import { matchmakerTransport } from "./services/matchmakerTransport";
+import { tournamentService } from "./services/tournamentService";
 import { isPreviewMode } from "./previewMode";
 import { previewFriendRequests, previewFriends } from "./mocks/previewData";
 
@@ -33,6 +34,7 @@ export function App() {
   const [outgoingRequestIds, setOutgoingRequestIds] = useState<string[]>([]);
   const [chats, setChats] = useState<OpenChat[]>([]);
   const chatsRef = useRef<OpenChat[]>([]);
+  const notifiedTournamentMatchesRef = useRef(new Set<string>());
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
   useEffect(() => {
     if (permanentLoadingScreen) return;
@@ -40,7 +42,7 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const { page, state, lobbyAutomationActive, authStatus, authError, signInWithSteam, notify } = useAppStore();
+  const { page, setPage, state, lobbyAutomationActive, authStatus, authError, signInWithSteam, notify } = useAppStore();
   const rankedLobbyTransition = ["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error;
   const rankedInputGuardActive = ["match_found", "accepting"].includes(state.queueStatus) || rankedLobbyTransition;
   const gameInSession = state.queueStatus === "in_game" || state.gameStatus === "in_match";
@@ -56,6 +58,31 @@ export function App() {
   useEffect(() => matchmakerTransport.onAdminMessage(({ message }) => {
     notify("Message from Empire League", "info", { detail: message, durationMs: 15_000 });
   }), [notify]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") return () => undefined;
+    const inspectTournament = (tournament: Awaited<ReturnType<typeof tournamentService.get>>) => {
+      const readyMatch = tournament.matches.find((match) =>
+        match.status === "waiting"
+        && (match.playerOneId === state.currentUser.id || match.playerTwoId === state.currentUser.id)
+      );
+      if (!readyMatch || notifiedTournamentMatchesRef.current.has(readyMatch.id)) return;
+      const playerReady = readyMatch.playerOneId === state.currentUser.id
+        ? readyMatch.playerOneReady
+        : readyMatch.playerTwoReady;
+      if (playerReady) return;
+      notifiedTournamentMatchesRef.current.add(readyMatch.id);
+      notify("Your tournament match is ready.", "warning", {
+        detail: `${tournament.name} is waiting for you. Ready up before the deadline.`,
+        durationMs: 15_000,
+        action: { label: "Open Tournament", run: () => setPage("tournaments") }
+      });
+    };
+    void tournamentService.list().then((tournaments) => tournaments.forEach(inspectTournament)).catch(() => undefined);
+    return tournamentService.onEvent((event) => {
+      void tournamentService.get(event.tournamentId).then(inspectTournament).catch(() => undefined);
+    });
+  }, [authStatus, notify, setPage, state.currentUser.id]);
 
   useEffect(() => {
     const clearAttention = () => void window.electronApi?.clearUnreadMessageAlert();

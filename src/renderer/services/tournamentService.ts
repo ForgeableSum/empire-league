@@ -36,7 +36,8 @@ export const tournamentService = {
         status: "registration",
         startsAt: input.startsAt,
         createdAt: new Date().toISOString(),
-        entries: []
+        entries: [],
+        matches: []
       };
       previewTournaments = [...previewTournaments, tournament];
       return structuredClone(tournament);
@@ -63,7 +64,7 @@ export const tournamentService = {
       if (!tournament.entries.some((entry) => entry.playerId === "user-1")) {
         const occupied = new Set(tournament.entries.map((entry) => entry.bracketSlot));
         const bracketSlot = Array.from({ length: tournament.participantCapacity }, (_, index) => index + 1).find((slot) => !occupied.has(slot))!;
-        tournament.entries.push({ playerId: "user-1", displayName: "EmpireSum", rating: 1426, ratingAtJoin: 1426, bracketSlot, joinedAt: new Date().toISOString() });
+        tournament.entries.push({ playerId: "user-1", displayName: "EmpireSum", rating: 1426, ratingAtJoin: 1426, status: "active", bracketSlot, joinedAt: new Date().toISOString() });
       }
       return structuredClone(tournament);
     }
@@ -102,6 +103,7 @@ function previewTournament(): Tournament {
     displayName: String(displayName),
     rating: 1250 + index * 22,
     ratingAtJoin: 1250 + index * 22,
+    status: "active" as const,
     bracketSlot: Number(bracketSlot),
     joinedAt: new Date(Date.now() - index * 60_000).toISOString()
   }));
@@ -119,6 +121,7 @@ function previewTournament(): Tournament {
     status: "registration",
     startsAt: new Date(Date.now() + 42 * 60_000).toISOString(),
     createdAt: new Date().toISOString(),
-    entries
+    entries,
+    matches: []
   };
 }

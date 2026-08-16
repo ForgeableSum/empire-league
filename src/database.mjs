@@ -48,15 +48,23 @@ export class TournamentOperationError extends Error {
   }
 }
 
-export async function getTournaments() {
+export async function getTournaments(playerId) {
   const [tournamentRows] = await database.query(
     `SELECT t.id, t.creator_player_id, creator.display_name AS creator_display_name,
             t.name, t.format, t.civilization_mode, t.participant_capacity,
-            t.minimum_elo, t.map_id, t.map_name, t.status, t.starts_at, t.created_at
+            t.minimum_elo, t.map_id, t.map_name, t.status, t.starts_at, t.started_at,
+            t.completed_at, t.created_at
      FROM tournaments t
      JOIN players creator ON creator.id = t.creator_player_id
-     WHERE t.status = 'registration' AND t.starts_at >= NOW(3)
-     ORDER BY t.starts_at ASC, t.created_at ASC`
+     WHERE (t.status = 'registration' AND t.starts_at >= UTC_TIMESTAMP(3))
+        OR t.status = 'started'
+        OR (t.status = 'completed' AND (
+          t.creator_player_id = ? OR EXISTS (
+            SELECT 1 FROM tournament_entries mine WHERE mine.tournament_id = t.id AND mine.player_id = ?
+          )
+        ))
+     ORDER BY FIELD(t.status, 'started', 'registration', 'completed'), t.starts_at ASC, t.created_at ASC`,
+    [playerId, playerId]
   );
   return tournamentsWithEntries(tournamentRows);
 }
@@ -65,7 +73,8 @@ export async function getTournamentById(tournamentId) {
   const [rows] = await database.execute(
     `SELECT t.id, t.creator_player_id, creator.display_name AS creator_display_name,
             t.name, t.format, t.civilization_mode, t.participant_capacity,
-            t.minimum_elo, t.map_id, t.map_name, t.status, t.starts_at, t.created_at
+            t.minimum_elo, t.map_id, t.map_name, t.status, t.starts_at, t.started_at,
+            t.completed_at, t.created_at
      FROM tournaments t
      JOIN players creator ON creator.id = t.creator_player_id
      WHERE t.id = ?`,
@@ -80,7 +89,7 @@ async function tournamentsWithEntries(tournamentRows) {
   const ids = tournamentRows.map((row) => row.id);
   const placeholders = ids.map(() => "?").join(",");
   const [entryRows] = await database.query(
-    `SELECT e.tournament_id, e.player_id, e.bracket_slot, e.rating_at_join, e.joined_at,
+    `SELECT e.tournament_id, e.player_id, e.bracket_slot, e.rating_at_join, e.status, e.joined_at,
             p.display_name, p.avatar_url, p.rating
      FROM tournament_entries e
      JOIN players p ON p.id = e.player_id
@@ -97,10 +106,39 @@ async function tournamentsWithEntries(tournamentRows) {
       ...(row.avatar_url ? { avatarUrl: row.avatar_url } : {}),
       rating: Number(row.rating),
       ratingAtJoin: Number(row.rating_at_join),
+      status: row.status,
       bracketSlot: Number(row.bracket_slot),
       joinedAt: dateToIso(row.joined_at)
     });
     entriesByTournament.set(row.tournament_id, entries);
+  }
+  const [matchRows] = await database.query(
+    `SELECT id, tournament_id, round_number, match_position, player_one_id, player_two_id,
+            player_one_ready_at, player_two_ready_at, ready_deadline, game_match_id,
+            winner_player_id, status, completed_at
+     FROM tournament_matches
+     WHERE tournament_id IN (${placeholders})
+     ORDER BY tournament_id, round_number, match_position`,
+    ids
+  );
+  const matchesByTournament = new Map();
+  for (const row of matchRows) {
+    const matches = matchesByTournament.get(row.tournament_id) ?? [];
+    matches.push({
+      id: row.id,
+      roundNumber: Number(row.round_number),
+      matchPosition: Number(row.match_position),
+      ...(row.player_one_id ? { playerOneId: row.player_one_id } : {}),
+      ...(row.player_two_id ? { playerTwoId: row.player_two_id } : {}),
+      playerOneReady: Boolean(row.player_one_ready_at),
+      playerTwoReady: Boolean(row.player_two_ready_at),
+      ...(row.ready_deadline ? { readyDeadline: dateToIso(row.ready_deadline) } : {}),
+      ...(row.game_match_id ? { gameMatchId: row.game_match_id } : {}),
+      ...(row.winner_player_id ? { winnerPlayerId: row.winner_player_id } : {}),
+      status: row.status,
+      ...(row.completed_at ? { completedAt: dateToIso(row.completed_at) } : {})
+    });
+    matchesByTournament.set(row.tournament_id, matches);
   }
   return tournamentRows.map((row) => ({
     id: row.id,
@@ -115,8 +153,11 @@ async function tournamentsWithEntries(tournamentRows) {
     mapName: row.map_name,
     status: row.status,
     startsAt: dateToIso(row.starts_at),
+    ...(row.started_at ? { startedAt: dateToIso(row.started_at) } : {}),
+    ...(row.completed_at ? { completedAt: dateToIso(row.completed_at) } : {}),
     createdAt: dateToIso(row.created_at),
-    entries: entriesByTournament.get(row.id) ?? []
+    entries: entriesByTournament.get(row.id) ?? [],
+    matches: matchesByTournament.get(row.id) ?? []
   }));
 }
 
@@ -129,7 +170,7 @@ export async function createTournament(input) {
       `SELECT id, name
        FROM tournaments
        WHERE creator_player_id = ?
-         AND (status = 'started' OR (status = 'registration' AND starts_at > NOW(3)))
+         AND (status = 'started' OR (status = 'registration' AND starts_at > UTC_TIMESTAMP(3)))
        LIMIT 1`,
       [input.creatorPlayerId]
     );
@@ -180,7 +221,7 @@ export async function cancelTournament(tournamentId, playerId) {
 
     await connection.execute("SELECT id FROM players WHERE id = ? FOR UPDATE", [playerId]);
     const [tournamentRows] = await connection.execute(
-      `SELECT id, name, status, starts_at,
+      `SELECT id, name, status, (starts_at <= UTC_TIMESTAMP(3)) AS already_started,
               (SELECT COUNT(*) FROM tournament_entries WHERE tournament_id = tournaments.id) AS entry_count
        FROM tournaments
        WHERE id = ?
@@ -189,7 +230,7 @@ export async function cancelTournament(tournamentId, playerId) {
     );
     const tournament = tournamentRows[0];
     if (!tournament) throw new TournamentOperationError("Tournament not found.", 404);
-    if (tournament.status !== "registration" || new Date(tournament.starts_at).getTime() <= Date.now()) {
+    if (tournament.status !== "registration" || tournament.already_started) {
       throw new TournamentOperationError("This tournament can no longer be canceled.");
     }
 
@@ -213,7 +254,8 @@ export async function joinTournament(tournamentId, playerId) {
   try {
     await connection.beginTransaction();
     const [tournamentRows] = await connection.execute(
-      `SELECT participant_capacity, minimum_elo, status, starts_at
+      `SELECT participant_capacity, minimum_elo, status,
+              (starts_at <= UTC_TIMESTAMP(3)) AS already_started
        FROM tournaments WHERE id = ? FOR UPDATE`,
       [tournamentId]
     );
@@ -228,7 +270,7 @@ export async function joinTournament(tournamentId, playerId) {
       await connection.commit();
       return getTournamentById(tournamentId);
     }
-    if (tournament.status !== "registration" || new Date(tournament.starts_at).getTime() <= Date.now()) {
+    if (tournament.status !== "registration" || tournament.already_started) {
       throw new TournamentOperationError("Registration for this tournament is closed.");
     }
 
@@ -267,12 +309,12 @@ export async function leaveTournament(tournamentId, playerId) {
   try {
     await connection.beginTransaction();
     const [tournamentRows] = await connection.execute(
-      "SELECT status, starts_at FROM tournaments WHERE id = ? FOR UPDATE",
+      "SELECT status, (starts_at <= UTC_TIMESTAMP(3)) AS already_started FROM tournaments WHERE id = ? FOR UPDATE",
       [tournamentId]
     );
     const tournament = tournamentRows[0];
     if (!tournament) throw new TournamentOperationError("Tournament not found.", 404);
-    if (tournament.status !== "registration" || new Date(tournament.starts_at).getTime() <= Date.now()) {
+    if (tournament.status !== "registration" || tournament.already_started) {
       throw new TournamentOperationError("You can no longer leave this tournament.");
     }
     await connection.execute(
@@ -289,8 +331,355 @@ export async function leaveTournament(tournamentId, playerId) {
   }
 }
 
+export async function processTournamentLifecycle() {
+  const connection = await database.getConnection();
+  const changedTournamentIds = new Set();
+  const expiredMatches = [];
+  try {
+    await connection.beginTransaction();
+    const [dueTournaments] = await connection.query(
+      `SELECT id, participant_capacity
+       FROM tournaments
+       WHERE status = 'registration' AND starts_at <= UTC_TIMESTAMP(3)
+       FOR UPDATE`
+    );
+    for (const tournament of dueTournaments) {
+      await startTournamentWithinTransaction(connection, tournament);
+      changedTournamentIds.add(tournament.id);
+    }
+
+    const [expiredRows] = await connection.query(
+      `SELECT * FROM tournament_matches
+       WHERE status = 'waiting' AND ready_deadline <= UTC_TIMESTAMP(3)
+         AND (player_one_ready_at IS NULL OR player_two_ready_at IS NULL)
+       FOR UPDATE`
+    );
+    for (const tournamentMatch of expiredRows) {
+      const playerOneReady = Boolean(tournamentMatch.player_one_ready_at);
+      const playerTwoReady = Boolean(tournamentMatch.player_two_ready_at);
+      const winnerPlayerId = playerOneReady === playerTwoReady
+        ? null
+        : playerOneReady ? tournamentMatch.player_one_id : tournamentMatch.player_two_id;
+      await completeTournamentMatchWithinTransaction(
+        connection,
+        tournamentMatch,
+        winnerPlayerId,
+        "forfeit",
+        true
+      );
+      changedTournamentIds.add(tournamentMatch.tournament_id);
+      expiredMatches.push({
+        tournamentMatchId: tournamentMatch.id,
+        playerIds: [tournamentMatch.player_one_id, tournamentMatch.player_two_id].filter(Boolean)
+      });
+    }
+    await connection.commit();
+    return { changedTournamentIds: [...changedTournamentIds], expiredMatches };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function recoverInterruptedTournamentMatches() {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      "SELECT id, tournament_id, game_match_id FROM tournament_matches WHERE status = 'in_progress' FOR UPDATE"
+    );
+    for (const tournamentMatch of rows) {
+      if (tournamentMatch.game_match_id) {
+        await connection.execute(
+          "UPDATE matches SET status = 'completed', completed_at = UTC_TIMESTAMP(3) WHERE id = ? AND status <> 'completed'",
+          [tournamentMatch.game_match_id]
+        );
+        await connection.execute(
+          `INSERT INTO match_results (match_id, winner_player_id, result, verification_status, verified_at)
+           SELECT id, NULL, 'no_contest', 'no_contest', UTC_TIMESTAMP(3) FROM matches WHERE id = ?
+           ON DUPLICATE KEY UPDATE winner_player_id = NULL, result = 'no_contest',
+             verification_status = 'no_contest', verified_at = UTC_TIMESTAMP(3)`,
+          [tournamentMatch.game_match_id]
+        );
+      }
+      await connection.execute(
+        `UPDATE tournament_matches
+         SET status = 'waiting', player_one_ready_at = NULL, player_two_ready_at = NULL,
+             ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE), game_match_id = NULL
+         WHERE id = ?`,
+        [tournamentMatch.id]
+      );
+    }
+    await connection.commit();
+    return [...new Set(rows.map((row) => row.tournament_id))];
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function startTournamentWithinTransaction(connection, tournament) {
+  const capacity = Number(tournament.participant_capacity);
+  const roundCount = Math.log2(capacity);
+  await connection.execute(
+    "UPDATE tournaments SET status = 'started', started_at = UTC_TIMESTAMP(3) WHERE id = ?",
+    [tournament.id]
+  );
+  for (let roundNumber = 1; roundNumber <= roundCount; roundNumber += 1) {
+    const matchCount = capacity / (2 ** roundNumber);
+    for (let matchPosition = 1; matchPosition <= matchCount; matchPosition += 1) {
+      await connection.execute(
+        `INSERT IGNORE INTO tournament_matches
+          (id, tournament_id, round_number, match_position)
+         VALUES (?, ?, ?, ?)`,
+        [`${tournament.id}:r${roundNumber}:m${matchPosition}`, tournament.id, roundNumber, matchPosition]
+      );
+    }
+  }
+
+  const [entries] = await connection.execute(
+    "SELECT player_id, bracket_slot FROM tournament_entries WHERE tournament_id = ? ORDER BY bracket_slot",
+    [tournament.id]
+  );
+  const entrantsBySlot = new Map(entries.map((entry) => [Number(entry.bracket_slot), entry.player_id]));
+  for (let matchPosition = 1; matchPosition <= capacity / 2; matchPosition += 1) {
+    const playerOneId = entrantsBySlot.get(matchPosition * 2 - 1) ?? null;
+    const playerTwoId = entrantsBySlot.get(matchPosition * 2) ?? null;
+    await connection.execute(
+      `UPDATE tournament_matches
+       SET player_one_id = ?, player_two_id = ?,
+           player_one_source_resolved = TRUE, player_two_source_resolved = TRUE
+       WHERE tournament_id = ? AND round_number = 1 AND match_position = ?`,
+      [playerOneId, playerTwoId, tournament.id, matchPosition]
+    );
+    const [rows] = await connection.execute(
+      "SELECT * FROM tournament_matches WHERE tournament_id = ? AND round_number = 1 AND match_position = ? FOR UPDATE",
+      [tournament.id, matchPosition]
+    );
+    await activateResolvedTournamentMatch(connection, rows[0]);
+  }
+}
+
+async function activateResolvedTournamentMatch(connection, tournamentMatch) {
+  if (tournamentMatch.player_one_id && tournamentMatch.player_two_id) {
+    await connection.execute(
+      `UPDATE tournament_matches
+       SET status = 'waiting', ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE)
+       WHERE id = ?`,
+      [tournamentMatch.id]
+    );
+    return;
+  }
+  const winnerPlayerId = tournamentMatch.player_one_id ?? tournamentMatch.player_two_id ?? null;
+  await completeTournamentMatchWithinTransaction(connection, tournamentMatch, winnerPlayerId, "bye", false);
+}
+
+async function completeTournamentMatchWithinTransaction(
+  connection,
+  tournamentMatch,
+  winnerPlayerId,
+  status = "completed",
+  noShow = false
+) {
+  await connection.execute(
+    `UPDATE tournament_matches
+     SET status = ?, winner_player_id = ?, completed_at = UTC_TIMESTAMP(3)
+     WHERE id = ?`,
+    [status, winnerPlayerId, tournamentMatch.id]
+  );
+  const participants = [tournamentMatch.player_one_id, tournamentMatch.player_two_id].filter(Boolean);
+  for (const playerId of participants) {
+    if (playerId === winnerPlayerId) continue;
+    await connection.execute(
+      "UPDATE tournament_entries SET status = ? WHERE tournament_id = ? AND player_id = ?",
+      [noShow ? "no_show" : "eliminated", tournamentMatch.tournament_id, playerId]
+    );
+  }
+
+  const [[tournament]] = await connection.execute(
+    "SELECT participant_capacity FROM tournaments WHERE id = ? FOR UPDATE",
+    [tournamentMatch.tournament_id]
+  );
+  const finalRound = Math.log2(Number(tournament.participant_capacity));
+  if (Number(tournamentMatch.round_number) === finalRound) {
+    await connection.execute(
+      "UPDATE tournaments SET status = 'completed', completed_at = UTC_TIMESTAMP(3) WHERE id = ?",
+      [tournamentMatch.tournament_id]
+    );
+    if (winnerPlayerId) {
+      await connection.execute(
+        "UPDATE tournament_entries SET status = 'winner' WHERE tournament_id = ? AND player_id = ?",
+        [tournamentMatch.tournament_id, winnerPlayerId]
+      );
+    }
+    return;
+  }
+
+  const nextRound = Number(tournamentMatch.round_number) + 1;
+  const nextPosition = Math.ceil(Number(tournamentMatch.match_position) / 2);
+  const oddPosition = Number(tournamentMatch.match_position) % 2 === 1;
+  await connection.execute(
+    `UPDATE tournament_matches
+     SET ${oddPosition ? "player_one_id" : "player_two_id"} = ?,
+         ${oddPosition ? "player_one_source_resolved" : "player_two_source_resolved"} = TRUE
+     WHERE tournament_id = ? AND round_number = ? AND match_position = ?`,
+    [winnerPlayerId, tournamentMatch.tournament_id, nextRound, nextPosition]
+  );
+  await activateTournamentRoundIfReady(connection, tournamentMatch.tournament_id, nextRound, finalRound);
+}
+
+async function activateTournamentRoundIfReady(connection, tournamentId, roundNumber, finalRound) {
+  const [unfinishedPrevious] = await connection.execute(
+    `SELECT id FROM tournament_matches
+     WHERE tournament_id = ? AND round_number = ?
+       AND status IN ('pending', 'waiting', 'in_progress')
+     LIMIT 1`,
+    [tournamentId, roundNumber - 1]
+  );
+  if (unfinishedPrevious.length) return;
+  const [rows] = await connection.execute(
+    `SELECT * FROM tournament_matches
+     WHERE tournament_id = ? AND round_number = ? AND status = 'pending'
+       AND player_one_source_resolved = TRUE AND player_two_source_resolved = TRUE
+     ORDER BY match_position
+     FOR UPDATE`,
+    [tournamentId, roundNumber]
+  );
+  for (const tournamentMatch of rows) await activateResolvedTournamentMatch(connection, tournamentMatch);
+  if (roundNumber >= finalRound) return;
+  const [unfinishedCurrent] = await connection.execute(
+    `SELECT id FROM tournament_matches
+     WHERE tournament_id = ? AND round_number = ?
+       AND status IN ('pending', 'waiting', 'in_progress')
+     LIMIT 1`,
+    [tournamentId, roundNumber]
+  );
+  if (!unfinishedCurrent.length) {
+    await activateTournamentRoundIfReady(connection, tournamentId, roundNumber + 1, finalRound);
+  }
+}
+
+export async function readyTournamentMatch(tournamentId, playerId) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(
+      `SELECT tm.*, (tm.ready_deadline <= UTC_TIMESTAMP(3)) AS ready_deadline_passed,
+              t.name AS tournament_name, t.map_id, t.map_name, t.civilization_mode
+       FROM tournament_matches tm
+       JOIN tournaments t ON t.id = tm.tournament_id
+       WHERE tm.tournament_id = ? AND t.status = 'started' AND tm.status = 'waiting'
+         AND (tm.player_one_id = ? OR tm.player_two_id = ?)
+       ORDER BY tm.round_number, tm.match_position
+       LIMIT 1
+       FOR UPDATE`,
+      [tournamentId, playerId, playerId]
+    );
+    const tournamentMatch = rows[0];
+    if (!tournamentMatch) throw new TournamentOperationError("You do not have a tournament match ready.", 404);
+    const isPlayerOne = tournamentMatch.player_one_id === playerId;
+    const alreadyReady = Boolean(isPlayerOne ? tournamentMatch.player_one_ready_at : tournamentMatch.player_two_ready_at);
+    if (!alreadyReady && tournamentMatch.ready_deadline_passed) {
+      throw new TournamentOperationError("The ready deadline for this match has passed.", 410);
+    }
+    await connection.execute(
+      `UPDATE tournament_matches SET ${isPlayerOne ? "player_one_ready_at" : "player_two_ready_at"} = COALESCE(${isPlayerOne ? "player_one_ready_at" : "player_two_ready_at"}, UTC_TIMESTAMP(3)) WHERE id = ?`,
+      [tournamentMatch.id]
+    );
+    await connection.commit();
+    return {
+      tournamentId,
+      tournamentName: tournamentMatch.tournament_name,
+      tournamentMatchId: tournamentMatch.id,
+      playerOneId: tournamentMatch.player_one_id,
+      playerTwoId: tournamentMatch.player_two_id,
+      mapId: tournamentMatch.map_id,
+      mapName: tournamentMatch.map_name,
+      civilizationMode: tournamentMatch.civilization_mode
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function markTournamentMatchLaunched(tournamentMatchId, gameMatchId) {
+  const [result] = await database.execute(
+    `UPDATE tournament_matches
+     SET status = 'in_progress', game_match_id = ?
+     WHERE id = ? AND status = 'waiting' AND player_one_ready_at IS NOT NULL AND player_two_ready_at IS NOT NULL`,
+    [gameMatchId, tournamentMatchId]
+  );
+  if (result.affectedRows !== 1) throw new TournamentOperationError("Tournament match is no longer available.");
+}
+
+export async function unreadyTournamentMatch(tournamentMatchId, playerId) {
+  const [rows] = await database.execute(
+    "SELECT tournament_id, player_one_id, player_two_id FROM tournament_matches WHERE id = ? AND status = 'waiting'",
+    [tournamentMatchId]
+  );
+  const tournamentMatch = rows[0];
+  if (!tournamentMatch) return null;
+  const column = tournamentMatch.player_one_id === playerId
+    ? "player_one_ready_at"
+    : tournamentMatch.player_two_id === playerId ? "player_two_ready_at" : null;
+  if (!column) return null;
+  await database.execute(`UPDATE tournament_matches SET ${column} = NULL WHERE id = ? AND status = 'waiting'`, [tournamentMatchId]);
+  return tournamentMatch.tournament_id;
+}
+
+export async function resetTournamentMatch(tournamentMatchId) {
+  const [rows] = await database.execute(
+    "SELECT tournament_id FROM tournament_matches WHERE id = ? AND status = 'in_progress'",
+    [tournamentMatchId]
+  );
+  if (!rows.length) return null;
+  await database.execute(
+    `UPDATE tournament_matches
+     SET status = 'waiting', player_one_ready_at = NULL, player_two_ready_at = NULL,
+         ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE), game_match_id = NULL
+     WHERE id = ? AND status = 'in_progress'`,
+    [tournamentMatchId]
+  );
+  return rows[0].tournament_id;
+}
+
 function dateToIso(value) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+async function resolveTournamentGameResultWithinTransaction(connection, tournamentMatchId, winnerPlayerId, status) {
+  if (!tournamentMatchId) return;
+  const [rows] = await connection.execute(
+    "SELECT * FROM tournament_matches WHERE id = ? FOR UPDATE",
+    [tournamentMatchId]
+  );
+  const tournamentMatch = rows[0];
+  if (!tournamentMatch || !["waiting", "in_progress"].includes(tournamentMatch.status)) return;
+  await completeTournamentMatchWithinTransaction(
+    connection,
+    tournamentMatch,
+    winnerPlayerId,
+    status,
+    false
+  );
+}
+
+async function resetTournamentGameWithinTransaction(connection, tournamentMatchId) {
+  if (!tournamentMatchId) return;
+  await connection.execute(
+    `UPDATE tournament_matches
+     SET status = 'waiting', player_one_ready_at = NULL, player_two_ready_at = NULL,
+         ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE), game_match_id = NULL
+     WHERE id = ? AND status IN ('waiting', 'in_progress')`,
+    [tournamentMatchId]
+  );
 }
 
 async function insertDurableMatch(connection, match, status, completedAt = null, civilizations = {}) {
@@ -377,6 +766,7 @@ export async function recordNoContestMatch(match) {
          winner_player_id = NULL, result = 'no_contest', verification_status = 'no_contest', verified_at = VALUES(verified_at)`,
       [match.id, completedAt]
     );
+    await resetTournamentGameWithinTransaction(connection, match.tournamentMatchId);
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -459,6 +849,10 @@ export async function recordVerifiedMatchResult(match, replay) {
       const change = won ? winnerChange : loserChange;
       const before = Number(player.active_rating);
       const after = before + change;
+      if (match.ratingEligible === false) {
+        ratings[player.id] = { oldRating: before, newRating: before, ratingChange: 0 };
+        continue;
+      }
       await connection.execute(
         `UPDATE players
          SET ${fields.rating} = ?, ${fields.peakRating} = GREATEST(${fields.peakRating}, ?),
@@ -476,6 +870,12 @@ export async function recordVerifiedMatchResult(match, replay) {
       );
       ratings[player.id] = { oldRating: before, newRating: after, ratingChange: change };
     }
+    await resolveTournamentGameResultWithinTransaction(
+      connection,
+      match.tournamentMatchId,
+      winners[0].id,
+      "completed"
+    );
     await connection.commit();
     return ratings;
   } catch (error) {
@@ -522,6 +922,7 @@ export async function recordMatchResultConflict(match, { reason, implicatedTicke
         );
       }
     }
+    await resetTournamentGameWithinTransaction(connection, match.tournamentMatchId);
     await connection.commit();
   } catch (error) {
     await connection.rollback();

@@ -12,6 +12,8 @@ export interface MatchResult {
   verified: boolean;
   verificationSource: "mock" | "worlds_edge" | "replay" | "manual_review";
   verificationStatus?: "verified" | "contested";
+  ratingEligible?: boolean;
+  tournamentId?: string;
 }
 
 export interface ReplayPlayerMetadata {

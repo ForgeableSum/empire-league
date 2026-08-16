@@ -30,6 +30,12 @@ import {
   cancelTournament,
   joinTournament,
   leaveTournament,
+  processTournamentLifecycle,
+  recoverInterruptedTournamentMatches,
+  readyTournamentMatch,
+  markTournamentMatchLaunched,
+  unreadyTournamentMatch,
+  resetTournamentMatch,
   TournamentOperationError
 } from "./database.mjs";
 import { replaySettingsAgree, validateRankedReplaySettings } from "./replayRules.mjs";
@@ -90,6 +96,7 @@ const teamRatingRangeSchedule = [
 let eventSequence = 0;
 let rematchCooldownCleanupTimer;
 let weeklyRotationTimer;
+let tournamentLifecycleTimer;
 const socialPresence = new Map();
 const socialFriendIds = new Map();
 const socialMessages = new Map();
@@ -554,6 +561,13 @@ function deleteMatch(match) {
     if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
     ticket.matchId = null;
   }
+  if (match.matchType === "tournament" && !match.resultResolved && !match.startedAt) {
+    void resetTournamentMatch(match.tournamentMatchId).then((tournamentId) => {
+      if (tournamentId) broadcastTournamentChanged(tournamentId);
+    }).catch((error) => {
+      console.error(`[matchmaker] ${match.id}: failed to reset tournament match:`, error);
+    });
+  }
 }
 
 function releaseMatchTickets(match) {
@@ -576,6 +590,11 @@ function deleteDisconnectedTicket(ticket, message = "The other player disconnect
   clearTicketDisconnectTimer(ticket);
   if (!match) {
     tickets.delete(ticket.id);
+    if (ticket.source === "tournament") {
+      void unreadyTournamentMatch(ticket.tournamentMatchId, ticket.player.id).then((tournamentId) => {
+        if (tournamentId) broadcastTournamentChanged(tournamentId);
+      }).catch((error) => console.error(`[matchmaker] ${ticket.id}: failed to clear tournament readiness:`, error));
+    }
     console.warn(`[matchmaker] ${ticket.id}: disconnected ticket removed`);
     return true;
   }
@@ -638,7 +657,7 @@ function scheduleRematchCooldownCleanup() {
 }
 
 function addDeclinedPairCooldown(match) {
-  if (match.teamSize !== 1) return;
+  if (match.teamSize !== 1 || match.matchType === "tournament") return;
 
   const expiresAt = Date.now() + declinedPairCooldownMs;
   const players = matchTickets(match);
@@ -667,6 +686,7 @@ async function expireActiveMatch(match, message, code = "MATCH_EXPIRED") {
   if (match.startedAt) {
     try {
       await recordNoContestMatch(match);
+      if (match.tournamentId) broadcastTournamentChanged(match.tournamentId);
     } catch (error) {
       console.error(`[matchmaker] ${match.id}: failed to persist no-contest result:`, error);
     }
@@ -813,7 +833,9 @@ function resultForTicket(match, ticket, replay, ratings) {
     ratingChange: playerRatings.ratingChange,
     verified: true,
     verificationSource: "replay",
-    verificationStatus: "verified"
+    verificationStatus: "verified",
+    ratingEligible: match.ratingEligible !== false,
+    ...(match.tournamentId ? { tournamentId: match.tournamentId } : {})
   };
 }
 
@@ -830,7 +852,9 @@ function contestedResultForTicket(ticket) {
     ratingChange: 0,
     verified: false,
     verificationSource: "replay",
-    verificationStatus: "contested"
+    verificationStatus: "contested",
+    ratingEligible: ticket.source !== "tournament",
+    ...(ticket.tournamentId ? { tournamentId: ticket.tournamentId } : {})
   };
 }
 
@@ -850,6 +874,7 @@ async function resolveContestedResult(match, detail, implicatedTicketIds, report
     });
   }
   deleteMatch(match);
+  if (match.tournamentId) broadcastTournamentChanged(match.tournamentId);
 }
 
 async function resolveVerifiedResult(match, replay) {
@@ -866,6 +891,7 @@ async function resolveVerifiedResult(match, replay) {
       });
     }
     deleteMatch(match);
+    if (match.tournamentId) broadcastTournamentChanged(match.tournamentId);
     console.log(`[matchmaker] ${match.id}: verified result; winner=${replay.winnerProfileId}`);
     return true;
   } finally {
@@ -1062,8 +1088,71 @@ function sessionFor(match, ticket) {
     acceptedByOpponent: match.accepted.has(opponent.id),
     acceptDeadline: match.acceptDeadline,
     selectedMap: match.selectedMap,
-    createdAt: match.createdAt
+    createdAt: match.createdAt,
+    matchType: match.matchType ?? "ranked",
+    ratingEligible: match.ratingEligible !== false,
+    ...(match.tournamentId ? { tournamentId: match.tournamentId } : {}),
+    ...(match.tournamentMatchId ? { tournamentMatchId: match.tournamentMatchId } : {})
   };
+}
+
+async function tryLaunchTournamentMatch(tournamentMatchId) {
+  const participants = [...tickets.values()]
+    .filter((ticket) => ticket.source === "tournament" && ticket.tournamentMatchId === tournamentMatchId && !ticket.matchId)
+    .sort((left, right) => new Date(left.joinedAt).getTime() - new Date(right.joinedAt).getTime());
+  if (participants.length < 2) return;
+  const host = participants.find((ticket) => ticket.canHost) ?? participants[0];
+  const guest = participants.find((ticket) => ticket.id !== host.id);
+  if (!guest) return;
+  const selectedMap = host.queue.mapPool[0];
+  const catalogMap = publicMapCatalog.maps.find((map) => map.id === selectedMap.id);
+  if (!catalogMap) throw new TournamentOperationError("The tournament map is no longer available.");
+  const assignments = new Map([
+    [host.id, { slot: 1, team: 1 }],
+    [guest.id, { slot: 2, team: 2 }]
+  ]);
+  const match = {
+    id: `match-${randomUUID().slice(0, 8)}`,
+    host,
+    guest,
+    guests: [guest],
+    participants: [host, guest],
+    assignments,
+    teamSize: 1,
+    accepted: new Set(),
+    selectedMap,
+    createdAt: new Date().toISOString(),
+    acceptDeadline: new Date(Date.now() + 30_000).toISOString(),
+    lobby: null,
+    guestLobbyJoined: new Set(),
+    guestContentAccepted: new Set(),
+    guestLobbyReady: new Set(),
+    resultReports: new Map(),
+    resultResolved: false,
+    mapCatalogVersion: publicMapCatalog.version,
+    mapGroupId: catalogMap.groupId,
+    civilizationPreferences: new Map(participants.map((participant) => [
+      participant.id,
+      rollCivilizationPreference(
+        participant.queue.civilizationPreference,
+        catalogMap.groupId,
+        [],
+        Math.random
+      )
+    ])),
+    matchType: "tournament",
+    ratingEligible: false,
+    tournamentId: host.tournamentId,
+    tournamentMatchId
+  };
+  await markTournamentMatchLaunched(tournamentMatchId, match.id);
+  for (const participant of participants) participant.matchId = match.id;
+  matches.set(match.id, match);
+  for (const participant of participants) emit(participant, { type: "match_found", match: sessionFor(match, participant) });
+  match.expirationTimer = setTimeout(() => void expireMatch(match), 30_000);
+  match.expirationTimer.unref?.();
+  broadcastTournamentChanged(match.tournamentId);
+  console.log(`[matchmaker] ${match.id}: tournament match ${tournamentMatchId}, host=${host.player.displayName}`);
 }
 
 async function tryMatch(ticket) {
@@ -1385,7 +1474,7 @@ async function handleRequest(request, response) {
     }
 
     if (request.method === "GET" && url.pathname === "/tournaments") {
-      return send(response, 200, { tournaments: await getTournaments() });
+      return send(response, 200, { tournaments: await getTournaments(authenticatedPlayer.id) });
     }
 
     if (request.method === "POST" && url.pathname === "/tournaments") {
@@ -1937,6 +2026,80 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && url.pathname === "/queue") {
       const body = await readJson(request);
       if (!body.queue?.id) return send(response, 400, { error: "queue is required" });
+      if (typeof body.queue.tournamentId === "string") {
+        for (const ticket of tickets.values()) {
+          if (ticket.player.id === authenticatedPlayer.id && ticket.disconnectedAt) {
+            if (ticket.source === "tournament" && !ticket.matchId) {
+              clearTicketSearchTimers(ticket);
+              clearTicketDisconnectTimer(ticket);
+              tickets.delete(ticket.id);
+              await unreadyTournamentMatch(ticket.tournamentMatchId, authenticatedPlayer.id);
+            } else {
+              deleteDisconnectedTicket(ticket, "The other player restarted or left the match.");
+            }
+          }
+        }
+        const alreadyActive = weeklyQueue.has(authenticatedPlayer.id)
+          || playerCustomLobby(authenticatedPlayer.id)
+          || playerHasRankedActivity(authenticatedPlayer.id);
+        if (alreadyActive) return send(response, 409, { error: "player already has an active queue or match" });
+        playersJoiningQueue.add(authenticatedPlayer.id);
+        try {
+          const context = await readyTournamentMatch(body.queue.tournamentId, authenticatedPlayer.id);
+          const catalogMap = publicMapCatalog.maps.find((map) => map.id === context.mapId);
+          if (!catalogMap) return send(response, 409, { error: "The tournament map is no longer available." });
+          let civilizationPreference;
+          if (context.civilizationMode === "pick") {
+            civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
+            if (civilizationPreference.mode !== "pick" || !civilizationPreference.civilization) {
+              return send(response, 400, { error: "Choose a civilization before readying for this match." });
+            }
+          } else {
+            civilizationPreference = { mode: "random" };
+          }
+          const queue = normalizeQueueMapPreferences({
+            id: `tournament:${context.tournamentId}`,
+            name: `${context.tournamentName} Tournament`,
+            description: "Single-elimination tournament match.",
+            format: "1v1",
+            ruleset: "Random Map",
+            mapPool: [{ id: catalogMap.id }],
+            civilizationPreference,
+            ranked: false,
+            estimatedWaitSeconds: 0,
+            playersSearching: 0,
+            tournamentId: context.tournamentId
+          });
+          delete queue.ignoredMapIds;
+          const ticket = {
+            id: `ticket-${randomUUID()}`,
+            queueId: queue.id,
+            queue,
+            player: authenticatedPlayer,
+            canHost: body.canHost !== false,
+            joinedAt: new Date().toISOString(),
+            matchId: null,
+            events: [],
+            source: "tournament",
+            tournamentId: context.tournamentId,
+            tournamentMatchId: context.tournamentMatchId
+          };
+          tickets.set(ticket.id, ticket);
+          await tryLaunchTournamentMatch(context.tournamentMatchId);
+          broadcastTournamentChanged(context.tournamentId);
+          return send(response, 201, {
+            id: ticket.id,
+            queueId: ticket.queueId,
+            joinedAt: ticket.joinedAt,
+            ignoredMapIds: []
+          });
+        } catch (error) {
+          if (error instanceof TournamentOperationError) return send(response, error.status, { error: error.message });
+          throw error;
+        } finally {
+          playersJoiningQueue.delete(authenticatedPlayer.id);
+        }
+      }
       let ignoredMapIds = [];
       try {
         body.queue = normalizeQueueMapPreferences(body.queue);
@@ -2009,6 +2172,9 @@ async function handleRequest(request, response) {
       if (!ticket || ticket.player.id !== authenticatedPlayer.id) {
         return send(response, 404, { error: "ticket not found" });
       }
+      if (ticket.source === "tournament") {
+        return send(response, 409, { error: "Tournament match settings are locked." });
+      }
       if (ticket.matchId) return send(response, 409, { error: "queue preferences are locked after a match is found" });
       const body = await readJson(request);
       if (!body.queue?.id || body.queue.id !== ticket.queueId) {
@@ -2046,7 +2212,7 @@ async function handleRequest(request, response) {
         if (setupStarted && validCriticalFailure) {
           void recordAutomationFailure({
             player: authenticatedPlayer,
-            contextType: "ranked_match",
+            contextType: match.matchType === "tournament" ? "tournament_match" : "ranked_match",
             contextId: match.id,
             message: automationFailure.message.trim(),
             code: automationFailure.code,
@@ -2063,6 +2229,10 @@ async function handleRequest(request, response) {
         addDeclinedPairCooldown(match);
         deleteMatch(match);
         return send(response, 200, { ok: true });
+      }
+      if (ticket.source === "tournament") {
+        const tournamentId = await unreadyTournamentMatch(ticket.tournamentMatchId, authenticatedPlayer.id);
+        if (tournamentId) broadcastTournamentChanged(tournamentId);
       }
       tickets.delete(ticketId);
       return send(response, 200, { ok: true });
@@ -2266,7 +2436,7 @@ async function handleRequest(request, response) {
       });
       void recordAutomationFailure({
         player: authenticatedPlayer,
-        contextType: "ranked_match",
+        contextType: match.matchType === "tournament" ? "tournament_match" : "ranked_match",
         contextId: match.id,
         message: failureMessage,
         code: "GAME_START_NOT_DETECTED",
@@ -2619,12 +2789,53 @@ function scheduleWeeklyRotation() {
 }
 scheduleWeeklyRotation();
 
+async function runTournamentLifecycle() {
+  try {
+    const lifecycle = await processTournamentLifecycle();
+    for (const tournamentId of lifecycle.changedTournamentIds) broadcastTournamentChanged(tournamentId);
+    for (const expired of lifecycle.expiredMatches) {
+      const affectedTickets = [...tickets.values()].filter(
+        (ticket) => ticket.tournamentMatchId === expired.tournamentMatchId
+      );
+      const affectedRuntimeMatches = new Set(
+        affectedTickets.map((ticket) => ticket.matchId && matches.get(ticket.matchId)).filter(Boolean)
+      );
+      for (const match of affectedRuntimeMatches) {
+        emitToMatch(match, {
+          type: "error",
+          code: "TOURNAMENT_READY_EXPIRED",
+          message: "The tournament ready deadline expired. The bracket has advanced."
+        });
+        deleteMatch(match);
+      }
+      for (const ticket of affectedTickets) {
+        if (tickets.get(ticket.id) !== ticket) continue;
+        emit(ticket, {
+          type: "error",
+          code: "TOURNAMENT_READY_EXPIRED",
+          message: "The tournament ready deadline expired. The bracket has advanced."
+        });
+        tickets.delete(ticket.id);
+      }
+    }
+  } catch (error) {
+    console.error("[matchmaker] Tournament lifecycle failed:", error);
+  }
+}
+
 function escapeHtml(value) {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[character]);
 }
 
 const databaseInfo = await checkDatabase();
 console.log(`[matchmaker] MySQL ${databaseInfo.version} connected (${databaseInfo.databaseName}, schema ${databaseInfo.schemaVersion})`);
+const recoveredTournamentIds = await recoverInterruptedTournamentMatches();
+if (recoveredTournamentIds.length) {
+  console.warn(`[matchmaker] Recovered ${recoveredTournamentIds.length} interrupted tournament(s) with a fresh ready check.`);
+}
+await runTournamentLifecycle();
+tournamentLifecycleTimer = setInterval(() => void runTournamentLifecycle(), 5_000);
+tournamentLifecycleTimer.unref?.();
 server.listen(port, host, () => {
   console.log(`[matchmaker] listening on http://${host}:${port}`);
 });
@@ -2634,6 +2845,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
     clearInterval(socketHeartbeat);
     clearTimeout(rematchCooldownCleanupTimer);
     clearTimeout(weeklyRotationTimer);
+    clearInterval(tournamentLifecycleTimer);
     for (const socket of webSocketServer.clients) socket.close(1001, "Server shutting down");
     server.close(() => database.end().finally(() => process.exit(0)));
   });

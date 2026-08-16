@@ -682,6 +682,10 @@
 }
 
 .tournament-detail-status span { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px rgba(113, 194, 140, .7); }
+.tournament-detail-status.started { color: #f0c66e; border-color: rgba(226, 181, 109, .4); background: rgba(127, 82, 27, .18); }
+.tournament-detail-status.started span { background: #f0c66e; box-shadow: 0 0 8px rgba(240, 198, 110, .7); }
+.tournament-detail-status.completed { color: #c9b58e; border-color: rgba(201, 181, 142, .35); background: rgba(94, 79, 53, .18); }
+.tournament-detail-status.completed span { background: #c9b58e; box-shadow: none; }
 .tournament-detail-main h2 { margin: 6px 0 9px; color: #efd495; font-size: 34px; }
 .tournament-detail-main > p { max-width: 630px; }
 

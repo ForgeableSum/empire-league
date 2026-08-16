@@ -12,7 +12,8 @@ export function ResultScreen() {
   if (!match || !result) return null;
   const won = result.outcome === "win";
   const contested = result.verificationStatus === "contested";
-  const promoted = result.verified && won && isRatingPromotion(result.oldRating, result.newRating);
+  const ratingEligible = result.ratingEligible !== false;
+  const promoted = ratingEligible && result.verified && won && isRatingPromotion(result.oldRating, result.newRating);
 
   return (
     <>
@@ -25,13 +26,17 @@ export function ResultScreen() {
           {contested && (
             <p>The replay result could not be verified. The result was discarded and ratings were not changed.</p>
           )}
-          <div className="rating-swing">
-            <strong>{result.ratingChange > 0 ? "+" : ""}{result.ratingChange} Rating</strong>
-            <span>{contested ? "No rating change" : `${result.oldRating} → ${result.newRating}`}</span>
-          </div>
+          {ratingEligible ? (
+            <div className="rating-swing">
+              <strong>{result.ratingChange > 0 ? "+" : ""}{result.ratingChange} Rating</strong>
+              <span>{contested ? "No rating change" : `${result.oldRating} → ${result.newRating}`}</span>
+            </div>
+          ) : (
+            <div className="rating-swing"><strong>Tournament Match</strong><span>Your Elo was not changed.</span></div>
+          )}
           <div className="button-row">
             <button className="primary" type="button" onClick={() => void returnToMatchmaking()}>
-              Return to Matchmaking
+              {match.matchType === "tournament" ? "Return to Tournament" : "Return to Matchmaking"}
             </button>
             <button className="secondary" type="button" onClick={() => setPage("home")}>Return Home</button>
           </div>

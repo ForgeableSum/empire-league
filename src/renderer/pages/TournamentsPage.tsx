@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronRight, Map as MapIcon, Plus, RefreshCw, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import type { Tournament, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
+import { civilizations } from "../../shared/civilizations";
 import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { previewSection } from "../previewMode";
@@ -10,7 +11,7 @@ import { useAppStore } from "../state/appStore";
 type BracketPlayer = TournamentEntry | "open" | "tbd";
 
 export function TournamentsPage() {
-  const { state, notify } = useAppStore();
+  const { state, notify, startQueue, localizeAoe2Name } = useAppStore();
   const [creating, setCreating] = useState(previewSection === "create");
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(previewSection === "detail" ? "arabia-open" : null);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -24,12 +25,13 @@ export function TournamentsPage() {
   const [beginsAt, setBeginsAt] = useState(() => formatDateTimeInput(Date.now() + 24 * 60 * 60_000));
   const [mapId, setMapId] = useState(enabledMapCatalogEntries.find((map) => map.id === "arabia")?.id ?? enabledMapCatalogEntries[0]?.id ?? "");
   const [civilizationMode, setCivilizationMode] = useState<TournamentCivilizationMode>("pick");
+  const [matchCivilization, setMatchCivilization] = useState<string>(civilizations[0] ?? "Britons");
 
   const refreshTournaments = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
       const next = await tournamentService.list();
-      setTournaments(next.sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt)));
+      setTournaments(next.sort(compareTournaments));
     } catch (error) {
       notify("Tournaments could not be loaded.", "danger", { detail: messageFor(error) });
     } finally {
@@ -60,7 +62,7 @@ export function TournamentsPage() {
         startsAt: new Date(beginsAt).toISOString()
       });
       setTournaments((current) => [...current.filter((item) => item.id !== tournament.id), tournament]
-        .sort((left, right) => Date.parse(left.startsAt) - Date.parse(right.startsAt)));
+        .sort(compareTournaments));
       setCreating(false);
       setSelectedTournamentId(tournament.id);
       notify("Tournament created.", "success", { detail: `${tournament.name} is open for registration.` });
@@ -90,7 +92,10 @@ export function TournamentsPage() {
   }
 
   function beginCreating() {
-    const existing = tournaments.find((tournament) => tournament.creatorPlayerId === state.currentUser.id);
+    const existing = tournaments.find((tournament) =>
+      tournament.creatorPlayerId === state.currentUser.id
+      && (tournament.status === "started" || (tournament.status === "registration" && Date.parse(tournament.startsAt) > Date.now()))
+    );
     if (existing) {
       notify("You already have a tournament running.", "warning", {
         detail: `Cancel ${existing.name} before creating another.`
@@ -118,6 +123,29 @@ export function TournamentsPage() {
     }
   }
 
+  async function readyForTournamentMatch(tournament: Tournament) {
+    const map = enabledMapCatalogEntries.find((candidate) => candidate.id === tournament.mapId);
+    if (!map) {
+      notify("Tournament match could not be started.", "danger", { detail: "The tournament map is no longer available." });
+      return;
+    }
+    await startQueue({
+      id: `tournament:${tournament.id}`,
+      name: `${tournament.name} Tournament`,
+      description: "Single-elimination tournament match.",
+      format: "1v1",
+      ruleset: "Random Map",
+      mapPool: [{ id: map.id, name: map.name, style: map.style, thumbnailUrl: "" }],
+      civilizationPreference: tournament.civilizationMode === "pick"
+        ? { mode: "pick", civilization: matchCivilization }
+        : { mode: "random" },
+      ranked: false,
+      estimatedWaitSeconds: 0,
+      playersSearching: 0,
+      tournamentId: tournament.id
+    });
+  }
+
   const selectedTournament = tournaments.find((tournament) => tournament.id === selectedTournamentId);
   if (selectedTournament) {
     const cancelling = pendingAction === `cancel:${selectedTournament.id}`;
@@ -130,8 +158,13 @@ export function TournamentsPage() {
           currentPlayerRating={state.currentUser.rating}
           pending={pendingAction === `entry:${selectedTournament.id}`}
           cancelling={cancelling}
+          queueStatus={state.queueStatus}
+          selectedCivilization={matchCivilization}
+          civilizationOptions={civilizations.map((name) => ({ value: name, label: localizeAoe2Name(name) }))}
+          onCivilizationChange={setMatchCivilization}
           onBack={() => setSelectedTournamentId(null)}
           onToggleJoin={() => void toggleTournamentEntry(selectedTournament)}
+          onReady={() => void readyForTournamentMatch(selectedTournament)}
           onCancel={() => setPendingCancellation(selectedTournament)}
         />
         {pendingCancellation && (
@@ -193,7 +226,7 @@ export function TournamentsPage() {
 
       <div className="tournament-list-section">
         <div className="tournament-list-title">
-          <div><h2>Upcoming tournaments</h2><p>Starting soonest first</p></div>
+          <div><h2>Tournaments</h2><p>Active first, then starting soonest</p></div>
           <button className="tournament-refresh" type="button" disabled={loading} onClick={() => void refreshTournaments(true)}><RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh</button>
         </div>
         <div className="tournament-list">
@@ -204,7 +237,7 @@ export function TournamentsPage() {
               <div><strong>{tournament.mapName}</strong><small>Fixed map</small></div>
               <div><strong>{tournament.civilizationMode === "pick" ? "Pick civilizations" : "Random civilizations"}</strong><small>{tournament.minimumElo > 0 ? `${tournament.minimumElo}+ Elo` : "Open rating"}</small></div>
               <div className="tournament-player-count"><Users size={16} /><span><strong>{tournament.entries.length}/{tournament.participantCapacity}</strong><small>{Math.max(0, tournament.participantCapacity - tournament.entries.length)} spots left</small></span></div>
-              <div className="tournament-begins"><strong>{formatCountdown(Date.parse(tournament.startsAt) - now)}</strong><small>{formatStartTime(tournament.startsAt)}</small></div>
+              <div className="tournament-begins"><strong>{tournament.status === "started" ? "In progress" : tournament.status === "completed" ? "Complete" : formatCountdown(Date.parse(tournament.startsAt) - now)}</strong><small>{formatStartTime(tournament.startsAt)}</small></div>
               <span className="tournament-row-action" aria-hidden="true"><ChevronRight size={20} /></span>
             </button>
           ))}
@@ -242,28 +275,42 @@ function TournamentCancelConfirmation({ tournament, pending, onDismiss, onConfir
   );
 }
 
-function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, cancelling, onBack, onToggleJoin, onCancel }: {
+function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, cancelling, queueStatus, selectedCivilization, civilizationOptions, onCivilizationChange, onBack, onToggleJoin, onReady, onCancel }: {
   tournament: Tournament;
   now: number;
   currentPlayerId: string;
   currentPlayerRating: number;
   pending: boolean;
   cancelling: boolean;
+  queueStatus: string;
+  selectedCivilization: string;
+  civilizationOptions: Array<{ value: string; label: string }>;
+  onCivilizationChange: (civilization: string) => void;
   onBack: () => void;
   onToggleJoin: () => void;
+  onReady: () => void;
   onCancel: () => void;
 }) {
   const rounds = buildBracket(tournament);
   const joinedEntry = tournament.entries.find((entry) => entry.playerId === currentPlayerId);
   const spotsLeft = Math.max(0, tournament.participantCapacity - tournament.entries.length);
   const ratingEligible = currentPlayerRating >= tournament.minimumElo;
+  const currentMatch = tournament.matches.find((match) =>
+    ["waiting", "in_progress"].includes(match.status)
+    && (match.playerOneId === currentPlayerId || match.playerTwoId === currentPlayerId)
+  );
+  const currentPlayerReady = currentMatch
+    ? currentMatch.playerOneId === currentPlayerId ? currentMatch.playerOneReady : currentMatch.playerTwoReady
+    : false;
+  const entryStatus = joinedEntry?.status;
+  const queueAvailable = ["idle", "cancelled", "completed"].includes(queueStatus);
 
   return (
     <section className="tournament-detail-page">
       <button className="tournament-detail-back" type="button" onClick={onBack}><ArrowLeft size={16} /> All tournaments</button>
       <article className="panel tournament-detail-hero">
         <div className="tournament-detail-main">
-          <div className="tournament-detail-status"><span /> Registration open</div>
+          <div className={`tournament-detail-status ${tournament.status}`}><span /> {tournamentStatusLabel(tournament.status)}</div>
           <span className="eyebrow">Single elimination · Hosted by {tournament.creatorDisplayName}</span>
           <h2>{tournament.name}</h2>
           <p>Win your match to advance. One loss eliminates you from the tournament.</p>
@@ -275,13 +322,37 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           </div>
         </div>
         <aside className="tournament-entry-card">
-          <span>Begins in</span><strong>{formatCountdown(Date.parse(tournament.startsAt) - now)}</strong><small>{formatFullStartTime(tournament.startsAt)}</small>
+          <span>{tournament.status === "registration" ? "Begins in" : tournament.status === "started" ? "Tournament" : "Status"}</span>
+          <strong>{tournament.status === "registration" ? formatCountdown(Date.parse(tournament.startsAt) - now) : tournament.status === "started" ? "In progress" : "Complete"}</strong>
+          <small>{tournament.status === "registration" ? formatFullStartTime(tournament.startsAt) : currentMatch?.readyDeadline ? `Ready by ${formatStartTime(currentMatch.readyDeadline)}` : formatFullStartTime(tournament.startsAt)}</small>
           <div className="tournament-capacity-track"><span style={{ width: `${tournament.entries.length / tournament.participantCapacity * 100}%` }} /></div>
-          <p>{joinedEntry ? `You are in bracket slot ${joinedEntry.bracketSlot}` : spotsLeft === 0 ? "Registration is full" : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} remaining`}</p>
-          <button className={joinedEntry ? "secondary wide" : "primary wide"} type="button" disabled={pending || cancelling || (!joinedEntry && (!spotsLeft || !ratingEligible))} onClick={onToggleJoin}>
-            {pending ? "Updating…" : joinedEntry ? "Leave Tournament" : !ratingEligible ? `Requires ${tournament.minimumElo} Elo` : spotsLeft === 0 ? "Tournament Full" : "Join Tournament"}
-          </button>
-          {tournament.creatorPlayerId === currentPlayerId && (
+          {tournament.status === "registration" ? (
+            <>
+              <p>{joinedEntry ? `You are in bracket slot ${joinedEntry.bracketSlot}` : spotsLeft === 0 ? "Registration is full" : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} remaining`}</p>
+              <button className={joinedEntry ? "secondary wide" : "primary wide"} type="button" disabled={pending || cancelling || (!joinedEntry && (!spotsLeft || !ratingEligible))} onClick={onToggleJoin}>
+                {pending ? "Updating…" : joinedEntry ? "Leave Tournament" : !ratingEligible ? `Requires ${tournament.minimumElo} Elo` : spotsLeft === 0 ? "Tournament Full" : "Join Tournament"}
+              </button>
+            </>
+          ) : tournament.status === "started" && currentMatch?.status === "waiting" ? (
+            <>
+              <p>{currentPlayerReady ? "You are ready. Waiting for your opponent." : `Your opponent is ${tournamentPlayerName(tournament, currentMatch.playerOneId === currentPlayerId ? currentMatch.playerTwoId : currentMatch.playerOneId)}.`}</p>
+              {!currentPlayerReady && tournament.civilizationMode === "pick" && <ThemedSelect label="Your civilization" value={selectedCivilization} onChange={onCivilizationChange} options={civilizationOptions} />}
+              <button className="primary wide" type="button" disabled={!queueAvailable} onClick={onReady}>
+                {!queueAvailable ? (currentPlayerReady ? "Waiting for Opponent" : "Finish Current Activity") : currentPlayerReady ? "Resume Ready Check" : "Ready for Match"}
+              </button>
+            </>
+          ) : tournament.status === "started" && currentMatch?.status === "in_progress" ? (
+            <p>Your tournament match is currently in progress.</p>
+          ) : tournament.status === "started" && entryStatus === "active" ? (
+            <p>You advanced. Waiting for your next opponent.</p>
+          ) : tournament.status === "completed" && entryStatus === "winner" ? (
+            <p>You won the tournament.</p>
+          ) : joinedEntry ? (
+            <p>Your tournament run has ended.</p>
+          ) : (
+            <p>Registration has closed.</p>
+          )}
+          {tournament.status === "registration" && tournament.creatorPlayerId === currentPlayerId && (
             <button className="tournament-cancel-button wide" type="button" disabled={pending || cancelling} onClick={onCancel}>
               <Trash2 size={15} /> {cancelling ? "Canceling…" : "Cancel Tournament"}
             </button>
@@ -319,16 +390,43 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
 
 function buildBracket(tournament: Tournament): Array<{ name: string; matches: BracketPlayer[][] }> {
   const entrantsBySlot = new Map(tournament.entries.map((entry) => [entry.bracketSlot, entry]));
+  const entrantsById = new Map(tournament.entries.map((entry) => [entry.playerId, entry]));
   const rounds: Array<{ name: string; matches: BracketPlayer[][] }> = [];
   for (let playersInRound = tournament.participantCapacity, roundIndex = 0; playersInRound >= 2; playersInRound /= 2, roundIndex += 1) {
+    const persistedMatches = tournament.matches.filter((match) => match.roundNumber === roundIndex + 1);
     rounds.push({
       name: bracketRoundName(playersInRound),
-      matches: Array.from({ length: playersInRound / 2 }, (_, matchIndex) => roundIndex === 0
-        ? [entrantsBySlot.get(matchIndex * 2 + 1) ?? "open", entrantsBySlot.get(matchIndex * 2 + 2) ?? "open"]
-        : ["tbd", "tbd"])
+      matches: Array.from({ length: playersInRound / 2 }, (_, matchIndex) => {
+        const persisted = persistedMatches.find((match) => match.matchPosition === matchIndex + 1);
+        if (persisted) {
+          return [persisted.playerOneId, persisted.playerTwoId].map((playerId) =>
+            playerId ? entrantsById.get(playerId) ?? "tbd" : roundIndex === 0 ? "open" : "tbd"
+          );
+        }
+        return roundIndex === 0
+          ? [entrantsBySlot.get(matchIndex * 2 + 1) ?? "open", entrantsBySlot.get(matchIndex * 2 + 2) ?? "open"]
+          : ["tbd", "tbd"];
+      })
     });
   }
   return rounds;
+}
+
+function tournamentStatusLabel(status: Tournament["status"]): string {
+  if (status === "registration") return "Registration open";
+  if (status === "started") return "Tournament in progress";
+  if (status === "completed") return "Tournament complete";
+  return "Tournament canceled";
+}
+
+function tournamentPlayerName(tournament: Tournament, playerId?: string): string {
+  return tournament.entries.find((entry) => entry.playerId === playerId)?.displayName ?? "TBD";
+}
+
+function compareTournaments(left: Tournament, right: Tournament): number {
+  const order: Record<Tournament["status"], number> = { started: 0, registration: 1, completed: 2, cancelled: 3 };
+  return order[left.status] - order[right.status]
+    || Date.parse(left.startsAt) - Date.parse(right.startsAt);
 }
 
 function bracketRoundName(playersInRound: number): string {

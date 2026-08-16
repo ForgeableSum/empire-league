@@ -52,7 +52,8 @@ export function QueuePage() {
     const savedQueueId = loadMapPreferences().selectedQueueId;
     return queues.some((queue) => queue.id === savedQueueId) ? savedQueueId! : queues[0]?.id ?? "";
   });
-  const selectedQueue = queues.find((queue) => queue.id === selectedQueueId) ?? queues[0];
+  const configuredQueue = queues.find((queue) => queue.id === selectedQueueId) ?? queues[0];
+  const selectedQueue = state.selectedQueue?.tournamentId ? state.selectedQueue : configuredQueue;
   const canStartQueue = ["idle", "cancelled", "completed"].includes(state.queueStatus)
     && (!state.activeMatch || state.queueStatus === "completed")
     && state.gameStatus !== "loading";
@@ -299,7 +300,7 @@ export function QueuePage() {
   }, [enabledGroups, queues, selectedMaps, selectedQueueId]);
 
   useEffect(() => {
-    if (!isSearching || !selectedQueue) return;
+    if (!isSearching || !selectedQueue || selectedQueue.tournamentId) return;
     const timer = window.setTimeout(() => {
       void updateActiveQueue({
         ...selectedQueue,
@@ -334,6 +335,26 @@ export function QueuePage() {
   }
   if (state.queueStatus === "completed") {
     return <ResultScreen />;
+  }
+  if (isSearching && selectedQueue?.tournamentId) {
+    return (
+      <section className="search-waiting-layout matchmaking-overview">
+        <div className="search-state">
+          <div className="search-orbit"><Swords size={34} /></div>
+          <span className="eyebrow">Tournament ready check</span>
+          <h2>Waiting for your opponent</h2>
+          <p>Your position is reserved. Lobby automation will begin as soon as your opponent is ready.</p>
+          <div className="queue-summary">
+            <div><span>Map</span><strong>{selectedQueue.mapPool[0]?.name ?? "Tournament map"}</strong></div>
+            <div><span>Civilization</span><strong>{selectedQueue.civilizationPreference?.civilization ?? "Random"}</strong></div>
+          </div>
+          <button className="secondary" type="button" onClick={() => void cancelQueue()}>
+            <XCircle size={18} /> Leave Ready Check
+          </button>
+        </div>
+        <MatchmakingBrand />
+      </section>
+    );
   }
 
   return (

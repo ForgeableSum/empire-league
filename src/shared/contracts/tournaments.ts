@@ -1,5 +1,7 @@
 export type TournamentCivilizationMode = "pick" | "random";
 export type TournamentStatus = "registration" | "started" | "completed" | "cancelled";
+export type TournamentEntryStatus = "active" | "eliminated" | "withdrawn" | "no_show" | "winner";
+export type TournamentMatchStatus = "pending" | "waiting" | "in_progress" | "completed" | "forfeit" | "bye" | "no_contest";
 
 export interface TournamentEntry {
   playerId: string;
@@ -7,8 +9,24 @@ export interface TournamentEntry {
   avatarUrl?: string;
   rating: number;
   ratingAtJoin: number;
+  status: TournamentEntryStatus;
   bracketSlot: number;
   joinedAt: string;
+}
+
+export interface TournamentMatch {
+  id: string;
+  roundNumber: number;
+  matchPosition: number;
+  playerOneId?: string;
+  playerTwoId?: string;
+  playerOneReady: boolean;
+  playerTwoReady: boolean;
+  readyDeadline?: string;
+  gameMatchId?: string;
+  winnerPlayerId?: string;
+  status: TournamentMatchStatus;
+  completedAt?: string;
 }
 
 export interface Tournament {
@@ -24,8 +42,11 @@ export interface Tournament {
   mapName: string;
   status: TournamentStatus;
   startsAt: string;
+  startedAt?: string;
+  completedAt?: string;
   createdAt: string;
   entries: TournamentEntry[];
+  matches: TournamentMatch[];
 }
 
 export interface CreateTournamentInput {

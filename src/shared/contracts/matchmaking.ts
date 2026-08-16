@@ -141,6 +141,7 @@ export interface QueueDefinition {
   ranked: boolean;
   estimatedWaitSeconds: number;
   playersSearching: number;
+  tournamentId?: string;
 }
 
 export interface LobbySettings {
@@ -195,6 +196,10 @@ export interface MatchSession {
   lobby?: LobbySession;
   result?: MatchResult;
   createdAt: string;
+  matchType?: "ranked" | "tournament";
+  ratingEligible?: boolean;
+  tournamentId?: string;
+  tournamentMatchId?: string;
 }
 
 export interface JoinQueueRequest {

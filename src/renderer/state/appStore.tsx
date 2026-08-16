@@ -1013,6 +1013,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             activeMatch: matchedSession
           }));
           log(`Match found: ${event.match.id}`);
+          if (event.match.matchType === "tournament") {
+            log("Tournament readiness confirmed; accepting fixed match automatically");
+            void services.matchmaking.acceptMatch(event.match.id).catch((error: unknown) => {
+              setError({
+                code: "TOURNAMENT_MATCH_ACCEPT_FAILED",
+                message: "The tournament match could not be started.",
+                technicalDetails: error instanceof Error ? error.message : undefined,
+                retryable: true
+              });
+            });
+          }
         }
         if (event.type === "opponent_accepted") {
           const matchedSession = matchedSessionRef.current;
@@ -1341,6 +1352,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           completeResult(event.result);
         }
         if (event.type === "error") {
+          if (event.code === "TOURNAMENT_READY_EXPIRED") {
+            void window.electronApi?.stopMatchFoundAlert();
+            void retireRankedTransport();
+            setState((previous) => ({
+              ...previous,
+              selectedQueue: null,
+              queueStartedAt: null,
+              queueStatus: "idle",
+              activeMatch: null,
+              error: null
+            }));
+            setPage("tournaments");
+            notify(event.message, "warning", { durationMs: 7000 });
+            return;
+          }
           if (event.code === "TICKET_NOT_FOUND") {
             queueJoinInFlightRef.current = false;
             matchedSessionRef.current = null;
@@ -1684,29 +1710,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((previous) => {
       const activeMatch = previous.activeMatch ? { ...previous.activeMatch, result, status: "completed" as const } : null;
       const isTeamRating = result.ratingPool === "team";
-      const wins = !isTeamRating && result.outcome === "win"
+      const ratingEligible = result.ratingEligible !== false;
+      const wins = ratingEligible && !isTeamRating && result.outcome === "win"
         ? previous.currentUser.wins + 1
         : previous.currentUser.wins;
-      const losses = !isTeamRating && result.outcome === "loss"
+      const losses = ratingEligible && !isTeamRating && result.outcome === "loss"
         ? previous.currentUser.losses + 1
         : previous.currentUser.losses;
       const updatedUser = {
         ...previous.currentUser,
-        rating: result.verified && !isTeamRating ? result.newRating : previous.currentUser.rating,
-        peakRating: result.verified && !isTeamRating
+        rating: result.verified && ratingEligible && !isTeamRating ? result.newRating : previous.currentUser.rating,
+        peakRating: result.verified && ratingEligible && !isTeamRating
           ? Math.max(previous.currentUser.peakRating, result.newRating)
           : previous.currentUser.peakRating,
-        teamRating: result.verified && isTeamRating ? result.newRating : previous.currentUser.teamRating,
-        teamPeakRating: result.verified && isTeamRating
+        teamRating: result.verified && ratingEligible && isTeamRating ? result.newRating : previous.currentUser.teamRating,
+        teamPeakRating: result.verified && ratingEligible && isTeamRating
           ? Math.max(previous.currentUser.teamPeakRating, result.newRating)
           : previous.currentUser.teamPeakRating,
-        division: result.verified && !isTeamRating
+        division: result.verified && ratingEligible && !isTeamRating
           ? getDivisionForRating(result.newRating)
           : previous.currentUser.division,
         wins,
         losses,
         winRate: wins + losses > 0 ? Number(((wins / (wins + losses)) * 100).toFixed(1)) : 0,
-        streak: isTeamRating
+        streak: !ratingEligible || isTeamRating
           ? previous.currentUser.streak
           : result.outcome === "win"
           ? Math.max(1, previous.currentUser.streak + 1)
@@ -1751,6 +1778,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function returnToMatchmaking(): Promise<void> {
+    const tournamentMatch = stateRef.current.activeMatch?.matchType === "tournament";
     queueJoinInFlightRef.current = false;
     replayResultInFlightRef.current = false;
     await retireRankedTransport();
@@ -1762,7 +1790,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       activeMatch: null,
       error: null
     }));
-    setPage("ranked");
+    setPage(tournamentMatch ? "tournaments" : "ranked");
   }
 
   async function retireRankedTransport(): Promise<void> {
