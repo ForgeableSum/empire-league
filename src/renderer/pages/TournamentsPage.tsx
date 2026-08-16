@@ -213,7 +213,7 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
         </aside>
       </article>
       <section className="tournament-bracket-section">
-        <div className="tournament-bracket-heading"><div><span className="eyebrow">The road to victory</span><h2>Bracket</h2></div><p>Players are placed into a random open starting slot.</p></div>
+        <div className="tournament-bracket-heading"><div><h2>Bracket</h2></div><p>Players are placed into a random open starting slot.</p></div>
         <div className="tournament-bracket-scroll">
           <div className="tournament-bracket" style={{ "--bracket-rounds": rounds.length } as CSSProperties}>
             {rounds.map((round, roundIndex) => (
