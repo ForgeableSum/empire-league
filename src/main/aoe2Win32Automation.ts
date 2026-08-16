@@ -774,7 +774,11 @@ export async function clearAoe2TextField(processId: number): Promise<NativeInput
   };
 }
 
-export function readAoe2ReadyState(processId: number, designY: number): NativeReadyStateResult {
+export function readAoe2ReadyState(
+  processId: number,
+  designY: number,
+  options: { minimumVoteChannel?: number; minimumVotes?: number } = {}
+): NativeReadyStateResult {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return { state: "unknown", detail: "WINDOW_NOT_FOUND" };
@@ -803,11 +807,15 @@ export function readAoe2ReadyState(processId: number, designY: number): NativeRe
   if (readableSamples.length === 0) {
     return { state: "unknown", detail: `PIXEL_READ_FAILED|${describePixelRead(window)}` };
   }
-  const redVotes = readableSamples.filter(({ rgb: [red, green] }) => red > green * 2).length;
-  const greenVotes = readableSamples.filter(({ rgb: [red, green] }) => green > red * 2).length;
-  const state = greenVotes > redVotes && greenVotes >= 2
+  const minimumVoteChannel = options.minimumVoteChannel ?? 0;
+  const redVotes = readableSamples.filter(({ rgb: [red, green] }) =>
+    red >= minimumVoteChannel && red > green * 2).length;
+  const greenVotes = readableSamples.filter(({ rgb: [red, green] }) =>
+    green >= minimumVoteChannel && green > red * 2).length;
+  const minimumVotes = options.minimumVotes ?? 2;
+  const state = greenVotes > redVotes && greenVotes >= minimumVotes
     ? "ready"
-    : redVotes > greenVotes && redVotes >= 2
+    : redVotes > greenVotes && redVotes >= minimumVotes
       ? "not-ready"
       : "unknown";
   const center = samples[4];

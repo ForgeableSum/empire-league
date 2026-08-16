@@ -3899,7 +3899,7 @@ export function registerGameHandlers(): void {
               `CIV_SELECT|Step=FallbackRandomEnterVerify|FailedSelection=${selection}|Reason=${reason}`
               + `|Attempt=${attempt}|${enterPickerState.detail}`
             );
-            if (enterPickerState.state === "closed") {
+            if (enterPickerState.state === "closed" && !explicitRandom) {
               emitLog(`CIV_SELECT|Complete=True|Selection=Random|FallbackFrom=${selection}|Slot=${slot}|Reason=${reason}`);
               return {
                 sent: true,
@@ -3909,8 +3909,17 @@ export function registerGameHandlers(): void {
                 ...(!explicitRandom ? { usedRandomCivilizationFallback: true } : {})
               };
             }
-            randomState = readAoe2CivilizationTileState(gameProcess.pid!, randomX, randomY);
-            randomSelected = randomState.state === "selected";
+            if (explicitRandom) {
+              // For selector tiles, Enter advances AoE2 to its confirmation
+              // state. That state removes the black search field, so the
+              // picker detector alone resembles a closed picker even though
+              // Confirm is still visible. Continue through the verified
+              // confirmation path instead of returning early.
+              randomSelected = true;
+            } else {
+              randomState = readAoe2CivilizationTileState(gameProcess.pid!, randomX, randomY);
+              randomSelected = randomState.state === "selected";
+            }
           }
         }
         if (!randomSelected) {
@@ -3929,6 +3938,36 @@ export function registerGameHandlers(): void {
         );
         if (!randomConfirm.sent) throw new Error("Random civilization confirmation could not be clicked.");
         await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+
+        if (explicitRandom) {
+          const readyDesignY = slot === 1
+            ? aoe2UiManifest.actions.hostReady.point[1]
+            : aoe2UiManifest.actions.guestReady.point[1];
+          let readyState = readAoe2ReadyState(gameProcess.pid!, readyDesignY, {
+            minimumVoteChannel: 80,
+            minimumVotes: 5
+          });
+          emitLog(`CIV_SELECT|Step=ExplicitRandomVerifyReturn|Slot=${slot}|${readyState.detail}`);
+          if (readyState.state === "unknown") {
+            const confirmEnter = await sendAoe2Enter(gameProcess.pid!);
+            emitLog(`CIV_SELECT|Step=ExplicitRandomConfirmEnter|Slot=${slot}|${confirmEnter.detail}`);
+            if (!confirmEnter.sent) throw new Error("Random civilization confirmation Enter could not be sent.");
+            await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+            readyState = readAoe2ReadyState(gameProcess.pid!, readyDesignY, {
+              minimumVoteChannel: 80,
+              minimumVotes: 5
+            });
+            emitLog(`CIV_SELECT|Step=ExplicitRandomVerifyEnterReturn|Slot=${slot}|${readyState.detail}`);
+          }
+          if (readyState.state === "unknown") {
+            throw new Error("Random selection did not return to the lobby.");
+          }
+          emitLog(`CIV_SELECT|Complete=True|Selection=Random|FallbackFrom=${selection}|Slot=${slot}|Reason=${reason}`);
+          return {
+            sent: true,
+            message: `Random selected for AoE2 lobby slot ${slot}.`
+          };
+        }
 
         let fallbackPickerState = readAoe2CivilizationPickerState(gameProcess.pid!);
         emitLog(
