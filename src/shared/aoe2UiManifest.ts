@@ -110,7 +110,7 @@ export const aoe2UiManifest = {
     settleMs: 1_500
   },
   teamSlotButtons: {
-    x: 2093,
+    x: 2042,
     rowCenters: [555, 645, 735, 825, 915, 1005, 1095, 1185],
     initialSelection: "?",
     cycle: ["?", "-", "1", "2", "3", "4"]
