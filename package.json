@@ -1,7 +1,7 @@
 {
   "name": "empire-league",
   "version": "0.1.49",
-  "description": "Electron prototype for an AoE2 DE community 1v1 matchmaking client.",
+  "description": "AoE2 DE Community Client & Matchmaker",
   "author": "Empire League Prototype",
   "main": "dist/main/main.js",
   "type": "module",
