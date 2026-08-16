@@ -722,6 +722,24 @@
 .tournament-entry-card > small { color: var(--muted); font-size: 11px; }
 .tournament-entry-card > p { margin: 7px 0 13px; font-size: 11px; }
 
+.tournament-cancel-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 9px;
+  padding: 9px 12px;
+  color: #d9857d;
+  border: 1px solid rgba(185, 75, 65, .42);
+  background: rgba(104, 34, 29, .18);
+}
+
+.tournament-cancel-button:hover:not(:disabled) {
+  color: #f0a098;
+  border-color: rgba(211, 91, 80, .7);
+  background: rgba(132, 42, 35, .28);
+}
+
 .tournament-capacity-track { height: 5px; margin-top: 17px; overflow: hidden; border-radius: 999px; background: #312b25; }
 .tournament-capacity-track span { display: block; height: 100%; background: linear-gradient(90deg, #9c6528, #e2b56d); }
 
@@ -1546,12 +1564,14 @@
   border-color: color-mix(in srgb, var(--danger) 65%, var(--line));
 }
 
-.social-confirm-backdrop {
+.social-confirm-backdrop,
+.tournament-confirm-backdrop {
   z-index: 60;
   backdrop-filter: blur(4px);
 }
 
-.social-confirm-modal {
+.social-confirm-modal,
+.tournament-confirm-modal {
   width: min(430px, calc(100vw - 40px));
   display: grid;
   gap: 16px;
@@ -1564,11 +1584,17 @@
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.62);
 }
 
-.social-confirm-modal h2 {
+.social-confirm-modal h2,
+.tournament-confirm-modal h2 {
   margin-top: 4px;
 }
 
-.social-confirm-icon {
+.tournament-confirm-modal {
+  width: min(500px, calc(100vw - 40px));
+}
+
+.social-confirm-icon,
+.tournament-confirm-icon {
   width: 48px;
   height: 48px;
   display: grid;
@@ -1579,14 +1605,20 @@
   background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
-.social-confirm-actions {
+.social-confirm-actions,
+.tournament-confirm-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 2px;
 }
 
-.social-confirm-remove {
+.tournament-confirm-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.social-confirm-remove,
+.tournament-confirm-remove {
   min-height: 40px;
   display: inline-flex;
   align-items: center;
@@ -1599,7 +1631,12 @@
   font-weight: 800;
 }
 
-.social-confirm-remove:hover {
+.tournament-confirm-remove {
+  white-space: nowrap;
+}
+
+.social-confirm-remove:hover,
+.tournament-confirm-remove:hover:not(:disabled) {
   filter: brightness(1.1);
 }
 

@@ -27,6 +27,7 @@ import {
   getTournaments,
   getTournamentById,
   createTournament,
+  cancelTournament,
   joinTournament,
   leaveTournament,
   TournamentOperationError
@@ -1409,19 +1410,24 @@ async function handleRequest(request, response) {
       if (!Number.isFinite(startsAtMs) || startsAtMs <= Date.now()) {
         return send(response, 400, { error: "Tournament start time must be in the future." });
       }
-      const tournament = await createTournament({
-        id: randomUUID(),
-        creatorPlayerId: authenticatedPlayer.id,
-        name,
-        civilizationMode,
-        participantCapacity,
-        minimumElo,
-        mapId: map.id,
-        mapName: map.name,
-        startsAt: new Date(startsAtMs)
-      });
-      broadcastTournamentChanged(tournament.id);
-      return send(response, 201, { tournament });
+      try {
+        const tournament = await createTournament({
+          id: randomUUID(),
+          creatorPlayerId: authenticatedPlayer.id,
+          name,
+          civilizationMode,
+          participantCapacity,
+          minimumElo,
+          mapId: map.id,
+          mapName: map.name,
+          startsAt: new Date(startsAtMs)
+        });
+        broadcastTournamentChanged(tournament.id);
+        return send(response, 201, { tournament });
+      } catch (error) {
+        if (error instanceof TournamentOperationError) return send(response, error.status, { error: error.message });
+        throw error;
+      }
     }
 
     const tournamentDetail = url.pathname.match(/^\/tournaments\/([^/]+)$/);
@@ -1430,6 +1436,17 @@ async function handleRequest(request, response) {
       return tournament
         ? send(response, 200, { tournament })
         : send(response, 404, { error: "Tournament not found." });
+    }
+    if (request.method === "DELETE" && tournamentDetail) {
+      const tournamentId = decodeURIComponent(tournamentDetail[1]);
+      try {
+        const cancelled = await cancelTournament(tournamentId, authenticatedPlayer.id);
+        broadcastTournamentChanged(tournamentId);
+        return send(response, 200, { cancelled });
+      } catch (error) {
+        if (error instanceof TournamentOperationError) return send(response, error.status, { error: error.message });
+        throw error;
+      }
     }
 
     const tournamentJoin = url.pathname.match(/^\/tournaments\/([^/]+)\/join$/);

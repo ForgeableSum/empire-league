@@ -121,24 +121,91 @@ async function tournamentsWithEntries(tournamentRows) {
 }
 
 export async function createTournament(input) {
-  await database.execute(
-    `INSERT INTO tournaments
-      (id, creator_player_id, name, format, civilization_mode, participant_capacity,
-       minimum_elo, map_id, map_name, status, starts_at)
-     VALUES (?, ?, ?, 'single_elimination', ?, ?, ?, ?, ?, 'registration', ?)`,
-    [
-      input.id,
-      input.creatorPlayerId,
-      input.name,
-      input.civilizationMode,
-      input.participantCapacity,
-      input.minimumElo,
-      input.mapId,
-      input.mapName,
-      input.startsAt
-    ]
-  );
-  return getTournamentById(input.id);
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute("SELECT id FROM players WHERE id = ? FOR UPDATE", [input.creatorPlayerId]);
+    const [existingRows] = await connection.execute(
+      `SELECT id, name
+       FROM tournaments
+       WHERE creator_player_id = ?
+         AND (status = 'started' OR (status = 'registration' AND starts_at > NOW(3)))
+       LIMIT 1`,
+      [input.creatorPlayerId]
+    );
+    if (existingRows.length) {
+      throw new TournamentOperationError(
+        `You already have a tournament running: "${existingRows[0].name}". Cancel it before creating another.`
+      );
+    }
+    await connection.execute(
+      `INSERT INTO tournaments
+        (id, creator_player_id, name, format, civilization_mode, participant_capacity,
+         minimum_elo, map_id, map_name, status, starts_at)
+       VALUES (?, ?, ?, 'single_elimination', ?, ?, ?, ?, ?, 'registration', ?)`,
+      [
+        input.id,
+        input.creatorPlayerId,
+        input.name,
+        input.civilizationMode,
+        input.participantCapacity,
+        input.minimumElo,
+        input.mapId,
+        input.mapName,
+        input.startsAt
+      ]
+    );
+    await connection.commit();
+    return getTournamentById(input.id);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function cancelTournament(tournamentId, playerId) {
+  const connection = await database.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [ownerRows] = await connection.execute(
+      "SELECT creator_player_id FROM tournaments WHERE id = ?",
+      [tournamentId]
+    );
+    if (!ownerRows.length) throw new TournamentOperationError("Tournament not found.", 404);
+    if (ownerRows[0].creator_player_id !== playerId) {
+      throw new TournamentOperationError("Only the tournament creator can cancel it.", 403);
+    }
+
+    await connection.execute("SELECT id FROM players WHERE id = ? FOR UPDATE", [playerId]);
+    const [tournamentRows] = await connection.execute(
+      `SELECT id, name, status, starts_at,
+              (SELECT COUNT(*) FROM tournament_entries WHERE tournament_id = tournaments.id) AS entry_count
+       FROM tournaments
+       WHERE id = ?
+       FOR UPDATE`,
+      [tournamentId]
+    );
+    const tournament = tournamentRows[0];
+    if (!tournament) throw new TournamentOperationError("Tournament not found.", 404);
+    if (tournament.status !== "registration" || new Date(tournament.starts_at).getTime() <= Date.now()) {
+      throw new TournamentOperationError("This tournament can no longer be canceled.");
+    }
+
+    await connection.execute("DELETE FROM tournaments WHERE id = ?", [tournamentId]);
+    await connection.commit();
+    return {
+      id: tournament.id,
+      name: tournament.name,
+      unregisteredPlayers: Number(tournament.entry_count)
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function joinTournament(tournamentId, playerId) {

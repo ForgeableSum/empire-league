@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Map as MapIcon, Plus, RefreshCw, Shield, Swords, Trophy, Users, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Map as MapIcon, Plus, RefreshCw, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import type { Tournament, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
 import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
@@ -16,6 +16,7 @@ export function TournamentsPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [pendingCancellation, setPendingCancellation] = useState<Tournament | null>(null);
   const [now, setNow] = useState(Date.now());
   const [name, setName] = useState("Weekend Showdown");
   const [capacity, setCapacity] = useState("16");
@@ -88,18 +89,60 @@ export function TournamentsPage() {
     }
   }
 
+  function beginCreating() {
+    const existing = tournaments.find((tournament) => tournament.creatorPlayerId === state.currentUser.id);
+    if (existing) {
+      notify("You already have a tournament running.", "warning", {
+        detail: `Cancel ${existing.name} before creating another.`
+      });
+      setSelectedTournamentId(existing.id);
+      return;
+    }
+    setCreating(true);
+  }
+
+  async function cancelOwnedTournament(tournament: Tournament) {
+    setPendingAction(`cancel:${tournament.id}`);
+    try {
+      const cancelled = await tournamentService.cancel(tournament.id);
+      setTournaments((current) => current.filter((item) => item.id !== tournament.id));
+      setSelectedTournamentId(null);
+      notify("Tournament canceled.", "warning", {
+        detail: `${cancelled.name} was deleted and ${cancelled.unregisteredPlayers} ${cancelled.unregisteredPlayers === 1 ? "player was" : "players were"} unregistered.`
+      });
+    } catch (error) {
+      notify("Tournament could not be canceled.", "danger", { detail: messageFor(error) });
+    } finally {
+      setPendingCancellation(null);
+      setPendingAction(null);
+    }
+  }
+
   const selectedTournament = tournaments.find((tournament) => tournament.id === selectedTournamentId);
   if (selectedTournament) {
+    const cancelling = pendingAction === `cancel:${selectedTournament.id}`;
     return (
-      <TournamentDetail
-        tournament={selectedTournament}
-        now={now}
-        currentPlayerId={state.currentUser.id}
-        currentPlayerRating={state.currentUser.rating}
-        pending={pendingAction === `entry:${selectedTournament.id}`}
-        onBack={() => setSelectedTournamentId(null)}
-        onToggleJoin={() => void toggleTournamentEntry(selectedTournament)}
-      />
+      <>
+        <TournamentDetail
+          tournament={selectedTournament}
+          now={now}
+          currentPlayerId={state.currentUser.id}
+          currentPlayerRating={state.currentUser.rating}
+          pending={pendingAction === `entry:${selectedTournament.id}`}
+          cancelling={cancelling}
+          onBack={() => setSelectedTournamentId(null)}
+          onToggleJoin={() => void toggleTournamentEntry(selectedTournament)}
+          onCancel={() => setPendingCancellation(selectedTournament)}
+        />
+        {pendingCancellation && (
+          <TournamentCancelConfirmation
+            tournament={pendingCancellation}
+            pending={cancelling}
+            onDismiss={() => setPendingCancellation(null)}
+            onConfirm={() => void cancelOwnedTournament(pendingCancellation)}
+          />
+        )}
+      </>
     );
   }
 
@@ -111,7 +154,7 @@ export function TournamentsPage() {
           <h2>Community Tournaments</h2>
           <p>Join the next bracket or create a simple knockout tournament.</p>
         </div>
-        {!creating && <button className="primary tournament-create-trigger" type="button" onClick={() => setCreating(true)}><Plus size={17} /> Create Tournament</button>}
+        {!creating && <button className="primary tournament-create-trigger" type="button" onClick={beginCreating}><Plus size={17} /> Create Tournament</button>}
       </header>
 
       {creating && (
@@ -173,14 +216,42 @@ export function TournamentsPage() {
   );
 }
 
-function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, onBack, onToggleJoin }: {
+function TournamentCancelConfirmation({ tournament, pending, onDismiss, onConfirm }: {
+  tournament: Tournament;
+  pending: boolean;
+  onDismiss: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="modal-backdrop tournament-confirm-backdrop" role="presentation" onPointerDown={() => !pending && onDismiss()}>
+      <section className="tournament-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="cancel-tournament-title" onPointerDown={(event) => event.stopPropagation()}>
+        <div className="tournament-confirm-icon"><Trash2 size={24} /></div>
+        <div>
+          <span className="eyebrow">Cancel tournament</span>
+          <h2 id="cancel-tournament-title">Cancel {tournament.name}?</h2>
+        </div>
+        <p>All {tournament.entries.length} registered {tournament.entries.length === 1 ? "player" : "players"} will be removed and the tournament will be permanently deleted.</p>
+        <div className="tournament-confirm-actions">
+          <button className="tournament-confirm-remove" type="button" disabled={pending} onClick={onConfirm}>
+            <Trash2 size={16} /> {pending ? "Canceling…" : "Cancel Tournament"}
+          </button>
+          <button className="secondary" type="button" disabled={pending} autoFocus onClick={onDismiss}>Keep Tournament</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, cancelling, onBack, onToggleJoin, onCancel }: {
   tournament: Tournament;
   now: number;
   currentPlayerId: string;
   currentPlayerRating: number;
   pending: boolean;
+  cancelling: boolean;
   onBack: () => void;
   onToggleJoin: () => void;
+  onCancel: () => void;
 }) {
   const rounds = buildBracket(tournament);
   const joinedEntry = tournament.entries.find((entry) => entry.playerId === currentPlayerId);
@@ -207,9 +278,14 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           <span>Begins in</span><strong>{formatCountdown(Date.parse(tournament.startsAt) - now)}</strong><small>{formatFullStartTime(tournament.startsAt)}</small>
           <div className="tournament-capacity-track"><span style={{ width: `${tournament.entries.length / tournament.participantCapacity * 100}%` }} /></div>
           <p>{joinedEntry ? `You are in bracket slot ${joinedEntry.bracketSlot}` : spotsLeft === 0 ? "Registration is full" : `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} remaining`}</p>
-          <button className={joinedEntry ? "secondary wide" : "primary wide"} type="button" disabled={pending || (!joinedEntry && (!spotsLeft || !ratingEligible))} onClick={onToggleJoin}>
+          <button className={joinedEntry ? "secondary wide" : "primary wide"} type="button" disabled={pending || cancelling || (!joinedEntry && (!spotsLeft || !ratingEligible))} onClick={onToggleJoin}>
             {pending ? "Updating…" : joinedEntry ? "Leave Tournament" : !ratingEligible ? `Requires ${tournament.minimumElo} Elo` : spotsLeft === 0 ? "Tournament Full" : "Join Tournament"}
           </button>
+          {tournament.creatorPlayerId === currentPlayerId && (
+            <button className="tournament-cancel-button wide" type="button" disabled={pending || cancelling} onClick={onCancel}>
+              <Trash2 size={15} /> {cancelling ? "Canceling…" : "Cancel Tournament"}
+            </button>
+          )}
         </aside>
       </article>
       <section className="tournament-bracket-section">

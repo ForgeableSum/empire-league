@@ -17,6 +17,11 @@ export const tournamentService = {
 
   async create(input: CreateTournamentInput): Promise<Tournament> {
     if (isPreviewMode) {
+      const existing = previewTournaments.find((tournament) =>
+        tournament.creatorPlayerId === "user-1"
+        && (tournament.status === "started" || (tournament.status === "registration" && Date.parse(tournament.startsAt) > Date.now()))
+      );
+      if (existing) throw new Error(`You already have a tournament running: "${existing.name}". Cancel it before creating another.`);
       const tournament: Tournament = {
         id: `preview-${Date.now()}`,
         creatorPlayerId: "user-1",
@@ -37,6 +42,19 @@ export const tournamentService = {
       return structuredClone(tournament);
     }
     return (await matchmakerTransport.request<{ tournament: Tournament }>("/tournaments", { method: "POST", body: input })).tournament;
+  },
+
+  async cancel(tournamentId: string): Promise<{ id: string; name: string; unregisteredPlayers: number }> {
+    if (isPreviewMode) {
+      const tournament = requirePreviewTournament(tournamentId);
+      const cancelled = { id: tournament.id, name: tournament.name, unregisteredPlayers: tournament.entries.length };
+      previewTournaments = previewTournaments.filter((item) => item.id !== tournamentId);
+      return cancelled;
+    }
+    return (await matchmakerTransport.request<{ cancelled: { id: string; name: string; unregisteredPlayers: number } }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}`,
+      { method: "DELETE" }
+    )).cancelled;
   },
 
   async join(tournamentId: string): Promise<Tournament> {
