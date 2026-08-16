@@ -110,7 +110,8 @@ export const aoe2UiManifest = {
     settleMs: 1_500
   },
   teamSlotButtons: {
-    x: 2042,
+    hostX: 2093,
+    guestX: 2042,
     rowCenters: [555, 645, 735, 825, 915, 1005, 1095, 1185],
     initialSelection: "?",
     cycle: ["?", "-", "1", "2", "3", "4"]
@@ -280,5 +281,12 @@ export function civilizationSlotDesignPoint(slot: number): readonly [number, num
 export function teamSlotDesignPoint(slot: number): readonly [number, number] {
   const y = aoe2UiManifest.teamSlotButtons.rowCenters[slot - 1];
   if (y === undefined) throw new Error(`AoE2 lobby slot ${slot} is outside the supported 1-8 range.`);
-  return [aoe2UiManifest.teamSlotButtons.x, y];
+  // AoE2 renders an additional control beside the host's team selector. Its
+  // working increment hitbox is farther right than the selector used by guest
+  // rows, so a shared X coordinate either misses guests or opens the wrong
+  // host control.
+  const x = slot === 1
+    ? aoe2UiManifest.teamSlotButtons.hostX
+    : aoe2UiManifest.teamSlotButtons.guestX;
+  return [x, y];
 }
