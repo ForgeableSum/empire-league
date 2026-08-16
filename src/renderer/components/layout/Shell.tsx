@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, CalendarDays, Download, Eye, Gamepad2, History, Home, Languages, LogOut, Radio, RotateCcw, Swords, Settings, User, Users } from "lucide-react";
+import { ArrowLeft, BarChart3, CalendarDays, Download, Eye, Gamepad2, History, Home, Languages, LogOut, Radio, RotateCcw, Swords, Settings, Trophy, User, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import appIcon from "../../assets/el_icon_no_plume.png";
 import { presenceService } from "../../services/presenceService";
@@ -19,6 +19,7 @@ const navItems: Array<{ page: AppPage; label: string; icon: ReactNode }> = [
   { page: "home", label: "Home", icon: <Home size={18} /> },
   { page: "ranked", label: "Ranked", icon: <Swords size={18} /> },
   { page: "weekly", label: "Weekly", icon: <CalendarDays size={18} /> },
+  { page: "tournaments", label: "Tournaments", icon: <Trophy size={18} /> },
   { page: "custom", label: "Custom", icon: <Gamepad2 size={18} /> },
   { page: "match-history", label: "Match History", icon: <History size={18} /> },
   { page: "leaderboard", label: "Leaderboard", icon: <BarChart3 size={18} /> },
@@ -405,6 +406,7 @@ function titleFor(page: AppPage): string {
     home: "Home",
     ranked: "Ranked",
     weekly: "Weekly Queue",
+    tournaments: "Tournaments",
     custom: "Custom Games",
     "match-history": "Match History",
     leaderboard: "Leaderboard",

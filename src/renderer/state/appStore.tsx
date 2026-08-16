@@ -25,10 +25,10 @@ import type { AppError, AppState, MockServiceConfig, NotificationItem, UserSetti
 import { isPreviewCapture, isPreviewMode, previewPage } from "../previewMode";
 import { previewMatches } from "../mocks/previewData";
 
-type AppPage = "home" | "ranked" | "weekly" | "custom" | "match-history" | "leaderboard" | "profile" | "social" | "settings";
+type AppPage = "home" | "ranked" | "weekly" | "tournaments" | "custom" | "match-history" | "leaderboard" | "profile" | "social" | "settings";
 
 function isAppPage(value: string | null): value is AppPage {
-  return value === "home" || value === "ranked" || value === "weekly" || value === "custom" || value === "match-history"
+  return value === "home" || value === "ranked" || value === "weekly" || value === "tournaments" || value === "custom" || value === "match-history"
     || value === "leaderboard" || value === "profile" || value === "social" || value === "settings";
 }
 

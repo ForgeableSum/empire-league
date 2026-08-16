@@ -1,6 +1,7 @@
 import { HomePage } from "./pages/HomePage";
 import { QueuePage } from "./pages/QueuePage";
 import { WeeklyPage } from "./pages/WeeklyPage";
+import { TournamentsPage } from "./pages/TournamentsPage";
 import { CustomPage } from "./pages/CustomPage";
 import { MatchHistoryPage } from "./pages/MatchHistoryPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
@@ -250,6 +251,7 @@ export function App() {
         <div className="persistent-page" hidden={page !== "weekly"}>
           <WeeklyPage />
         </div>
+        {page === "tournaments" && <TournamentsPage />}
         {page === "custom" && <CustomPage />}
         {page === "match-history" && <MatchHistoryPage />}
         {page === "leaderboard" && <LeaderboardPage />}
