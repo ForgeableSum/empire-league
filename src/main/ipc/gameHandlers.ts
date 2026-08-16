@@ -3798,7 +3798,8 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:select-civilization", async (
     event,
     selection: Aoe2CivilizationSelection,
-    slot: number
+    slot: number,
+    automationContext: "ranked" | "custom" = "ranked"
   ) => {
     if (process.platform !== "win32"
       || !Number.isInteger(slot)
@@ -3836,7 +3837,10 @@ export function registerGameHandlers(): void {
       let civilizationY: number;
       const usesFilteredPicker = selection in aoe2UiManifest.civilizationGrid.entries;
       const confirmPoint = aoe2UiManifest.actions.confirmCivilization.point;
-      const selectRandomFallback = async (reason: "TileUnavailable" | "ConfirmationFailed") => {
+      const selectRandomFallback = async (
+        reason: "TileUnavailable" | "ConfirmationFailed" | "ExplicitRandom"
+      ) => {
+        const explicitRandom = reason === "ExplicitRandom";
         const searchPoint = aoe2UiManifest.civilizationPicker.searchPoint;
         const fallbackSearchFocus = await postAoe2DesignClick(
           gameProcess.pid!,
@@ -3899,8 +3903,10 @@ export function registerGameHandlers(): void {
               emitLog(`CIV_SELECT|Complete=True|Selection=Random|FallbackFrom=${selection}|Slot=${slot}|Reason=${reason}`);
               return {
                 sent: true,
-                message: `${selection} could not be selected; Random selected for AoE2 lobby slot ${slot}.`,
-                usedRandomCivilizationFallback: true
+                message: explicitRandom
+                  ? `Random selected for AoE2 lobby slot ${slot}.`
+                  : `${selection} could not be selected; Random selected for AoE2 lobby slot ${slot}.`,
+                ...(!explicitRandom ? { usedRandomCivilizationFallback: true } : {})
               };
             }
             randomState = readAoe2CivilizationTileState(gameProcess.pid!, randomX, randomY);
@@ -3945,10 +3951,21 @@ export function registerGameHandlers(): void {
         emitLog(`CIV_SELECT|Complete=True|Selection=Random|FallbackFrom=${selection}|Slot=${slot}|Reason=${reason}`);
         return {
           sent: true,
-          message: `${selection} could not be selected; Random selected for AoE2 lobby slot ${slot}.`,
-          usedRandomCivilizationFallback: true
+          message: explicitRandom
+            ? `Random selected for AoE2 lobby slot ${slot}.`
+            : `${selection} could not be selected; Random selected for AoE2 lobby slot ${slot}.`,
+          ...(!explicitRandom ? { usedRandomCivilizationFallback: true } : {})
         };
       };
+      // Ranked and team matchmaking resolve Random to a concrete civilization
+      // before reaching this handler, then use the existing DLC fallback when
+      // that civilization is unavailable. Custom lobbies intentionally leave
+      // Random unresolved so AoE2 can roll from the civilizations installed on
+      // this client. Reuse that same verified fallback path without changing
+      // any matchmaking selection behavior.
+      if (automationContext === "custom" && selection === "Random") {
+        return await selectRandomFallback("ExplicitRandom");
+      }
       if (usesFilteredPicker) {
         const searchPoint = aoe2UiManifest.civilizationPicker.searchPoint;
         const searchFocus = await postAoe2DesignClick(
