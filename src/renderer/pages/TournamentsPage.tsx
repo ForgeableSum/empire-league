@@ -301,18 +301,27 @@ export function TournamentsPage() {
 
       <div className="tournament-list-section">
         <div className="tournament-list-title">
-          <div><h2>Tournaments</h2><p>Active first, then starting soonest</p></div>
+          <div><h2>Tournaments</h2><p>In progress first, then upcoming and recent results</p></div>
           <button className="tournament-refresh" type="button" disabled={loading} onClick={() => void refreshTournaments(true)}><RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh</button>
         </div>
         <div className="tournament-list">
-          <div className="tournament-list-header" aria-hidden="true"><span>Tournament</span><span>Map</span><span>Rules</span><span>Players</span><span>Begins</span><span /></div>
+          <div className="tournament-list-header" aria-hidden="true"><span>Tournament</span><span>Map</span><span>Rules</span><span>Players</span><span>Status</span><span /></div>
           {tournaments.map((tournament, index) => (
             <button className="tournament-row" key={tournament.id} type="button" onClick={() => setSelectedTournamentId(tournament.id)}>
               <div className="tournament-identity"><span className="tournament-emblem"><Trophy size={18} /></span><span><strong>{tournament.name}</strong><small>{index === 0 ? "Next tournament" : `Hosted by ${tournament.creatorDisplayName}`}</small></span></div>
               <div><strong>{localizeAoe2Name(tournament.mapName)}</strong><small>Fixed map</small></div>
               <div><strong>{tournament.civilizationMode === "pick" ? "Pick civilizations" : "Random civilizations"}</strong><small>{tournamentAccessLabel(tournament)}</small></div>
               <div className="tournament-player-count"><Users size={16} /><span><strong>{tournament.entries.length}/{tournament.participantCapacity}</strong><small>{Math.max(0, tournament.participantCapacity - tournament.entries.length)} spots left</small></span></div>
-              <div className="tournament-begins"><strong>{tournament.status === "started" ? "In progress" : tournament.status === "completed" ? "Complete" : formatCountdown(Date.parse(tournament.startsAt) - now)}</strong><small>{formatStartTime(tournament.startsAt)}</small></div>
+              <div className={`tournament-status-cell ${tournament.status}`}>
+                <strong>{tournamentListStatusLabel(tournament.status)}</strong>
+                <small>{tournament.status === "registration"
+                  ? `Begins in ${formatCountdown(Date.parse(tournament.startsAt) - now)}`
+                  : tournament.status === "completed"
+                    ? `Finished ${formatStartTime(tournament.completedAt ?? tournament.startsAt)}`
+                    : tournament.status === "started"
+                      ? `Began ${formatStartTime(tournament.startedAt ?? tournament.startsAt)}`
+                      : "Cancelled"}</small>
+              </div>
               <span className="tournament-row-action" aria-hidden="true"><ChevronRight size={20} /></span>
             </button>
           ))}
@@ -626,6 +635,13 @@ function tournamentStatusLabel(status: Tournament["status"]): string {
   if (status === "started") return "Tournament in progress";
   if (status === "completed") return "Tournament complete";
   return "Tournament canceled";
+}
+
+function tournamentListStatusLabel(status: Tournament["status"]): string {
+  if (status === "registration") return "Registration Open";
+  if (status === "started") return "In Progress";
+  if (status === "completed") return "Complete";
+  return "Cancelled";
 }
 
 function tournamentPlayerName(tournament: Tournament, playerId?: string): string {

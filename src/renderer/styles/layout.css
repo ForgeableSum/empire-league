@@ -677,7 +677,10 @@
 
 .tournament-player-count { grid-template-columns: 18px minmax(0, 1fr); align-items: center; color: var(--muted); }
 .tournament-player-count > span { display: grid; gap: 5px; }
-.tournament-begins strong { color: var(--accent-2); font-size: 15px; font-variant-numeric: tabular-nums; }
+.tournament-status-cell strong { font-size: 13px; font-variant-numeric: tabular-nums; }
+.tournament-status-cell.registration strong { color: var(--success); }
+.tournament-status-cell.started strong { color: var(--accent-2); }
+.tournament-status-cell.completed strong { color: #d9857d; }
 
 .tournament-row-action {
   width: 36px;
