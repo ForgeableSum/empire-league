@@ -296,7 +296,7 @@ export function App() {
         {page === "social" && <SocialPage friends={friends} requests={requests} onMessage={(friend) => void openChat(friend)} onAccept={(request) => void acceptRequest(request)} onDecline={(id) => void socialService.declineRequest(requests.find((item) => item.id === id)?.connectionId ?? id)} onInvite={inviteFriend} onUnfriend={(friend) => void unfriend(friend)} />}
         {page === "settings" && <SettingsPage />}
       </Shell>
-      {state.queueStatus === "match_found" && state.activeMatch && <MatchFoundOverlay />}
+      {state.queueStatus === "match_found" && state.activeMatch?.matchType !== "tournament" && <MatchFoundOverlay />}
       <Toasts />
       <ChatDock
         chats={chats}
