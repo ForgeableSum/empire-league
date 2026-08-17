@@ -420,7 +420,7 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
             <>
               <p>{currentPlayerReady ? "You are ready. Waiting for your opponent." : `Your opponent is ${tournamentPlayerName(tournament, currentMatch.playerOneId === currentPlayerId ? currentMatch.playerTwoId : currentMatch.playerOneId)}.`}</p>
               {!currentPlayerReady && tournament.civilizationMode === "pick" && <ThemedSelect label="Your civilization" value={selectedCivilization} onChange={onCivilizationChange} options={civilizationOptions} />}
-              <button className="primary wide" type="button" disabled={!queueAvailable} onClick={onReady}>
+              <button className="primary wide tournament-ready-button" type="button" disabled={!queueAvailable} onClick={onReady}>
                 {!queueAvailable ? (currentPlayerReady ? "Waiting for Opponent" : "Finish Current Activity") : currentPlayerReady ? "Resume Ready Check" : "Ready for Match"}
               </button>
             </>

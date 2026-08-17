@@ -563,6 +563,8 @@
   box-shadow: 0 12px 30px rgba(0, 0, 0, .2);
 }
 
+.tournament-detail-hero:has(.themed-select[open]) { z-index: 30; }
+
 .tournament-list-header,
 .tournament-row {
   display: grid;
@@ -660,7 +662,7 @@
   grid-template-columns: minmax(0, 1fr) 275px;
   gap: 28px;
   padding: 28px;
-  overflow: hidden;
+  overflow: visible;
   border-color: #8f672f;
   background: linear-gradient(110deg, rgba(51, 38, 23, .97), rgba(26, 23, 20, .96) 60%, rgba(55, 38, 19, .92));
 }
@@ -728,6 +730,7 @@
 .tournament-entry-card > strong { margin: 7px 0 3px; color: #f0c66e; font-size: 27px; font-variant-numeric: tabular-nums; }
 .tournament-entry-card > small { color: var(--muted); font-size: 11px; }
 .tournament-entry-card > p { margin: 7px 0 13px; font-size: 11px; }
+.tournament-ready-button { margin-top: 12px; }
 
 .tournament-join-password {
   margin: 0 0 12px;
