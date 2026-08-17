@@ -65,7 +65,11 @@ export async function getTournaments(playerId) {
             SELECT 1 FROM tournament_entries mine WHERE mine.tournament_id = t.id AND mine.player_id = ?
           )
         ))
-     ORDER BY FIELD(t.status, 'started', 'registration', 'completed'), t.starts_at ASC, t.created_at ASC`,
+     ORDER BY FIELD(t.status, 'started', 'registration', 'completed'),
+              CASE WHEN t.status = 'completed' THEN COALESCE(t.completed_at, t.starts_at) END DESC,
+              CASE WHEN t.status <> 'completed' THEN t.starts_at END ASC,
+              CASE WHEN t.status = 'completed' THEN t.created_at END DESC,
+              CASE WHEN t.status <> 'completed' THEN t.created_at END ASC`,
     [playerId, playerId]
   );
   return tournamentsWithEntries(tournamentRows);

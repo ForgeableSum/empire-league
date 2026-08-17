@@ -634,8 +634,14 @@ function tournamentPlayerName(tournament: Tournament, playerId?: string): string
 
 function compareTournaments(left: Tournament, right: Tournament): number {
   const order: Record<Tournament["status"], number> = { started: 0, registration: 1, completed: 2, cancelled: 3 };
-  return order[left.status] - order[right.status]
-    || Date.parse(left.startsAt) - Date.parse(right.startsAt);
+  const statusDifference = order[left.status] - order[right.status];
+  if (statusDifference) return statusDifference;
+  if (left.status === "completed" && right.status === "completed") {
+    return Date.parse(right.completedAt ?? right.startsAt) - Date.parse(left.completedAt ?? left.startsAt)
+      || Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  }
+  return Date.parse(left.startsAt) - Date.parse(right.startsAt)
+    || Date.parse(left.createdAt) - Date.parse(right.createdAt);
 }
 
 function tournamentAccessLabel(tournament: Tournament): string {
