@@ -2899,6 +2899,7 @@ scheduleWeeklyRotation();
 async function runTournamentLifecycle() {
   try {
     const lifecycle = await processTournamentLifecycle();
+    for (const tournamentId of lifecycle.cancelledTournamentIds) tournamentChats.clear(tournamentId);
     for (const tournamentId of lifecycle.changedTournamentIds) broadcastTournamentChanged(tournamentId);
     for (const expired of lifecycle.expiredMatches) {
       const affectedTickets = [...tickets.values()].filter(

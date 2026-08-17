@@ -357,6 +357,7 @@ export async function leaveTournament(tournamentId, playerId) {
 export async function processTournamentLifecycle() {
   const connection = await database.getConnection();
   const changedTournamentIds = new Set();
+  const cancelledTournamentIds = [];
   const expiredMatches = [];
   try {
     await connection.beginTransaction();
@@ -367,6 +368,16 @@ export async function processTournamentLifecycle() {
        FOR UPDATE`
     );
     for (const tournament of dueTournaments) {
+      const [entries] = await connection.execute(
+        "SELECT player_id FROM tournament_entries WHERE tournament_id = ? FOR UPDATE",
+        [tournament.id]
+      );
+      if (entries.length < 2) {
+        await connection.execute("DELETE FROM tournaments WHERE id = ?", [tournament.id]);
+        changedTournamentIds.add(tournament.id);
+        cancelledTournamentIds.push(tournament.id);
+        continue;
+      }
       await startTournamentWithinTransaction(connection, tournament);
       changedTournamentIds.add(tournament.id);
     }
@@ -397,7 +408,7 @@ export async function processTournamentLifecycle() {
       });
     }
     await connection.commit();
-    return { changedTournamentIds: [...changedTournamentIds], expiredMatches };
+    return { changedTournamentIds: [...changedTournamentIds], cancelledTournamentIds, expiredMatches };
   } catch (error) {
     await connection.rollback();
     throw error;
