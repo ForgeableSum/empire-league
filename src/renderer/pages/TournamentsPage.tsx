@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Eye, Lock, Map as MapIcon, Minus, Plus, RefreshCw, Send, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Eye, Lock, Map as MapIcon, Minus, Plus, RefreshCw, Send, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import type { Tournament, TournamentChatMessage, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
 import { builtInTournamentMapId } from "../../tournament-map.mjs";
@@ -270,7 +270,7 @@ export function TournamentsPage() {
           </div>
           <div className="tournament-form-grid">
             <label className="tournament-name-field">Tournament name<input maxLength={64} value={name} onChange={(event) => setName(event.target.value)} /></label>
-            <label>Begins<input type="datetime-local" value={beginsAt} onChange={(event) => setBeginsAt(event.target.value)} /></label>
+            <TournamentDateTimePicker value={beginsAt} onChange={setBeginsAt} />
             <ThemedSelect label="Participants" value={capacity} onChange={setCapacity} options={[8, 16, 32, 64].map((count) => ({ value: String(count), label: `${count} players` }))} />
             <label>Minimum Elo<input min="0" max="5000" step="50" type="number" value={minimumElo} onChange={(event) => setMinimumElo(event.target.value)} /></label>
             <ThemedSelect label="Map" value={mapId} onChange={setMapId} options={tournamentMaps
@@ -678,6 +678,124 @@ function formatFullStartTime(timestamp: string): string {
 
 function formatChatTime(timestamp: string): string {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
+}
+
+function TournamentDateTimePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const selected = parseDateTimeInput(value);
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(selected.getFullYear(), selected.getMonth(), 1));
+  const rootRef = useRef<HTMLDivElement>(null);
+  const today = new Date();
+  const hour24 = selected.getHours();
+  const hour12 = hour24 % 12 || 12;
+  const minute = selected.getMinutes();
+  const period = hour24 >= 12 ? "PM" : "AM";
+  const firstGridDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1 - visibleMonth.getDay());
+  const days = Array.from({ length: 42 }, (_, index) => new Date(
+    firstGridDay.getFullYear(),
+    firstGridDay.getMonth(),
+    firstGridDay.getDate() + index
+  ));
+  const weekdayLabels = Array.from({ length: 7 }, (_, index) => new Intl.DateTimeFormat(undefined, { weekday: "narrow" })
+    .format(new Date(2024, 0, 7 + index)));
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsideInteraction = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideInteraction);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideInteraction);
+  }, [open]);
+
+  function chooseDay(day: Date) {
+    onChange(formatDateTimeInput(new Date(
+      day.getFullYear(),
+      day.getMonth(),
+      day.getDate(),
+      selected.getHours(),
+      selected.getMinutes()
+    ).getTime()));
+  }
+
+  function changeTimePart(next: { hour?: string; minute?: string; period?: string }) {
+    const nextHour12 = Number(next.hour ?? hour12);
+    const nextMinute = Number(next.minute ?? minute);
+    const nextPeriod = next.period ?? period;
+    const nextHour24 = nextHour12 % 12 + (nextPeriod === "PM" ? 12 : 0);
+    onChange(formatDateTimeInput(new Date(
+      selected.getFullYear(),
+      selected.getMonth(),
+      selected.getDate(),
+      nextHour24,
+      nextMinute
+    ).getTime()));
+  }
+
+  return (
+    <div className="tournament-datetime-field" ref={rootRef}>
+      <span>Begins</span>
+      <div className={`tournament-datetime-picker${open ? " open" : ""}`}>
+        <button className="tournament-datetime-trigger" type="button" aria-expanded={open} onClick={() => {
+          setVisibleMonth(new Date(selected.getFullYear(), selected.getMonth(), 1));
+          setOpen((current) => !current);
+        }}>
+          <span>{new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(selected)}</span>
+          <CalendarDays size={16} />
+        </button>
+        {open && (
+          <div className="tournament-calendar" role="dialog" aria-label="Choose tournament start date and time">
+            <header>
+              <button type="button" aria-label="Previous month" onClick={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))}><ChevronLeft size={16} /></button>
+              <strong>{new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(visibleMonth)}</strong>
+              <button type="button" aria-label="Next month" onClick={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))}><ChevronRight size={16} /></button>
+            </header>
+            <div className="tournament-calendar-weekdays" aria-hidden="true">{weekdayLabels.map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}</div>
+            <div className="tournament-calendar-days">
+              {days.map((day) => {
+                const isSelected = sameCalendarDay(day, selected);
+                const isToday = sameCalendarDay(day, today);
+                return (
+                  <button
+                    className={`${day.getMonth() === visibleMonth.getMonth() ? "" : "outside"}${isToday ? " today" : ""}${isSelected ? " selected" : ""}`}
+                    type="button"
+                    aria-pressed={isSelected}
+                    key={formatDateKey(day)}
+                    onClick={() => chooseDay(day)}
+                  >{day.getDate()}</button>
+                );
+              })}
+            </div>
+            <footer>
+              <div className="tournament-time-controls">
+                <ThemedSelect label="Hour" value={String(hour12)} onChange={(hour) => changeTimePart({ hour })} options={Array.from({ length: 12 }, (_, index) => ({ value: String(index + 1), label: String(index + 1) }))} />
+                <ThemedSelect label="Minute" value={String(minute)} onChange={(nextMinute) => changeTimePart({ minute: nextMinute })} options={Array.from({ length: 60 }, (_, index) => ({ value: String(index), label: String(index).padStart(2, "0") }))} />
+                <ThemedSelect label="AM/PM" value={period} onChange={(nextPeriod) => changeTimePart({ period: nextPeriod })} options={[{ value: "AM", label: "AM" }, { value: "PM", label: "PM" }]} />
+              </div>
+              <button className="primary" type="button" onClick={() => setOpen(false)}>Done</button>
+            </footer>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function parseDateTimeInput(value: string): Date {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  return match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]))
+    : new Date();
+}
+
+function sameCalendarDay(left: Date, right: Date): boolean {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate();
+}
+
+function formatDateKey(date: Date): string {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
 }
 
 function formatDateTimeInput(timestamp: number): string {

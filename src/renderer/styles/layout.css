@@ -491,6 +491,72 @@
 
 .tournament-name-field { grid-column: span 2; }
 
+.tournament-datetime-field {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tournament-datetime-picker { position: relative; }
+.tournament-datetime-picker.open { z-index: 40; }
+
+.tournament-datetime-trigger {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  color: var(--text);
+  border: 1px solid #8c642e;
+  background: #181715;
+  text-align: left;
+}
+
+.tournament-datetime-trigger:hover,
+.tournament-datetime-picker.open .tournament-datetime-trigger { border-color: var(--accent-2); }
+.tournament-datetime-trigger svg { flex: 0 0 auto; color: var(--accent-2); }
+
+.tournament-calendar {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 5px);
+  left: 0;
+  width: 300px;
+  padding: 12px;
+  color: var(--text);
+  border: 1px solid #9b6b32;
+  background: linear-gradient(145deg, #29231c, #181613);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, .58), inset 0 0 0 1px rgba(226, 181, 109, .08);
+}
+
+.tournament-calendar header { display: grid; grid-template-columns: 32px 1fr 32px; align-items: center; margin-bottom: 9px; }
+.tournament-calendar header strong { color: #efd08e; text-align: center; }
+.tournament-calendar header button { width: 32px; height: 30px; display: grid; place-items: center; color: var(--accent-2); background: transparent; }
+.tournament-calendar header button:hover { color: #1b1309; background: var(--accent-2); }
+
+.tournament-calendar-weekdays,
+.tournament-calendar-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.tournament-calendar-weekdays { margin-bottom: 3px; }
+.tournament-calendar-weekdays span { padding: 4px 0; color: #a78350; font-size: 9px; font-weight: 800; text-align: center; text-transform: uppercase; }
+.tournament-calendar-days button { aspect-ratio: 1; display: grid; place-items: center; color: #d7c8b2; border: 1px solid transparent; background: transparent; font-size: 11px; }
+.tournament-calendar-days button.outside { color: #665b4e; }
+.tournament-calendar-days button:hover { color: #f7ddaa; border-color: rgba(197, 141, 69, .5); background: rgba(151, 95, 31, .28); }
+.tournament-calendar-days button.today { border-color: #9e6c31; color: #efbf72; }
+.tournament-calendar-days button.selected { color: #1a1107; border-color: #efc477; background: linear-gradient(135deg, #e2b56d, #b9762f); box-shadow: 0 0 12px rgba(218, 156, 71, .3); font-weight: 900; }
+
+.tournament-calendar footer { display: grid; gap: 10px; margin-top: 11px; padding-top: 10px; border-top: 1px solid rgba(140, 100, 46, .35); }
+.tournament-time-controls { display: grid; grid-template-columns: 1fr 1fr 1.15fr; gap: 6px; }
+.tournament-time-controls .themed-select-field { min-width: 0; gap: 4px; color: var(--muted); font-size: 10px; }
+.tournament-time-controls .themed-select summary { min-height: 34px; padding: 6px 24px 6px 8px; color: #f0c978; border-color: #765329; background: #151310; }
+.tournament-time-controls .themed-select summary::after { right: 8px; }
+.tournament-time-controls .themed-select-options { top: auto; right: auto; bottom: calc(100% + 4px); left: 0; width: max-content; min-width: 100%; }
+.tournament-time-controls .themed-select-option-list { max-height: 180px; }
+.tournament-calendar footer > button { min-height: 34px; justify-self: end; padding: 6px 15px; }
+
 .tournament-create-password { max-width: 420px; }
 .tournament-create-password small { margin-left: 5px; color: var(--faint); font-weight: 500; }
 
