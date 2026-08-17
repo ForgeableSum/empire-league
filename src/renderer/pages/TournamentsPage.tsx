@@ -251,6 +251,7 @@ export function TournamentsPage() {
     );
   }
 
+  const nextRegistrationId = tournaments.find((tournament) => tournament.status === "registration")?.id;
   return (
     <section className="tournaments-page">
       {creating && (
@@ -297,9 +298,9 @@ export function TournamentsPage() {
         </div>
         <div className="tournament-list">
           <div className="tournament-list-header" aria-hidden="true"><span>Tournament</span><span>Map</span><span>Rules</span><span>Players</span><span>Status</span><span /></div>
-          {tournaments.map((tournament, index) => (
+          {tournaments.map((tournament) => (
             <button className="tournament-row" key={tournament.id} type="button" onClick={() => setSelectedTournamentId(tournament.id)}>
-              <div className="tournament-identity"><span className="tournament-emblem"><Trophy size={18} /></span><span><strong>{tournament.name}</strong><small>{index === 0 ? "Next tournament" : `Hosted by ${tournament.creatorDisplayName}`}</small></span></div>
+              <div className="tournament-identity"><span className="tournament-emblem"><Trophy size={18} /></span><span><strong>{tournament.name}</strong><small>{tournament.id === nextRegistrationId ? "Next tournament" : `Hosted by ${tournament.creatorDisplayName}`}</small></span></div>
               <div><strong>{localizeAoe2Name(tournament.mapName)}</strong><small>Fixed map</small></div>
               <div><strong>{tournament.civilizationMode === "pick" ? "Pick civilizations" : "Random civilizations"}</strong><small>{tournamentAccessLabel(tournament)}</small></div>
               <div className="tournament-player-count"><Users size={16} /><span><strong>{tournament.entries.length}/{tournament.participantCapacity}</strong><small>{Math.max(0, tournament.participantCapacity - tournament.entries.length)} spots left</small></span></div>
