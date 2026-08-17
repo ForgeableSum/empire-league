@@ -82,6 +82,12 @@ export interface OpenLobbyResult {
   opened: boolean;
 }
 
+export interface OpenSpectatorResult {
+  opened: boolean;
+  captureAgeLaunched: boolean;
+  message?: string;
+}
+
 export interface LobbyVerificationResult {
   verification: LobbyVerification;
 }

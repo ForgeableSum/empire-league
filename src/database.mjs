@@ -118,7 +118,7 @@ async function tournamentsWithEntries(tournamentRows) {
   const [matchRows] = await database.query(
     `SELECT id, tournament_id, round_number, match_position, player_one_id, player_two_id,
             player_one_ready_at, player_two_ready_at, ready_deadline, game_match_id,
-            winner_player_id, status, completed_at
+            spectator_uri, game_started_at, winner_player_id, status, completed_at
      FROM tournament_matches
      WHERE tournament_id IN (${placeholders})
      ORDER BY tournament_id, round_number, match_position`,
@@ -137,6 +137,9 @@ async function tournamentsWithEntries(tournamentRows) {
       playerTwoReady: Boolean(row.player_two_ready_at),
       ...(row.ready_deadline ? { readyDeadline: dateToIso(row.ready_deadline) } : {}),
       ...(row.game_match_id ? { gameMatchId: row.game_match_id } : {}),
+      ...(row.status === "in_progress" && row.game_started_at && row.spectator_uri
+        ? { spectatorUri: row.spectator_uri, gameStartedAt: dateToIso(row.game_started_at) }
+        : {}),
       ...(row.winner_player_id ? { winnerPlayerId: row.winner_player_id } : {}),
       status: row.status,
       ...(row.completed_at ? { completedAt: dateToIso(row.completed_at) } : {})
@@ -423,7 +426,8 @@ export async function recoverInterruptedTournamentMatches() {
       await connection.execute(
         `UPDATE tournament_matches
          SET status = 'waiting', player_one_ready_at = NULL, player_two_ready_at = NULL,
-             ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE), game_match_id = NULL
+             ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE), game_match_id = NULL,
+             spectator_uri = NULL, game_started_at = NULL
          WHERE id = ?`,
         [tournamentMatch.id]
       );
@@ -628,9 +632,19 @@ export async function readyTournamentMatch(tournamentId, playerId) {
 export async function markTournamentMatchLaunched(tournamentMatchId, gameMatchId) {
   const [result] = await database.execute(
     `UPDATE tournament_matches
-     SET status = 'in_progress', game_match_id = ?
+     SET status = 'in_progress', game_match_id = ?, spectator_uri = NULL, game_started_at = NULL
      WHERE id = ? AND status = 'waiting' AND player_one_ready_at IS NOT NULL AND player_two_ready_at IS NOT NULL`,
     [gameMatchId, tournamentMatchId]
+  );
+  if (result.affectedRows !== 1) throw new TournamentOperationError("Tournament match is no longer available.");
+}
+
+export async function markTournamentMatchStarted(tournamentMatchId, spectatorUri) {
+  const [result] = await database.execute(
+    `UPDATE tournament_matches
+     SET spectator_uri = ?, game_started_at = UTC_TIMESTAMP(3)
+     WHERE id = ? AND status = 'in_progress' AND game_match_id IS NOT NULL`,
+    [spectatorUri, tournamentMatchId]
   );
   if (result.affectedRows !== 1) throw new TournamentOperationError("Tournament match is no longer available.");
 }
@@ -659,7 +673,8 @@ export async function resetTournamentMatch(tournamentMatchId) {
   await database.execute(
     `UPDATE tournament_matches
      SET status = 'waiting', player_one_ready_at = NULL, player_two_ready_at = NULL,
-         ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE), game_match_id = NULL
+         ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE), game_match_id = NULL,
+         spectator_uri = NULL, game_started_at = NULL
      WHERE id = ? AND status = 'in_progress'`,
     [tournamentMatchId]
   );
@@ -692,7 +707,8 @@ async function resetTournamentGameWithinTransaction(connection, tournamentMatchI
   await connection.execute(
     `UPDATE tournament_matches
      SET status = 'waiting', player_one_ready_at = NULL, player_two_ready_at = NULL,
-         ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE), game_match_id = NULL
+         ready_deadline = DATE_ADD(UTC_TIMESTAMP(3), INTERVAL 5 MINUTE), game_match_id = NULL,
+         spectator_uri = NULL, game_started_at = NULL
      WHERE id = ? AND status IN ('waiting', 'in_progress')`,
     [tournamentMatchId]
   );

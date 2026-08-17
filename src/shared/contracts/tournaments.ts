@@ -24,6 +24,8 @@ export interface TournamentMatch {
   playerTwoReady: boolean;
   readyDeadline?: string;
   gameMatchId?: string;
+  spectatorUri?: string;
+  gameStartedAt?: string;
   winnerPlayerId?: string;
   status: TournamentMatchStatus;
   completedAt?: string;

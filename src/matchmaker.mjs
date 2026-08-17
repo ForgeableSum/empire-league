@@ -34,6 +34,7 @@ import {
   recoverInterruptedTournamentMatches,
   readyTournamentMatch,
   markTournamentMatchLaunched,
+  markTournamentMatchStarted,
   unreadyTournamentMatch,
   resetTournamentMatch,
   TournamentOperationError
@@ -54,6 +55,7 @@ import {
 import { currentWeeklyMode as weeklyModeAt, weeklyRotation } from "./weekly-rotation.mjs";
 import { getTopAoe2Streams } from "./twitch-streams.mjs";
 import { adminDashboardHtml, adminLoginHtml } from "./admin-dashboard.mjs";
+import { tournamentSpectatorUri } from "./tournament-spectator.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -2491,6 +2493,11 @@ async function handleRequest(request, response) {
       }
       match.startedAt = new Date().toISOString();
       await recordPendingMatch(match);
+      if (match.tournamentMatchId) {
+        const spectatorUri = tournamentSpectatorUri(match.lobby?.platformLobbyId);
+        await markTournamentMatchStarted(match.tournamentMatchId, spectatorUri);
+        if (match.tournamentId) broadcastTournamentChanged(match.tournamentId);
+      }
       scheduleMatchLifecycleTimeout(
         match,
         matchResultTimeoutMs,

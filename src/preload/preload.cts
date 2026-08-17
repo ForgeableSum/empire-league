@@ -104,6 +104,7 @@ const electronApi: ElectronGameApi = {
     lobbyId,
     allowCustomContentPrompt
   ),
+  openAoe2Spectator: (spectatorUri) => ipcRenderer.invoke("game:open-spectator", spectatorUri),
   openSteamLogin: (url) => ipcRenderer.invoke("auth:open-steam-login", url),
   completeSteamLogin: () => ipcRenderer.invoke("auth:complete-steam-login"),
   loadAuthToken: () => ipcRenderer.invoke("auth:load-token"),

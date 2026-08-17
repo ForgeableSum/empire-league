@@ -2379,6 +2379,21 @@ async function getAoeUrlHelperExecutable(gamePath?: string): Promise<string | un
   return undefined;
 }
 
+async function getCaptureAgeExecutable(): Promise<string | undefined> {
+  const localAppData = process.env.LOCALAPPDATA;
+  const programFiles = process.env.ProgramFiles;
+  const programFilesX86 = process.env["ProgramFiles(x86)"];
+  const candidates = [
+    localAppData ? join(localAppData, "Programs", "CaptureAge", "CaptureAge.exe") : undefined,
+    programFiles ? join(programFiles, "CaptureAge", "CaptureAge.exe") : undefined,
+    programFilesX86 ? join(programFilesX86, "CaptureAge", "CaptureAge.exe") : undefined
+  ].filter((path): path is string => Boolean(path));
+  for (const executablePath of candidates) {
+    if (await pathExists(executablePath)) return executablePath;
+  }
+  return undefined;
+}
+
 async function getSteamAppsFolders(steamRoot: string): Promise<string[]> {
   const defaultSteamApps = join(steamRoot, "steamapps");
   const folders = [defaultSteamApps];
@@ -4397,5 +4412,62 @@ export function registerGameHandlers(): void {
       keepAoe2NativeWindowBehind(game.pid);
     }
     return { opened: true };
+  });
+
+  ipcMain.handle("game:open-spectator", async (_event, spectatorUri: string) => {
+    if (!/^aoe2de:\/\/1\/\d+$/.test(spectatorUri)) {
+      return { opened: false, captureAgeLaunched: false, message: "A valid AoE2 spectator URI is required." };
+    }
+    const installation = await detectAoe2Installation();
+    if (!installation.installed || !installation.path) {
+      return {
+        opened: false,
+        captureAgeLaunched: false,
+        message: installation.message ?? "AoE2: Definitive Edition is not installed."
+      };
+    }
+    const helperExecutable = await getAoeUrlHelperExecutable(installation.path);
+    if (!helperExecutable) {
+      return { opened: false, captureAgeLaunched: false, message: "The AoE2 URL helper could not be found." };
+    }
+    const handoff = spawn(helperExecutable, [spectatorUri], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false
+    });
+    const handoffStarted = await new Promise<boolean>((resolve) => {
+      handoff.once("spawn", () => resolve(true));
+      handoff.once("error", () => resolve(false));
+    });
+    if (!handoffStarted) {
+      return { opened: false, captureAgeLaunched: false, message: "AoE2 could not open the spectator link." };
+    }
+    handoff.unref();
+
+    const captureAgeExecutable = await getCaptureAgeExecutable();
+    if (!captureAgeExecutable) {
+      return {
+        opened: true,
+        captureAgeLaunched: false,
+        message: "The match is opening in AoE2. Install or open CaptureAge to use its spectator view."
+      };
+    }
+    const captureAge = spawn(captureAgeExecutable, [], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false
+    });
+    const captureAgeStarted = await new Promise<boolean>((resolve) => {
+      captureAge.once("spawn", () => resolve(true));
+      captureAge.once("error", () => resolve(false));
+    });
+    if (captureAgeStarted) captureAge.unref();
+    return {
+      opened: true,
+      captureAgeLaunched: captureAgeStarted,
+      message: captureAgeStarted
+        ? "Opening the live match in AoE2 and CaptureAge."
+        : "The match is opening in AoE2, but CaptureAge could not be started."
+    };
   });
 }

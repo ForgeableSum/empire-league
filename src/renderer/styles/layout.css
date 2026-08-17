@@ -849,6 +849,32 @@
 .tournament-bracket-match > div.mine > strong { color: #f2d798; }
 .tournament-bracket-match > div > em { padding: 2px 5px; color: #17110a; border-radius: 999px; background: var(--accent-2); font-size: 8px; font-style: normal; font-weight: 900; text-transform: uppercase; }
 
+.tournament-bracket-match.live {
+  border-color: rgba(201, 74, 61, .55);
+  box-shadow: 0 0 0 1px rgba(201, 74, 61, .08), 0 5px 16px rgba(0, 0, 0, .25);
+}
+
+.tournament-watch-live {
+  width: 100%;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #f0aaa2;
+  border: 0;
+  border-top: 1px solid rgba(201, 74, 61, .35);
+  border-radius: 0 0 2px 2px;
+  background: rgba(112, 34, 28, .28);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.tournament-watch-live:hover:not(:disabled) { color: #ffd1cb; background: rgba(144, 42, 34, .42); }
+.tournament-watch-live:disabled { cursor: default; opacity: .55; }
+
 @media (max-width: 1050px) {
   .tournament-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tournament-list-header,

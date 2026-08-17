@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Lock, Map as MapIcon, Plus, RefreshCw, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Eye, Lock, Map as MapIcon, Plus, RefreshCw, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import type { Tournament, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
 import { civilizations } from "../../shared/civilizations";
@@ -9,6 +9,12 @@ import { tournamentService } from "../services/tournamentService";
 import { useAppStore } from "../state/appStore";
 
 type BracketPlayer = TournamentEntry | "open" | "tbd";
+type BracketMatch = {
+  id: string;
+  players: BracketPlayer[];
+  playerIds: Array<string | undefined>;
+  spectatorUri?: string;
+};
 
 export function TournamentsPage() {
   const { state, notify, startQueue, localizeAoe2Name } = useAppStore();
@@ -157,6 +163,27 @@ export function TournamentsPage() {
     });
   }
 
+  async function watchTournamentMatch(spectatorUri: string) {
+    if (!window.electronApi) {
+      notify("Live spectating requires the Empire League desktop app.", "warning");
+      return;
+    }
+    setPendingAction(`spectate:${spectatorUri}`);
+    try {
+      const result = await window.electronApi.openAoe2Spectator(spectatorUri);
+      if (!result.opened) throw new Error(result.message ?? "The live match could not be opened.");
+      notify(
+        result.captureAgeLaunched ? "Opening live tournament match." : "Opening spectator mode in AoE2.",
+        result.captureAgeLaunched ? "success" : "warning",
+        { detail: result.message }
+      );
+    } catch (error) {
+      notify("The live match could not be opened.", "danger", { detail: messageFor(error) });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   const selectedTournament = tournaments.find((tournament) => tournament.id === selectedTournamentId);
   if (selectedTournament) {
     const cancelling = pendingAction === `cancel:${selectedTournament.id}`;
@@ -172,12 +199,14 @@ export function TournamentsPage() {
           queueStatus={state.queueStatus}
           selectedCivilization={matchCivilization}
           joinPassword={joinPassword}
+          spectatingUri={pendingAction?.startsWith("spectate:") ? pendingAction.slice("spectate:".length) : undefined}
           civilizationOptions={civilizations.map((name) => ({ value: name, label: localizeAoe2Name(name) }))}
           onCivilizationChange={setMatchCivilization}
           onJoinPasswordChange={setJoinPassword}
           onBack={() => setSelectedTournamentId(null)}
           onToggleJoin={() => void toggleTournamentEntry(selectedTournament)}
           onReady={() => void readyForTournamentMatch(selectedTournament)}
+          onWatch={(spectatorUri) => void watchTournamentMatch(spectatorUri)}
           onCancel={() => setPendingCancellation(selectedTournament)}
         />
         {pendingCancellation && (
@@ -289,7 +318,7 @@ function TournamentCancelConfirmation({ tournament, pending, onDismiss, onConfir
   );
 }
 
-function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, cancelling, queueStatus, selectedCivilization, joinPassword, civilizationOptions, onCivilizationChange, onJoinPasswordChange, onBack, onToggleJoin, onReady, onCancel }: {
+function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, cancelling, queueStatus, selectedCivilization, joinPassword, spectatingUri, civilizationOptions, onCivilizationChange, onJoinPasswordChange, onBack, onToggleJoin, onReady, onWatch, onCancel }: {
   tournament: Tournament;
   now: number;
   currentPlayerId: string;
@@ -299,12 +328,14 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
   queueStatus: string;
   selectedCivilization: string;
   joinPassword: string;
+  spectatingUri?: string;
   civilizationOptions: Array<{ value: string; label: string }>;
   onCivilizationChange: (civilization: string) => void;
   onJoinPasswordChange: (password: string) => void;
   onBack: () => void;
   onToggleJoin: () => void;
   onReady: () => void;
+  onWatch: (spectatorUri: string) => void;
   onCancel: () => void;
 }) {
   const rounds = buildBracket(tournament);
@@ -386,17 +417,26 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
               <div className="tournament-bracket-round" key={round.name}>
                 <div className="tournament-round-heading"><span>Round {roundIndex + 1}</span><strong>{round.name}</strong></div>
                 <div className="tournament-round-matches">
-                  {round.matches.map((match, matchIndex) => (
-                    <article className="tournament-bracket-match" key={`${round.name}-${matchIndex}`}>
-                      {match.map((player, playerIndex) => (
-                        <div className={bracketPlayerClass(player, currentPlayerId)} key={playerIndex}>
-                          <span>{typeof player === "object" ? player.bracketSlot : "—"}</span>
-                          <strong>{typeof player === "object" ? player.displayName : player === "open" ? "Open spot" : "TBD"}</strong>
-                          {typeof player === "object" && player.playerId === currentPlayerId && <em>You</em>}
-                        </div>
-                      ))}
-                    </article>
-                  ))}
+                  {round.matches.map((match, matchIndex) => {
+                    const isPlayingInMatch = match.playerIds.includes(currentPlayerId);
+                    return (
+                      <article className={`tournament-bracket-match${match.spectatorUri ? " live" : ""}`} key={match.id || `${round.name}-${matchIndex}`}>
+                        {match.players.map((player, playerIndex) => (
+                          <div className={bracketPlayerClass(player, currentPlayerId)} key={playerIndex}>
+                            <span>{typeof player === "object" ? player.bracketSlot : "—"}</span>
+                            <strong>{typeof player === "object" ? player.displayName : player === "open" ? "Open spot" : "TBD"}</strong>
+                            {typeof player === "object" && player.playerId === currentPlayerId && <em>You</em>}
+                          </div>
+                        ))}
+                        {match.spectatorUri && (
+                          <button className="tournament-watch-live" type="button" disabled={isPlayingInMatch || !queueAvailable || spectatingUri === match.spectatorUri} onClick={() => onWatch(match.spectatorUri!)}>
+                            <Eye size={13} />
+                            {isPlayingInMatch ? "Your match is live" : !queueAvailable ? "Finish current activity" : spectatingUri === match.spectatorUri ? "Opening live match…" : "Watch live"}
+                          </button>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -407,10 +447,10 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
   );
 }
 
-function buildBracket(tournament: Tournament): Array<{ name: string; matches: BracketPlayer[][] }> {
+function buildBracket(tournament: Tournament): Array<{ name: string; matches: BracketMatch[] }> {
   const entrantsBySlot = new Map(tournament.entries.map((entry) => [entry.bracketSlot, entry]));
   const entrantsById = new Map(tournament.entries.map((entry) => [entry.playerId, entry]));
-  const rounds: Array<{ name: string; matches: BracketPlayer[][] }> = [];
+  const rounds: Array<{ name: string; matches: BracketMatch[] }> = [];
   for (let playersInRound = tournament.participantCapacity, roundIndex = 0; playersInRound >= 2; playersInRound /= 2, roundIndex += 1) {
     const persistedMatches = tournament.matches.filter((match) => match.roundNumber === roundIndex + 1);
     rounds.push({
@@ -418,13 +458,23 @@ function buildBracket(tournament: Tournament): Array<{ name: string; matches: Br
       matches: Array.from({ length: playersInRound / 2 }, (_, matchIndex) => {
         const persisted = persistedMatches.find((match) => match.matchPosition === matchIndex + 1);
         if (persisted) {
-          return [persisted.playerOneId, persisted.playerTwoId].map((playerId) =>
-            playerId ? entrantsById.get(playerId) ?? "tbd" : roundIndex === 0 ? "open" : "tbd"
-          );
+          const playerIds = [persisted.playerOneId, persisted.playerTwoId];
+          return {
+            id: persisted.id,
+            playerIds,
+            ...(persisted.spectatorUri ? { spectatorUri: persisted.spectatorUri } : {}),
+            players: playerIds.map((playerId) =>
+              playerId ? entrantsById.get(playerId) ?? "tbd" : roundIndex === 0 ? "open" : "tbd"
+            )
+          };
         }
-        return roundIndex === 0
-          ? [entrantsBySlot.get(matchIndex * 2 + 1) ?? "open", entrantsBySlot.get(matchIndex * 2 + 2) ?? "open"]
-          : ["tbd", "tbd"];
+        return {
+          id: `${roundIndex + 1}:${matchIndex + 1}`,
+          playerIds: [],
+          players: roundIndex === 0
+            ? [entrantsBySlot.get(matchIndex * 2 + 1) ?? "open", entrantsBySlot.get(matchIndex * 2 + 2) ?? "open"]
+            : ["tbd", "tbd"]
+        };
       })
     });
   }
