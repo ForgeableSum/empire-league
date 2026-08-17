@@ -31,6 +31,14 @@ export interface TournamentMatch {
   completedAt?: string;
 }
 
+export interface TournamentChatMessage {
+  id: string;
+  playerId: string;
+  author: string;
+  text: string;
+  sentAt: string;
+}
+
 export interface Tournament {
   id: string;
   creatorPlayerId: string;

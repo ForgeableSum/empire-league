@@ -1,6 +1,6 @@
-import { ArrowLeft, ChevronRight, Eye, Lock, Map as MapIcon, Plus, RefreshCw, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
-import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
-import type { Tournament, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
+import { ArrowLeft, ChevronRight, Eye, Lock, Map as MapIcon, Minus, Plus, RefreshCw, Send, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import type { Tournament, TournamentChatMessage, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
 import { civilizations } from "../../shared/civilizations";
 import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import { ThemedSelect } from "../components/common/ThemedSelect";
@@ -49,7 +49,9 @@ export function TournamentsPage() {
 
   useEffect(() => {
     void refreshTournaments(true);
-    return tournamentService.onEvent(() => void refreshTournaments());
+    return tournamentService.onEvent((event) => {
+      if (event.type === "tournaments_changed") void refreshTournaments();
+    });
   }, [refreshTournaments]);
 
   useEffect(() => {
@@ -409,42 +411,149 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           )}
         </aside>
       </article>
-      <section className="tournament-bracket-section">
-        <div className="tournament-bracket-heading"><div><h2>Bracket</h2></div><p>Players are placed into a random open starting slot.</p></div>
-        <div className="tournament-bracket-scroll">
-          <div className="tournament-bracket" style={{ "--bracket-rounds": rounds.length } as CSSProperties}>
-            {rounds.map((round, roundIndex) => (
-              <div className="tournament-bracket-round" key={round.name}>
-                <div className="tournament-round-heading"><span>Round {roundIndex + 1}</span><strong>{round.name}</strong></div>
-                <div className="tournament-round-matches">
-                  {round.matches.map((match, matchIndex) => {
-                    const isPlayingInMatch = match.playerIds.includes(currentPlayerId);
-                    return (
-                      <article className={`tournament-bracket-match${match.spectatorUri ? " live" : ""}`} key={match.id || `${round.name}-${matchIndex}`}>
-                        {match.players.map((player, playerIndex) => (
-                          <div className={bracketPlayerClass(player, currentPlayerId)} key={playerIndex}>
-                            <span>{typeof player === "object" ? player.bracketSlot : "—"}</span>
-                            <strong>{typeof player === "object" ? player.displayName : player === "open" ? "Open spot" : "TBD"}</strong>
-                            {typeof player === "object" && player.playerId === currentPlayerId && <em>You</em>}
-                          </div>
-                        ))}
-                        {match.spectatorUri && (
-                          <button className="tournament-watch-live" type="button" disabled={isPlayingInMatch || !queueAvailable || spectatingUri === match.spectatorUri} onClick={() => onWatch(match.spectatorUri!)}>
-                            <Eye size={13} />
-                            {isPlayingInMatch ? "Your match is live" : !queueAvailable ? "Finish current activity" : spectatingUri === match.spectatorUri ? "Opening live match…" : "Watch live"}
-                          </button>
-                        )}
-                      </article>
-                    );
-                  })}
+      <div className="tournament-detail-content">
+        <section className="tournament-bracket-section">
+          <div className="tournament-bracket-heading"><div><h2>Bracket</h2></div><p>Players are placed into a random open starting slot.</p></div>
+          <div className="tournament-bracket-scroll">
+            <div className="tournament-bracket" style={{ "--bracket-rounds": rounds.length } as CSSProperties}>
+              {rounds.map((round, roundIndex) => (
+                <div className="tournament-bracket-round" key={round.name}>
+                  <div className="tournament-round-heading"><span>Round {roundIndex + 1}</span><strong>{round.name}</strong></div>
+                  <div className="tournament-round-matches">
+                    {round.matches.map((match, matchIndex) => {
+                      const isPlayingInMatch = match.playerIds.includes(currentPlayerId);
+                      return (
+                        <article className={`tournament-bracket-match${match.spectatorUri ? " live" : ""}`} key={match.id || `${round.name}-${matchIndex}`}>
+                          {match.players.map((player, playerIndex) => (
+                            <div className={bracketPlayerClass(player, currentPlayerId)} key={playerIndex}>
+                              <span>{typeof player === "object" ? player.bracketSlot : "—"}</span>
+                              <strong>{typeof player === "object" ? player.displayName : player === "open" ? "Open spot" : "TBD"}</strong>
+                              {typeof player === "object" && player.playerId === currentPlayerId && <em>You</em>}
+                            </div>
+                          ))}
+                          {match.spectatorUri && (
+                            <button className="tournament-watch-live" type="button" disabled={isPlayingInMatch || !queueAvailable || spectatingUri === match.spectatorUri} onClick={() => onWatch(match.spectatorUri!)}>
+                              <Eye size={13} />
+                              {isPlayingInMatch ? "Your match is live" : !queueAvailable ? "Finish current activity" : spectatingUri === match.spectatorUri ? "Opening live match…" : "Watch live"}
+                            </button>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+        <TournamentChat tournament={tournament} currentPlayerId={currentPlayerId} />
+      </div>
     </section>
   );
+}
+
+function TournamentChat({ tournament, currentPlayerId }: { tournament: Tournament; currentPlayerId: string }) {
+  const { notify } = useAppStore();
+  const [messages, setMessages] = useState<TournamentChatMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [minimized, setMinimized] = useState(false);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const hasAccess = tournament.creatorPlayerId === currentPlayerId
+    || tournament.entries.some((entry) => entry.playerId === currentPlayerId);
+  const latestMessageId = messages.at(-1)?.id;
+
+  useEffect(() => {
+    setMessages([]);
+    setLoadError(null);
+    if (!hasAccess) return undefined;
+    let active = true;
+    setLoading(true);
+    void tournamentService.messages(tournament.id).then((history) => {
+      if (active) setMessages((current) => mergeTournamentMessages(history, current));
+    }).catch((error) => {
+      if (active) setLoadError(messageFor(error));
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    const unsubscribe = tournamentService.onEvent((event) => {
+      if (active && event.type === "chat_message" && event.tournamentId === tournament.id) {
+        setMessages((current) => mergeTournamentMessages(current, [event.message]));
+      }
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [hasAccess, tournament.id]);
+
+  useEffect(() => {
+    const list = messagesRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [latestMessageId, minimized]);
+
+  async function submitMessage(event: FormEvent) {
+    event.preventDefault();
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    try {
+      const message = await tournamentService.sendMessage(tournament.id, text);
+      setMessages((current) => mergeTournamentMessages(current, [message]));
+      setDraft("");
+    } catch (error) {
+      notify("Tournament message could not be sent.", "danger", { detail: messageFor(error) });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!hasAccess) return null;
+
+  if (minimized) {
+    return (
+      <button className="chat-minimized tournament-chat-minimized" type="button" onClick={() => setMinimized(false)}>
+        <span className="tournament-chat-mark"><Trophy size={16} /></span>
+        <span><strong>Tournament chat</strong><small data-ui-translation="off">{tournament.name}</small></span>
+      </button>
+    );
+  }
+
+  return (
+    <section className="chat-window tournament-chat-window">
+      <header className="chat-header tournament-chat-header">
+        <button className="chat-person" type="button" onClick={() => setMinimized(true)}>
+          <span className="tournament-chat-mark"><Trophy size={17} /></span>
+          <span><strong>Tournament chat</strong><small data-ui-translation="off">{tournament.name}</small></span>
+        </button>
+        <div><button type="button" aria-label="Minimize tournament chat" onClick={() => setMinimized(true)}><Minus size={16} /></button></div>
+      </header>
+      <div className="chat-messages tournament-chat-messages" aria-live="polite" ref={messagesRef}>
+        {loading && messages.length === 0 && <p className="tournament-chat-state">Loading chat history…</p>}
+        {loadError && <p className="tournament-chat-state danger">{loadError}</p>}
+        {!loading && !loadError && messages.length === 0 && <p className="tournament-chat-state">No messages yet. Start the conversation.</p>}
+        {messages.map((message) => (
+          <div className={`chat-message tournament-chat-message${message.playerId === currentPlayerId ? " me" : ""}`} key={message.id}>
+            <small className="tournament-chat-author"><strong data-ui-translation="off">{message.author}</strong> · {formatChatTime(message.sentAt)}</small>
+            <span data-ui-translation="off">{message.text}</span>
+          </div>
+        ))}
+      </div>
+      <form className="chat-compose tournament-chat-compose" onSubmit={(event) => void submitMessage(event)}>
+        <input maxLength={500} placeholder="Message tournament…" value={draft} disabled={sending} onChange={(event) => setDraft(event.target.value)} />
+        <button type="submit" aria-label="Send tournament message" disabled={sending || !draft.trim()}><Send size={16} /></button>
+      </form>
+    </section>
+  );
+}
+
+function mergeTournamentMessages(...groups: TournamentChatMessage[][]): TournamentChatMessage[] {
+  const messages = new Map<string, TournamentChatMessage>();
+  for (const group of groups) for (const message of group) messages.set(message.id, message);
+  return [...messages.values()].sort((left, right) =>
+    Date.parse(left.sentAt) - Date.parse(right.sentAt) || left.id.localeCompare(right.id));
 }
 
 function buildBracket(tournament: Tournament): Array<{ name: string; matches: BracketMatch[] }> {
@@ -534,6 +643,10 @@ function formatStartTime(timestamp: string): string {
 
 function formatFullStartTime(timestamp: string): string {
   return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
+}
+
+function formatChatTime(timestamp: string): string {
+  return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(new Date(timestamp));
 }
 
 function formatDateTimeInput(timestamp: number): string {

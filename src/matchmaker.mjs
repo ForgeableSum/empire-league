@@ -56,6 +56,7 @@ import { currentWeeklyMode as weeklyModeAt, weeklyRotation } from "./weekly-rota
 import { getTopAoe2Streams } from "./twitch-streams.mjs";
 import { adminDashboardHtml, adminLoginHtml } from "./admin-dashboard.mjs";
 import { tournamentSpectatorUri } from "./tournament-spectator.mjs";
+import { createTournamentChatStore } from "./tournament-chat.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -103,6 +104,7 @@ const socialPresence = new Map();
 const socialFriendIds = new Map();
 const socialMessages = new Map();
 const socialUnread = new Map();
+const tournamentChats = createTournamentChatStore();
 const maxSocialMessagesPerConversation = 100;
 const customLobbies = new Map();
 const weeklyQueue = new Map();
@@ -427,6 +429,24 @@ function broadcastTournamentChanged(tournamentId) {
   const message = { type: "tournament_event", event: { type: "tournaments_changed", tournamentId } };
   for (const socket of webSocketServer.clients) {
     if (socket.readyState === WebSocket.OPEN && socketSessions.get(socket)?.player) sendSocket(socket, message);
+  }
+}
+
+function tournamentChatMember(tournament, playerId) {
+  return tournament.creatorPlayerId === playerId
+    || tournament.entries.some((entry) => entry.playerId === playerId);
+}
+
+function broadcastTournamentChatMessage(tournament, chatMessage) {
+  const outboundEvent = {
+    type: "tournament_event",
+    event: { type: "chat_message", tournamentId: tournament.id, message: chatMessage }
+  };
+  for (const socket of webSocketServer.clients) {
+    const playerId = socketSessions.get(socket)?.player?.id;
+    if (socket.readyState === WebSocket.OPEN && playerId && tournamentChatMember(tournament, playerId)) {
+      sendSocket(socket, outboundEvent);
+    }
   }
 }
 
@@ -1537,12 +1557,38 @@ async function handleRequest(request, response) {
       const tournamentId = decodeURIComponent(tournamentDetail[1]);
       try {
         const cancelled = await cancelTournament(tournamentId, authenticatedPlayer.id);
+        tournamentChats.clear(tournamentId);
         broadcastTournamentChanged(tournamentId);
         return send(response, 200, { cancelled });
       } catch (error) {
         if (error instanceof TournamentOperationError) return send(response, error.status, { error: error.message });
         throw error;
       }
+    }
+
+    const tournamentMessages = url.pathname.match(/^\/tournaments\/([^/]+)\/messages$/);
+    if (tournamentMessages && (request.method === "GET" || request.method === "POST")) {
+      const tournamentId = decodeURIComponent(tournamentMessages[1]);
+      const tournament = await getTournamentById(tournamentId);
+      if (!tournament) return send(response, 404, { error: "Tournament not found." });
+      if (!tournamentChatMember(tournament, authenticatedPlayer.id)) {
+        return send(response, 403, { error: "Join the tournament to use its chat." });
+      }
+      if (request.method === "GET") {
+        return send(response, 200, { messages: tournamentChats.history(tournamentId) });
+      }
+      const body = await readJson(request);
+      const text = String(body.text ?? "").trim().slice(0, 500);
+      if (!text) return send(response, 400, { error: "A message is required." });
+      const chatRecord = tournamentChats.add(tournamentId, {
+        id: randomUUID(),
+        playerId: authenticatedPlayer.id,
+        author: authenticatedPlayer.displayName,
+        text,
+        sentAt: new Date().toISOString()
+      });
+      broadcastTournamentChatMessage(tournament, chatRecord);
+      return send(response, 201, { message: chatRecord });
     }
 
     const tournamentJoin = url.pathname.match(/^\/tournaments\/([^/]+)\/join$/);

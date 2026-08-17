@@ -1,4 +1,4 @@
-import type { CreateTournamentInput, Tournament } from "../../shared/contracts/tournaments";
+import type { CreateTournamentInput, Tournament, TournamentChatMessage } from "../../shared/contracts/tournaments";
 import { matchmakerTransport } from "./matchmakerTransport";
 import { isPreviewMode } from "../previewMode";
 
@@ -90,11 +90,32 @@ export const tournamentService = {
     return (await matchmakerTransport.request<{ tournament: Tournament }>(`/tournaments/${encodeURIComponent(tournamentId)}/join`, { method: "DELETE" })).tournament;
   },
 
+  async messages(tournamentId: string): Promise<TournamentChatMessage[]> {
+    if (isPreviewMode) return [...(previewChatMessages.get(tournamentId) ?? [])];
+    return (await matchmakerTransport.request<{ messages: TournamentChatMessage[] }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/messages`
+    )).messages;
+  },
+
+  async sendMessage(tournamentId: string, text: string): Promise<TournamentChatMessage> {
+    if (isPreviewMode) {
+      const chatRecord = { id: `preview-chat-${Date.now()}`, playerId: "user-1", author: "EmpireSum", text, sentAt: new Date().toISOString() };
+      previewChatMessages.set(tournamentId, [...(previewChatMessages.get(tournamentId) ?? []), chatRecord]);
+      return chatRecord;
+    }
+    return (await matchmakerTransport.request<{ message: TournamentChatMessage }>(
+      `/tournaments/${encodeURIComponent(tournamentId)}/messages`,
+      { method: "POST", body: { text } }
+    )).message;
+  },
+
   onEvent(listener: Parameters<typeof matchmakerTransport.onTournamentEvent>[0]) {
     if (isPreviewMode) return () => undefined;
     return matchmakerTransport.onTournamentEvent(listener);
   }
 };
+
+const previewChatMessages = new Map<string, TournamentChatMessage[]>();
 
 function requirePreviewTournament(tournamentId: string): Tournament {
   const tournament = previewTournaments.find((item) => item.id === tournamentId);

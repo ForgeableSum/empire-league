@@ -26,7 +26,7 @@
     "test:replay-results": "node --test src/replay-result.test.mjs",
     "test:ratings": "node --test src/rating-pool.test.mjs",
     "test:weekly": "node --test src/weekly-rotation.test.mjs",
-    "test:tournaments": "node --test src/tournament-bracket.test.mjs src/tournament-password.test.mjs src/tournament-spectator.test.mjs",
+    "test:tournaments": "node --test src/tournament-bracket.test.mjs src/tournament-chat.test.mjs src/tournament-password.test.mjs src/tournament-spectator.test.mjs",
     "test:translations": "node scripts/extract-ui-strings.mjs --check && node scripts/audit-ui-translations.mjs"
   },
   "dependencies": {

@@ -37,7 +37,9 @@ export type CustomLobbyEvent = {
   closedRoomId?: string;
   closeReason?: string;
 };
-export type TournamentEvent = { type: "tournaments_changed"; tournamentId: string };
+export type TournamentEvent =
+  | { type: "tournaments_changed"; tournamentId: string }
+  | { type: "chat_message"; tournamentId: string; message: import("../../shared/contracts/tournaments").TournamentChatMessage };
 export type AdminMessage = { message: string; sentAt: string };
 
 class MatchmakerTransport {
