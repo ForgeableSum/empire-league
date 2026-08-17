@@ -253,15 +253,6 @@ export function TournamentsPage() {
 
   return (
     <section className="tournaments-page">
-      <header className="tournaments-heading">
-        <div>
-          <span className="eyebrow">Single elimination</span>
-          <h2>Community Tournaments</h2>
-          <p>Join the next bracket or create a simple knockout tournament.</p>
-        </div>
-        {!creating && <button className="primary tournament-create-trigger" type="button" onClick={beginCreating}><Plus size={17} /> Create Tournament</button>}
-      </header>
-
       {creating && (
         <form className="panel tournament-create-panel" onSubmit={(event) => void submitTournament(event)}>
           <div className="tournament-create-heading">
@@ -300,9 +291,9 @@ export function TournamentsPage() {
       )}
 
       <div className="tournament-list-section">
-        <div className="tournament-list-title">
-          <div><h2>Tournaments</h2><p>In progress first, then upcoming and recent results</p></div>
-          <button className="tournament-refresh" type="button" disabled={loading} onClick={() => void refreshTournaments(true)}><RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh</button>
+        <div className="tournament-list-toolbar">
+          {!creating && <button className="primary" type="button" onClick={beginCreating}><Plus size={17} /> Create Tournament</button>}
+          <button className="secondary" type="button" disabled={loading} onClick={() => void refreshTournaments(true)}><RefreshCw size={16} className={loading ? "spin" : ""} /> Refresh</button>
         </div>
         <div className="tournament-list">
           <div className="tournament-list-header" aria-hidden="true"><span>Tournament</span><span>Map</span><span>Rules</span><span>Players</span><span>Status</span><span /></div>
@@ -453,7 +444,6 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
       </article>
       <div className="tournament-detail-content">
         <section className="tournament-bracket-section">
-          <div className="tournament-bracket-heading"><div><h2>Bracket</h2></div><p>Players are placed into a random open starting slot.</p></div>
           <div className="tournament-bracket-scroll">
             <div className="tournament-bracket" style={{ "--bracket-rounds": rounds.length } as CSSProperties}>
               {rounds.map((round, roundIndex) => (

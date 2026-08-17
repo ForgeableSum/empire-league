@@ -442,8 +442,6 @@
   gap: 22px;
 }
 
-.tournaments-heading,
-.tournament-list-title,
 .tournament-create-heading,
 .tournament-create-footer {
   display: flex;
@@ -451,14 +449,6 @@
   justify-content: space-between;
   gap: 20px;
 }
-
-.tournaments-heading h2 {
-  margin: 5px 0 7px;
-  color: #ead3a1;
-  font-size: 28px;
-}
-
-.tournament-create-trigger { min-width: 184px; }
 
 .tournament-create-panel {
   display: grid;
@@ -604,22 +594,7 @@
 .tournament-form-actions { display: flex; gap: 9px; }
 
 .tournament-list-section { display: grid; gap: 12px; }
-.tournament-list-title h2 { margin-bottom: 3px; font-size: 20px; }
-.tournament-list-title p { font-size: 12px; }
-.tournament-list-title > span { display: flex; align-items: center; gap: 7px; color: var(--faint); font-size: 12px; }
-
-.tournament-refresh {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 9px;
-  color: var(--muted);
-  background: transparent;
-  font-size: 11px;
-}
-
-.tournament-refresh:hover { color: var(--accent-2); }
-.tournament-refresh:disabled { opacity: .6; cursor: default; }
+.tournament-list-toolbar { display: flex; justify-content: flex-start; gap: 10px; }
 
 .tournament-list {
   overflow: hidden;
@@ -898,16 +873,6 @@
   gap: 12px;
 }
 
-.tournament-bracket-heading {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 18px;
-}
-
-.tournament-bracket-heading h2 { margin-top: 4px; font-size: 22px; }
-.tournament-bracket-heading p { font-size: 11px; }
-
 .tournament-bracket-scroll {
   overflow-x: auto;
   border: 1px solid var(--line);
@@ -1018,7 +983,6 @@
 }
 
 @media (max-width: 760px) {
-  .tournaments-heading { align-items: flex-start; flex-direction: column; }
   .tournament-form-grid,
   .tournament-civ-options { grid-template-columns: 1fr; }
   .tournament-name-field { grid-column: span 1; }
@@ -1034,7 +998,6 @@
   .tournament-detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tournament-chat-window { right: 8px; width: min(318px, calc(100vw - 16px)); }
   .tournament-chat-minimized { right: 8px; max-width: calc(100vw - 16px); }
-  .tournament-bracket-heading { align-items: flex-start; flex-direction: column; }
 }
 
 .weekly-page { display: grid; gap: 22px; }
