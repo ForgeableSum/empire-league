@@ -33,7 +33,7 @@ export const tournamentService = {
         participantCapacity: input.participantCapacity,
         minimumElo: input.minimumElo,
         mapId: input.mapId,
-        mapName: input.mapId,
+        mapName: input.mapName,
         passwordProtected: Boolean(input.password),
         status: "registration",
         startsAt: input.startsAt,

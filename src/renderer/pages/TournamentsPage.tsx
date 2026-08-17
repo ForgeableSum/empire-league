@@ -1,6 +1,7 @@
 import { ArrowLeft, ChevronRight, Eye, Lock, Map as MapIcon, Minus, Plus, RefreshCw, Send, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import type { Tournament, TournamentChatMessage, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
+import { builtInTournamentMapId } from "../../tournament-map.mjs";
 import { civilizations } from "../../shared/civilizations";
 import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import { ThemedSelect } from "../components/common/ThemedSelect";
@@ -9,12 +10,18 @@ import { tournamentService } from "../services/tournamentService";
 import { useAppStore } from "../state/appStore";
 
 type BracketPlayer = TournamentEntry | "open" | "tbd";
+type TournamentMapOption = { id: string; gameName: string };
 type BracketMatch = {
   id: string;
   players: BracketPlayer[];
   playerIds: Array<string | undefined>;
   spectatorUri?: string;
 };
+
+const fallbackTournamentMaps: TournamentMapOption[] = enabledMapCatalogEntries.map((map) => ({
+  id: map.id,
+  gameName: map.gameMapName
+}));
 
 export function TournamentsPage() {
   const { state, notify, startQueue, localizeAoe2Name } = useAppStore();
@@ -29,7 +36,8 @@ export function TournamentsPage() {
   const [capacity, setCapacity] = useState("16");
   const [minimumElo, setMinimumElo] = useState("1000");
   const [beginsAt, setBeginsAt] = useState(() => formatDateTimeInput(Date.now() + 24 * 60 * 60_000));
-  const [mapId, setMapId] = useState(enabledMapCatalogEntries.find((map) => map.id === "arabia")?.id ?? enabledMapCatalogEntries[0]?.id ?? "");
+  const [tournamentMaps, setTournamentMaps] = useState<TournamentMapOption[]>(fallbackTournamentMaps);
+  const [mapId, setMapId] = useState(enabledMapCatalogEntries.find((map) => map.id === "arabia")?.id ?? fallbackTournamentMaps[0]?.id ?? "");
   const [civilizationMode, setCivilizationMode] = useState<TournamentCivilizationMode>("pick");
   const [matchCivilization, setMatchCivilization] = useState<string>(civilizations[0] ?? "Britons");
   const [createPassword, setCreatePassword] = useState("");
@@ -61,8 +69,30 @@ export function TournamentsPage() {
 
   useEffect(() => setJoinPassword(""), [selectedTournamentId]);
 
+  useEffect(() => {
+    if (!window.electronApi) return;
+    void window.electronApi.scanLocalCustomContent().then((catalog) => {
+      const byGameName = new Map(fallbackTournamentMaps.map((map) => [map.gameName.toLocaleLowerCase("en"), map]));
+      for (const map of catalog.maps) {
+        if (map.kind !== "map" || !map.builtIn || !map.enabled) continue;
+        const key = map.gameName.toLocaleLowerCase("en");
+        if (!byGameName.has(key)) byGameName.set(key, { id: builtInTournamentMapId(map.gameName), gameName: map.gameName });
+      }
+      const nextMaps = [...byGameName.values()];
+      setTournamentMaps(nextMaps);
+      setMapId((current) => nextMaps.some((map) => map.id === current)
+        ? current
+        : nextMaps.find((map) => map.gameName.toLocaleLowerCase("en") === "arabia")?.id ?? nextMaps[0]?.id ?? "");
+    }).catch(() => undefined);
+  }, []);
+
   async function submitTournament(event: FormEvent) {
     event.preventDefault();
+    const selectedMap = tournamentMaps.find((map) => map.id === mapId);
+    if (!selectedMap) {
+      notify("Choose an available tournament map.", "warning");
+      return;
+    }
     setPendingAction("create");
     try {
       const tournament = await tournamentService.create({
@@ -70,6 +100,7 @@ export function TournamentsPage() {
         participantCapacity: Number(capacity),
         minimumElo: Number(minimumElo),
         mapId,
+        mapName: selectedMap.gameName,
         civilizationMode,
         startsAt: new Date(beginsAt).toISOString(),
         password: createPassword || undefined
@@ -143,18 +174,14 @@ export function TournamentsPage() {
   }
 
   async function readyForTournamentMatch(tournament: Tournament) {
-    const map = enabledMapCatalogEntries.find((candidate) => candidate.id === tournament.mapId);
-    if (!map) {
-      notify("Tournament match could not be started.", "danger", { detail: "The tournament map is no longer available." });
-      return;
-    }
+    const catalogMap = enabledMapCatalogEntries.find((candidate) => candidate.id === tournament.mapId);
     await startQueue({
       id: `tournament:${tournament.id}`,
       name: `${tournament.name} Tournament`,
       description: "Single-elimination tournament match.",
       format: "1v1",
       ruleset: "Random Map",
-      mapPool: [{ id: map.id, name: map.name, style: map.style, thumbnailUrl: "" }],
+      mapPool: [{ id: tournament.mapId, name: tournament.mapName, style: catalogMap?.style ?? "open", thumbnailUrl: "" }],
       civilizationPreference: tournament.civilizationMode === "pick"
         ? { mode: "pick", civilization: matchCivilization }
         : { mode: "random" },
@@ -199,6 +226,7 @@ export function TournamentsPage() {
           pending={pendingAction === `entry:${selectedTournament.id}`}
           cancelling={cancelling}
           queueStatus={state.queueStatus}
+          mapDisplayName={localizeAoe2Name(selectedTournament.mapName)}
           selectedCivilization={matchCivilization}
           joinPassword={joinPassword}
           spectatingUri={pendingAction?.startsWith("spectate:") ? pendingAction.slice("spectate:".length) : undefined}
@@ -245,7 +273,9 @@ export function TournamentsPage() {
             <label>Begins<input type="datetime-local" value={beginsAt} onChange={(event) => setBeginsAt(event.target.value)} /></label>
             <ThemedSelect label="Participants" value={capacity} onChange={setCapacity} options={[8, 16, 32, 64].map((count) => ({ value: String(count), label: `${count} players` }))} />
             <label>Minimum Elo<input min="0" max="5000" step="50" type="number" value={minimumElo} onChange={(event) => setMinimumElo(event.target.value)} /></label>
-            <ThemedSelect label="Map" value={mapId} onChange={setMapId} options={enabledMapCatalogEntries.map((map) => ({ value: map.id, label: map.name }))} />
+            <ThemedSelect label="Map" value={mapId} onChange={setMapId} options={tournamentMaps
+              .map((map) => ({ value: map.id, label: localizeAoe2Name(map.gameName) }))
+              .sort((left, right) => left.label.localeCompare(right.label))} />
           </div>
           <label className="tournament-create-password"><span>Tournament password <small>Optional</small></span><input type="password" maxLength={64} autoComplete="new-password" value={createPassword} onChange={(event) => setCreatePassword(event.target.value)} /></label>
           <fieldset className="tournament-civ-fieldset">
@@ -279,7 +309,7 @@ export function TournamentsPage() {
           {tournaments.map((tournament, index) => (
             <button className="tournament-row" key={tournament.id} type="button" onClick={() => setSelectedTournamentId(tournament.id)}>
               <div className="tournament-identity"><span className="tournament-emblem"><Trophy size={18} /></span><span><strong>{tournament.name}</strong><small>{index === 0 ? "Next tournament" : `Hosted by ${tournament.creatorDisplayName}`}</small></span></div>
-              <div><strong>{tournament.mapName}</strong><small>Fixed map</small></div>
+              <div><strong>{localizeAoe2Name(tournament.mapName)}</strong><small>Fixed map</small></div>
               <div><strong>{tournament.civilizationMode === "pick" ? "Pick civilizations" : "Random civilizations"}</strong><small>{tournamentAccessLabel(tournament)}</small></div>
               <div className="tournament-player-count"><Users size={16} /><span><strong>{tournament.entries.length}/{tournament.participantCapacity}</strong><small>{Math.max(0, tournament.participantCapacity - tournament.entries.length)} spots left</small></span></div>
               <div className="tournament-begins"><strong>{tournament.status === "started" ? "In progress" : tournament.status === "completed" ? "Complete" : formatCountdown(Date.parse(tournament.startsAt) - now)}</strong><small>{formatStartTime(tournament.startsAt)}</small></div>
@@ -320,7 +350,7 @@ function TournamentCancelConfirmation({ tournament, pending, onDismiss, onConfir
   );
 }
 
-function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, cancelling, queueStatus, selectedCivilization, joinPassword, spectatingUri, civilizationOptions, onCivilizationChange, onJoinPasswordChange, onBack, onToggleJoin, onReady, onWatch, onCancel }: {
+function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRating, pending, cancelling, queueStatus, mapDisplayName, selectedCivilization, joinPassword, spectatingUri, civilizationOptions, onCivilizationChange, onJoinPasswordChange, onBack, onToggleJoin, onReady, onWatch, onCancel }: {
   tournament: Tournament;
   now: number;
   currentPlayerId: string;
@@ -328,6 +358,7 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
   pending: boolean;
   cancelling: boolean;
   queueStatus: string;
+  mapDisplayName: string;
   selectedCivilization: string;
   joinPassword: string;
   spectatingUri?: string;
@@ -364,7 +395,7 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           <h2>{tournament.name}</h2>
           <p>Win your match to advance. One loss eliminates you from the tournament.</p>
           <div className="tournament-detail-facts">
-            <div><MapIcon size={18} /><span><small>Map</small><strong>{tournament.mapName}</strong></span></div>
+            <div><MapIcon size={18} /><span><small>Map</small><strong>{mapDisplayName}</strong></span></div>
             <div><Shield size={18} /><span><small>Civilizations</small><strong>{tournament.civilizationMode === "pick" ? "Players pick" : "Random"}</strong></span></div>
             <div><Swords size={18} /><span><small>Minimum Elo</small><strong>{tournament.minimumElo > 0 ? tournament.minimumElo : "Open"}</strong></span></div>
             <div><Users size={18} /><span><small>Entrants</small><strong>{tournament.entries.length}/{tournament.participantCapacity}</strong></span></div>

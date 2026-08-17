@@ -66,6 +66,7 @@ export interface CreateTournamentInput {
   participantCapacity: number;
   minimumElo: number;
   mapId: string;
+  mapName: string;
   startsAt: string;
   password?: string;
 }

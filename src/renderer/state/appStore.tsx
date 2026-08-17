@@ -1068,7 +1068,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   getLobbyMapName(acceptedSession.selectedMap),
                   acceptedSession.queue.format === "team"
                     ? ((acceptedSession.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
-                    : 2
+                    : 2,
+                  "map",
+                  acceptedSession.matchType === "tournament" ? "tournament" : "ranked"
                 );
               });
             void prepareLobby(acceptedSession);
@@ -2146,7 +2148,7 @@ function delayForLobbyInput(milliseconds: number): Promise<void> {
 }
 
 function getLobbyMapName(map?: MapDefinition): string {
-  return (map && getCatalogMap(map.id)?.gameMapName) ?? mapCatalog.maps[0].gameMapName;
+  return (map && (getCatalogMap(map.id)?.gameMapName ?? map.name)) ?? mapCatalog.maps[0].gameMapName;
 }
 
 function isCustomLobbyMap(map?: MapDefinition): boolean {

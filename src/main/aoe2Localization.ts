@@ -5,6 +5,7 @@ import { app } from "electron";
 import { aoe2Languages, isAoe2LanguageId } from "../shared/aoe2Languages.js";
 import { civilizations } from "../shared/civilizations.js";
 import { enabledMapCatalogEntries } from "../shared/mapCatalog.js";
+import { builtInMapNameFromFile, isSelectableBuiltInMapFile } from "../shared/builtInMaps.js";
 import type { Aoe2Localization } from "../shared/contracts/localization.js";
 import civBonuses from "../shared/civBonuses.json" with { type: "json" };
 
@@ -46,6 +47,17 @@ function parseStrings(text: string): Map<string, string> {
     if (match) result.set(match[1], match[2].replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\r/g, "").replace(/\\t/g, " ").trim());
   }
   return result;
+}
+
+async function installedBuiltInMapNames(gamePath: string): Promise<string[]> {
+  try {
+    const root = join(gamePath, "resources", "_common", "drs", "gamedata_x2");
+    return (await readdir(root, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && isSelectableBuiltInMapFile(entry.name))
+      .map((entry) => builtInMapNameFromFile(entry.name));
+  } catch {
+    return [];
+  }
 }
 
 async function languageEntries(logPath: string): Promise<number[]> {
@@ -114,22 +126,42 @@ export async function loadAoe2Localization(gamePath: string, currentSessionOnly 
     ]);
     const english = parseStrings(englishText);
     const localized = parseStrings(localizedText);
+    const builtInMapNames = await installedBuiltInMapNames(gamePath);
     const wanted = new Set<string>([
       ...civilizations,
       "Random", "Full Random", "Mirror",
+      ...builtInMapNames,
       ...enabledMapCatalogEntries.filter((map) => !map.isCustomMap).flatMap((map) => [map.name, map.gameMapName])
     ]);
     const englishLookupAliases: Record<string, string> = {
       // Empire League's canonical/server name is plural; AoE2's UI string is singular in English.
       Mayans: "Maya"
     };
+    const normalizeLookup = (value: string) => value.toLocaleLowerCase("en").replace(/[^a-z0-9]+/g, "");
     const keyByEnglish = new Map<string, string>();
-    for (const [key, value] of english) if (wanted.has(value) && !keyByEnglish.has(value)) keyByEnglish.set(value, key);
+    for (const [key, value] of english) {
+      const normalized = normalizeLookup(value);
+      if (!keyByEnglish.has(normalized)) keyByEnglish.set(normalized, key);
+    }
     const names: Record<string, string> = {};
     for (const canonical of wanted) {
       const lookupName = englishLookupAliases[canonical] ?? canonical;
-      const key = keyByEnglish.get(lookupName) ?? [...english].find(([, value]) => value === lookupName)?.[0];
-      names[canonical] = (key && localized.get(key)) || canonical;
+      const key = keyByEnglish.get(normalizeLookup(lookupName));
+      const directTranslation = key ? localized.get(key) : undefined;
+      if (directTranslation) {
+        names[canonical] = directTranslation;
+        continue;
+      }
+      const descriptionEntry = [...english].find(([, value]) => {
+        const separator = value.match(/\s[-–—]\s/);
+        return separator?.index !== undefined
+          && normalizeLookup(value.slice(0, separator.index)) === normalizeLookup(lookupName);
+      });
+      const translatedDescription = descriptionEntry ? localized.get(descriptionEntry[0]) : undefined;
+      const separator = translatedDescription?.match(/\s[-–—]\s/);
+      names[canonical] = translatedDescription && separator?.index !== undefined
+        ? translatedDescription.slice(0, separator.index).trim()
+        : canonical;
     }
     const mapDescriptions: Record<string, string> = {};
     for (const map of enabledMapCatalogEntries.filter((entry) => !entry.isCustomMap)) {

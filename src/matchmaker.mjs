@@ -57,6 +57,7 @@ import { getTopAoe2Streams } from "./twitch-streams.mjs";
 import { adminDashboardHtml, adminLoginHtml } from "./admin-dashboard.mjs";
 import { tournamentSpectatorUri } from "./tournament-spectator.mjs";
 import { createTournamentChatStore } from "./tournament-chat.mjs";
+import { tournamentMapFromInput } from "./tournament-map.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -1128,7 +1129,7 @@ async function tryLaunchTournamentMatch(tournamentMatchId) {
   if (!guest) return;
   const selectedMap = host.queue.mapPool[0];
   const catalogMap = publicMapCatalog.maps.find((map) => map.id === selectedMap.id);
-  if (!catalogMap) throw new TournamentOperationError("The tournament map is no longer available.");
+  const mapGroupId = catalogMap?.groupId ?? null;
   const assignments = new Map([
     [host.id, { slot: 1, team: 1 }],
     [guest.id, { slot: 2, team: 2 }]
@@ -1152,12 +1153,12 @@ async function tryLaunchTournamentMatch(tournamentMatchId) {
     resultReports: new Map(),
     resultResolved: false,
     mapCatalogVersion: publicMapCatalog.version,
-    mapGroupId: catalogMap.groupId,
+    mapGroupId,
     civilizationPreferences: new Map(participants.map((participant) => [
       participant.id,
       rollCivilizationPreference(
         participant.queue.civilizationPreference,
-        catalogMap.groupId,
+        mapGroupId,
         [],
         Math.random
       )
@@ -1515,7 +1516,7 @@ async function handleRequest(request, response) {
       if (civilizationMode !== "pick" && civilizationMode !== "random") {
         return send(response, 400, { error: "Civilization mode must be pick or random." });
       }
-      const map = publicMapCatalog.maps.find((candidate) => candidate.id === body.mapId);
+      const map = tournamentMapFromInput(body, publicMapCatalog.maps);
       if (!map) return send(response, 400, { error: "Choose an available tournament map." });
       const startsAtMs = Date.parse(String(body.startsAt ?? ""));
       if (!Number.isFinite(startsAtMs) || startsAtMs <= Date.now()) {
@@ -2107,7 +2108,6 @@ async function handleRequest(request, response) {
         try {
           tournamentContext = await readyTournamentMatch(body.queue.tournamentId, authenticatedPlayer.id);
           const catalogMap = publicMapCatalog.maps.find((map) => map.id === tournamentContext.mapId);
-          if (!catalogMap) throw new TournamentOperationError("The tournament map is no longer available.");
           let civilizationPreference;
           if (tournamentContext.civilizationMode === "pick") {
             civilizationPreference = normalizeCivilizationPreference(body.queue.civilizationPreference);
@@ -2117,19 +2117,25 @@ async function handleRequest(request, response) {
           } else {
             civilizationPreference = { mode: "random" };
           }
-          const queue = normalizeQueueMapPreferences({
+          const queueInput = {
             id: `tournament:${tournamentContext.tournamentId}`,
             name: `${tournamentContext.tournamentName} Tournament`,
             description: "Single-elimination tournament match.",
             format: "1v1",
             ruleset: "Random Map",
-            mapPool: [{ id: catalogMap.id }],
+            mapPool: [{
+              id: tournamentContext.mapId,
+              name: tournamentContext.mapName,
+              style: catalogMap?.style ?? "open",
+              thumbnailUrl: ""
+            }],
             civilizationPreference,
             ranked: false,
             estimatedWaitSeconds: 0,
             playersSearching: 0,
             tournamentId: tournamentContext.tournamentId
-          });
+          };
+          const queue = catalogMap ? normalizeQueueMapPreferences(queueInput) : queueInput;
           delete queue.ignoredMapIds;
           tournamentTicket = {
             id: `ticket-${randomUUID()}`,

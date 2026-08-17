@@ -158,7 +158,7 @@ export function CustomPage() {
             </div>
           </div>
           {contentKind === "map"
-            ? <ContentSelect label="Map" items={catalog.maps.filter((item) => item.kind === "map")} value={mapId} onChange={setMapId} />
+            ? <ContentSelect label="Map" items={catalog.maps.filter((item) => item.kind === "map")} value={mapId} onChange={setMapId} displayName={(item) => item.builtIn ? localizeAoe2Name(item.gameName) : item.name} />
             : <ContentSelect label="Scenario" items={catalog.maps.filter((item) => item.kind === "scenario")} value={scenarioId} onChange={setScenarioId} />}
           <ContentSelect label="Data mod (optional)" items={catalog.dataMods} value={dataModId} onChange={setDataModId} />
           {[...catalog.maps, ...catalog.dataMods].some((item) => !item.enabled) && <small className="custom-disabled-mod-hint">Disabled mods must be enabled at the mods interface inside the game.</small>}
@@ -193,13 +193,13 @@ export function CustomPage() {
   );
 }
 
-function ContentSelect({ label, items, value, onChange }: { label: string; items: LocalCustomContent[]; value: string; onChange: (value: string) => void }) {
+function ContentSelect({ label, items, value, onChange, displayName = (item) => item.name }: { label: string; items: LocalCustomContent[]; value: string; onChange: (value: string) => void; displayName?: (item: LocalCustomContent) => string }) {
   const orderedItems = [
     ...items.filter((item) => item.enabled && !item.builtIn),
     ...items.filter((item) => !item.enabled && !item.builtIn),
     ...items.filter((item) => item.builtIn)
   ];
-  return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${item.name}${item.enabled ? "" : ` (Disabled: ${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
+  return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${displayName(item)}${item.enabled ? "" : ` (Disabled: ${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
 }
 
 export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {

@@ -20,6 +20,7 @@ import {
 } from "../aoe2MapInstaller.js";
 import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
 import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings } from "../../shared/contracts/customLobby.js";
+import { builtInMapNameFromFile, isSelectableBuiltInMapFile } from "../../shared/builtInMaps.js";
 import {
   aoe2UiManifest,
   civilizationDesignPoint,
@@ -118,7 +119,7 @@ let returnToMenuWatchGeneration = 0;
 let replayDetectionGeneration = 0;
 const builtInGameMapNames = new Set<string>();
 let createLobbySequenceCounter = 0;
-let activeCreateLobbySequence: { id: number; context: "ranked" | "custom" } | undefined;
+let activeCreateLobbySequence: { id: number; context: "ranked" | "tournament" | "custom" } | undefined;
 
 function startLoadingScreenWatch(processId: number, sender: WebContents): boolean {
   if (loadingScreenWatchers.has(sender)) return true;
@@ -149,15 +150,6 @@ function startLoadingScreenWatch(processId: number, sender: WebContents): boolea
 
 function normalizeContentName(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
-function builtInMapName(fileName: string) {
-  return basename(fileName, extname(fileName))
-    .replace(/[_-]+/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function selectScenarioVariants(
@@ -355,9 +347,8 @@ async function scanLocalCustomContent() {
       const entries = await readdir(gameMapsRoot, { withFileTypes: true });
       roots.push(gameMapsRoot);
       for (const entry of entries) {
-        if (!entry.isFile() || !/\.rms2?$/i.test(entry.name)) continue;
-        if (/^(?:br[ _-]|ctr[ _-]|em[ _-]|qs[ _-]|real[ _-]world[ _-]|special[ _-]map[ _-]|network[ _-]test)/i.test(entry.name)) continue;
-        const name = builtInMapName(entry.name);
+        if (!entry.isFile() || !isSelectableBuiltInMapFile(entry.name)) continue;
+        const name = builtInMapNameFromFile(entry.name);
         if (add("map", join(gameMapsRoot, entry.name), "AoE2 built-in maps", name, name, { builtIn: true })) {
           builtInGameMapNames.add(normalizeContentName(name));
         }
@@ -3235,7 +3226,7 @@ export function registerGameHandlers(): void {
     mapName: string,
     playerCount = 2,
     contentKind: "map" | "scenario" = "map",
-    automationRequest: "ranked" | "custom" | { context: "custom"; gameSettings: CustomLobbyGameSettings } = "ranked",
+    automationRequest: "ranked" | "tournament" | "custom" | { context: "custom"; gameSettings: CustomLobbyGameSettings } = "ranked",
     requestedGameSettings?: CustomLobbyGameSettings
   ) => {
     stopTabTest();
@@ -3244,6 +3235,7 @@ export function registerGameHandlers(): void {
     const automationContext = typeof automationRequest === "object" ? automationRequest.context : automationRequest;
     requestedGameSettings = typeof automationRequest === "object" ? automationRequest.gameSettings : requestedGameSettings;
     const isCustomAutomation = automationContext === "custom";
+    const isTournamentAutomation = automationContext === "tournament";
     if (process.platform !== "win32") {
       return { sent: false, message: "Lobby automation is only supported on Windows." };
     }
@@ -3567,8 +3559,9 @@ export function registerGameHandlers(): void {
           }
         }
         await delay(mapPicker.openSettleMs);
-        const isBuiltInMap = builtInGameMapNames.has(normalizeContentName(normalizedMapName));
-        const isCustomMap = !isBuiltInMap && (!knownMap || (mapPicker.customMapNames as readonly string[]).includes(normalizedMapName));
+        const knownCustomMap = (mapPicker.customMapNames as readonly string[]).includes(normalizedMapName);
+        const isBuiltInMap = !knownCustomMap && (isTournamentAutomation || builtInGameMapNames.has(normalizeContentName(normalizedMapName)));
+        const isCustomMap = !isBuiltInMap && (!knownMap || knownCustomMap);
         const mapStyle = isCustomMap ? "Custom" : "Standard";
         const mapStylePoint = isCustomMap ? mapPicker.customStylePoint : mapPicker.standardStylePoint;
         await clickStep("Open Map Style", mapPicker.mapStylePoint[0], mapPicker.mapStylePoint[1], { synchronous: true });
