@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { app, safeStorage } from "electron";
 import WebSocket from "ws";
 import type { ObsIntegrationStatus, ObsOutputStatus, ObsSetupResult } from "../shared/contracts/electronApi.js";
@@ -8,6 +9,7 @@ const obsUrl = "ws://127.0.0.1:4455";
 const sceneName = "Empire League";
 const appSourceName = "Empire League - App";
 const gameSourceName = "Empire League - Age of Empires II";
+const appCaptureExecutable = basename(process.execPath);
 let desiredCapture: "app" | "game" = "app";
 
 type JsonObject = Record<string, unknown>;
@@ -127,7 +129,7 @@ export async function setupObs(password?: string): Promise<ObsSetupResult> {
       capture_cursor: true,
       anti_cheat_hook: true
     });
-    const appReady = await ensureWindowTarget(client, appSourceName, "electron.exe");
+    const appReady = await ensureWindowTarget(client, appSourceName, appCaptureExecutable);
     await ensureAoe2CaptureTarget(client);
     await fitManagedSourcesToCanvas(client);
     await setSceneCapture(client, "app");
@@ -180,7 +182,7 @@ export async function setObsCaptureMode(mode: "app" | "game"): Promise<boolean> 
   try {
     await client.connect(await loadPassword());
     if (mode === "game" && !await ensureAoe2CaptureTarget(client)) return false;
-    if (mode === "app" && !await ensureWindowTarget(client, appSourceName, "electron.exe")) return false;
+    if (mode === "app" && !await ensureWindowTarget(client, appSourceName, appCaptureExecutable)) return false;
     await fitManagedSourcesToCanvas(client);
     await setSceneCapture(client, mode);
     return true;
@@ -217,7 +219,7 @@ async function readOutputStatus(client: ObsClient): Promise<ObsOutputStatus> {
   ]);
   const captureReady = desiredCapture === "game"
     ? await ensureAoe2CaptureTarget(client)
-    : await ensureWindowTarget(client, appSourceName, "electron.exe");
+    : await ensureWindowTarget(client, appSourceName, appCaptureExecutable);
   const streaming = Boolean(stream.outputActive);
   const recording = Boolean(record.outputActive);
   if (captureReady && (streaming || recording)) await setSceneCapture(client, desiredCapture);
@@ -248,7 +250,7 @@ async function readRawOutputStatus(client: ObsClient): Promise<{ streaming: bool
 async function prepareDesiredCapture(client: ObsClient): Promise<void> {
   const ready = desiredCapture === "game"
     ? await ensureAoe2CaptureTarget(client)
-    : await ensureWindowTarget(client, appSourceName, "electron.exe");
+    : await ensureWindowTarget(client, appSourceName, appCaptureExecutable);
   if (!ready) throw new Error("The active OBS capture window is not ready.");
   await fitManagedSourcesToCanvas(client);
   await setSceneCapture(client, desiredCapture);
