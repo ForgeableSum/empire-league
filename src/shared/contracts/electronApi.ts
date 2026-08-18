@@ -133,6 +133,8 @@ export interface ElectronGameApi {
   storeAuthToken(token: string): Promise<void>;
   clearAuthToken(): Promise<void>;
   alertMatchFound(showNotification: boolean): Promise<void>;
+  alertTournamentReady(tournamentName: string): Promise<void>;
+  onTournamentNotificationClicked(listener: () => void): () => void;
   isAppFocused(): Promise<boolean>;
   stopMatchFoundAlert(): Promise<void>;
   alertUnreadMessage(): Promise<void>;

@@ -111,6 +111,12 @@ const electronApi: ElectronGameApi = {
   storeAuthToken: (token) => ipcRenderer.invoke("auth:store-token", token),
   clearAuthToken: () => ipcRenderer.invoke("auth:clear-token"),
   alertMatchFound: (showNotification) => ipcRenderer.invoke("system:alert-match-found", showNotification),
+  alertTournamentReady: (tournamentName) => ipcRenderer.invoke("system:alert-tournament-ready", tournamentName),
+  onTournamentNotificationClicked: (listener) => {
+    const handler = () => listener();
+    ipcRenderer.on("system:tournament-notification-clicked", handler);
+    return () => ipcRenderer.removeListener("system:tournament-notification-clicked", handler);
+  },
   isAppFocused: () => ipcRenderer.invoke("system:is-app-focused"),
   stopMatchFoundAlert: () => ipcRenderer.invoke("system:stop-match-found-alert"),
   alertUnreadMessage: () => ipcRenderer.invoke("system:alert-unread-message"),

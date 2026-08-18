@@ -50,6 +50,33 @@ export function registerSystemHandlers(): void {
       notification.show();
     }
   });
+  ipcMain.handle("system:alert-tournament-ready", async (event, tournamentName: string) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return;
+    const safeTournamentName = typeof tournamentName === "string"
+      ? tournamentName.trim().slice(0, 64)
+      : "Tournament";
+    if (!window.isFocused()) window.flashFrame(true);
+
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: "Tournament match ready",
+        body: `${safeTournamentName || "Your tournament"} is waiting for you. Ready up before the deadline.`,
+        silent: false,
+        timeoutType: "never"
+      });
+      notification.on("click", () => {
+        if (window.isDestroyed()) return;
+        if (window.isMinimized()) window.restore();
+        window.show();
+        window.moveTop();
+        window.focus();
+        window.flashFrame(false);
+        window.webContents.send("system:tournament-notification-clicked");
+      });
+      notification.show();
+    }
+  });
   ipcMain.handle("system:is-app-focused", async (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     return Boolean(window && !window.isDestroyed() && window.isVisible() && !window.isMinimized() && window.isFocused());

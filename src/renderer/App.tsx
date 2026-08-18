@@ -59,6 +59,10 @@ export function App() {
     notify("Message from Empire League", "info", { detail: message, durationMs: 15_000 });
   }), [notify]);
 
+  useEffect(() => window.electronApi?.onTournamentNotificationClicked(() => {
+    setPage("tournaments");
+  }), [setPage]);
+
   useEffect(() => {
     if (authStatus !== "authenticated") return () => undefined;
     const inspectTournament = (tournament: Awaited<ReturnType<typeof tournamentService.get>>) => {
@@ -74,9 +78,10 @@ export function App() {
         : readyMatch.playerTwoReady;
       if (playerReady) return;
       notifiedTournamentMatchesRef.current.add(notificationKey);
+      void window.electronApi?.alertTournamentReady(tournament.name).catch(() => undefined);
       notify("Your tournament match is ready.", "warning", {
         detail: `${tournament.name} is waiting for you. Ready up before the deadline.`,
-        durationMs: 15_000,
+        durationMs: 60_000,
         action: { label: "Open Tournament", run: () => setPage("tournaments") }
       });
     };
