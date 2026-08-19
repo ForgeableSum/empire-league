@@ -478,7 +478,7 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           <BellRing size={22} />
           <div>
             <strong>Be ready when the tournament begins</strong>
-            <p>Keep Empire League open and connected when the countdown reaches zero. When it is your turn to play, the app will alert you. Open that alert and click Ready for Match within 5 minutes or you will forfeit.</p>
+            <p>When the tourney begins, be sure to have Empire League open. If Empire League is minimized, it will automatically reopen. Click Ready for Match within 5 minutes or you will forfeit.</p>
           </div>
         </aside>
       )}

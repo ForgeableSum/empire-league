@@ -53,6 +53,15 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:alert-tournament-ready", async (event, tournamentId: string, tournamentName: string) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return;
+    focusMainWindow(window);
+    window.moveTop();
+    const focusDeadline = Date.now() + 2_000;
+    while (!window.isFocused() && Date.now() < focusDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      focusMainWindow(window);
+      window.moveTop();
+    }
+    if (!window.isFocused()) throw new Error("The Empire League window could not be focused for the match-found prompt.");
     const safeTournamentName = typeof tournamentName === "string"
       ? tournamentName.trim().slice(0, 64)
       : "Tournament";

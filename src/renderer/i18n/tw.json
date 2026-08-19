@@ -353,7 +353,7 @@
   "Joining and synchronizing the AoE2 lobby…": "正在加入並同步 AoE2 大廳...",
   "Just for fun": "只是為了好玩",
   "Keep automatic detection": "保持自動偵測",
-  "Keep Empire League open and connected when the countdown reaches zero. When it is your turn to play, the app will alert you. Open that alert and click Ready for Match within 5 minutes or you will forfeit.": "倒數歸零時，請讓 Empire League 保持開啟並連線。輪到你出賽時，應用程式會發出通知。請開啟通知，並在 5 分鐘內點擊「準備比賽」，否則將以棄權判負。",
+  "When the tourney begins, be sure to have Empire League open. If Empire League is minimized, it will automatically reopen. Click Ready for Match within 5 minutes or you will forfeit.": "錦標賽開始時，請確保 Empire League 已開啟。如果 Empire League 已最小化，它會自動重新開啟。請在 5 分鐘內點擊「準備比賽」，否則將以棄權判負。",
   "Korean": "韓語",
   "L{0}": "左{0}",
   "Language selected inside AoE2": "AoE2內部所選的語言",
