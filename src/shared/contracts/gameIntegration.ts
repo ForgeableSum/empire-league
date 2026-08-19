@@ -15,6 +15,23 @@ export interface GameProcessStatus {
   owned: boolean;
 }
 
+export type Aoe2AutomationScreenState =
+  | "main-menu"
+  | "main-menu-news"
+  | "multiplayer-menu"
+  | "create-lobby-dialog"
+  | "lobby-room"
+  | "content-picker"
+  | "loading-screen"
+  | "unknown";
+
+export interface Aoe2AutomationPreflightResult extends GameProcessStatus {
+  phase: "queue-entry" | "host-start";
+  captureReady: boolean;
+  state: Aoe2AutomationScreenState;
+  detail: string;
+}
+
 export interface GameCloseResult {
   closed: boolean;
   running: boolean;

@@ -9,6 +9,7 @@ import type {
   GameInstallationStatus,
   GameLaunchResult,
   GameProcessStatus,
+  Aoe2AutomationPreflightResult,
   MouseTestPointerInfo,
   OpenLobbyResult
 } from "./gameIntegration.js";
@@ -85,6 +86,7 @@ export interface ElectronGameApi {
   disableEnabledUiMods(): Promise<DisableUiModsResult>;
   detectAoe2Installation(): Promise<GameInstallationStatus>;
   detectAoe2Process(): Promise<GameProcessStatus>;
+  inspectAoe2AutomationState(phase: "queue-entry" | "host-start"): Promise<Aoe2AutomationPreflightResult>;
   runSteamFamilyProbe(expectedSteamId?: string): Promise<SteamFamilyProbeResult>;
   closeAoe2(force: boolean): Promise<GameCloseResult>;
   launchAoe2(): Promise<GameLaunchResult>;

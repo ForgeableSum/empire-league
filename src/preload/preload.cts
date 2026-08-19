@@ -14,6 +14,7 @@ const electronApi: ElectronGameApi = {
   disableEnabledUiMods: () => ipcRenderer.invoke("game:disable-enabled-ui-mods"),
   detectAoe2Installation: () => ipcRenderer.invoke("game:detect-installation"),
   detectAoe2Process: () => ipcRenderer.invoke("game:detect-process"),
+  inspectAoe2AutomationState: (phase) => ipcRenderer.invoke("game:inspect-automation-state", phase),
   runSteamFamilyProbe: (expectedSteamId) => ipcRenderer.invoke("game:probe-steam-family", expectedSteamId),
   closeAoe2: (force) => ipcRenderer.invoke("game:close", force),
   launchAoe2: () => ipcRenderer.invoke("game:launch"),

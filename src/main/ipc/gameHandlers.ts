@@ -2826,6 +2826,59 @@ export function registerGameHandlers(): void {
     };
   });
 
+  ipcMain.handle("game:inspect-automation-state", async (event, requestedPhase: "queue-entry" | "host-start") => {
+    const phase = requestedPhase === "host-start" ? "host-start" : "queue-entry";
+    const processStatus = await prepareHiddenAoe2WindowBehind();
+    const owned = Boolean(processStatus.pid && processStatus.pid === ownedAoe2Pid);
+    const emitPreflight = (detail: string) => {
+      const message = `PREFLIGHT_STATE|Phase=${phase}|${detail}`;
+      console.info(`[AoE2 automation] ${message}`);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+    };
+    if (!processStatus.running || !processStatus.pid || !processStatus.windowReady) {
+      const detail = `Running=${processStatus.running}|Pid=${processStatus.pid ?? "none"}`
+        + `|WindowReady=${processStatus.windowReady === true}|Owned=${owned}|CaptureReady=False|State=unknown`;
+      emitPreflight(detail);
+      return {
+        ...processStatus,
+        owned,
+        phase,
+        captureReady: false,
+        state: "unknown" as const,
+        detail
+      };
+    }
+    const gameWindow = getAoe2NativeWindowHandle(processStatus.pid);
+    if (!gameWindow) {
+      const detail = `Running=True|Pid=${processStatus.pid}|WindowReady=True|Owned=${owned}`
+        + "|CaptureReady=False|State=unknown|Reason=WindowHandleUnavailable";
+      emitPreflight(detail);
+      return {
+        ...processStatus,
+        owned,
+        phase,
+        captureReady: false,
+        state: "unknown" as const,
+        detail
+      };
+    }
+    const captureReady = await waitForFreshAoe2WindowCapture(gameWindow, 3_000);
+    const screen = captureReady
+      ? readAoe2HostSetupState(processStatus.pid)
+      : { state: "unknown" as const, detail: describeAoe2WindowCapture(gameWindow) };
+    const detail = `Running=True|Pid=${processStatus.pid}|WindowReady=True|Owned=${owned}`
+      + `|CaptureReady=${captureReady}|State=${screen.state}|${screen.detail}`;
+    emitPreflight(detail);
+    return {
+      ...processStatus,
+      owned,
+      phase,
+      captureReady,
+      state: screen.state,
+      detail
+    };
+  });
+
   ipcMain.handle("game:probe-steam-family", async (_event, expectedSteamId?: string) => {
     return runSteamFamilyProbe(expectedSteamId);
   });

@@ -4,7 +4,7 @@ import { aoe2UiManifest } from "../../shared/aoe2UiManifest";
 import { isAoe2LanguageId } from "../../shared/aoe2Languages";
 import type { MatchResult } from "../../shared/contracts/matches";
 import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runtimeConfig";
-import type { GameInputResult } from "../../shared/contracts/gameIntegration";
+import type { Aoe2AutomationPreflightResult, GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MapDefinition, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
 import type { PlayerProfile } from "../../shared/contracts/players";
@@ -669,30 +669,57 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       if (!window.electronApi) throw new Error("The Electron game integration bridge is unavailable.");
 
+      log(`AOE2_PROCESS_PREP|Purpose=${purpose}|Event=Started`);
+
       const installation = await window.electronApi.detectAoe2Installation();
+      log(
+        `AOE2_PROCESS_PREP|Purpose=${purpose}|Event=InstallationDetected`
+        + `|Installed=${installation.installed}|PathAvailable=${Boolean(installation.path)}`
+      );
       if (!installation.installed || !installation.path) {
         throw new Error(installation.message ?? "AoE2 DE was not detected.");
       }
 
       const existingProcess = await window.electronApi.detectAoe2Process();
+      log(
+        `AOE2_PROCESS_PREP|Purpose=${purpose}|Event=ProcessDetected|Running=${existingProcess.running}`
+        + `|Pid=${existingProcess.pid ?? "none"}|WindowReady=${existingProcess.windowReady === true}`
+        + `|Owned=${existingProcess.owned}`
+      );
       if (existingProcess.running && existingProcess.owned) {
         if (!existingProcess.windowReady) {
           // The managed window is intentionally hidden while Empire League is
           // minimized. The main-process launch guard reveals that same window
           // behind Electron; it does not send another Steam launch request.
           const resumed = await window.electronApi.launchAoe2();
-          if (!resumed.launched || !(await waitForAoe2Window(5_000))) {
+          const windowReady = resumed.launched && await waitForAoe2Window(5_000);
+          log(
+            `AOE2_PROCESS_PREP|Purpose=${purpose}|Event=OwnedWindowResume`
+            + `|LaunchAccepted=${resumed.launched}|WindowReady=${windowReady}`
+          );
+          if (!windowReady) {
             throw new Error("The running AoE2 window could not be prepared for automation.");
           }
         }
         setState((previous) => ({ ...previous, gameStatus: "running" }));
         scheduleAoe2LocalizationRefresh();
+        log(`AOE2_PROCESS_PREP|Purpose=${purpose}|Event=Complete|Action=ReusedOwnedProcess|Pid=${existingProcess.pid ?? "none"}`);
         return true;
       }
       if (existingProcess.running && !existingProcess.owned) {
+        log(`AOE2_PROCESS_PREP|Purpose=${purpose}|Event=UnownedCloseStarted|Pid=${existingProcess.pid ?? "none"}`);
         const gracefulClose = await window.electronApi.closeAoe2(false);
+        log(
+          `AOE2_PROCESS_PREP|Purpose=${purpose}|Event=UnownedGracefulClose`
+          + `|Closed=${gracefulClose.closed}|Running=${gracefulClose.running}`
+        );
         if (!gracefulClose.closed) {
           const forcedClose = await window.electronApi.closeAoe2(true);
+          log(
+            `AOE2_PROCESS_PREP|Purpose=${purpose}|Event=UnownedForcedClose`
+            + `|Closed=${forcedClose.closed}|Running=${forcedClose.running}`
+            + `|Message=${forcedClose.message ?? "none"}`
+          );
           if (!forcedClose.closed) {
             throw new Error(forcedClose.message ?? "The existing AoE2 process could not be closed.");
           }
@@ -708,13 +735,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
 
       const ready = await launchAoe2WithRetry((detail) => {
+        log(`AOE2_PROCESS_PREP|Purpose=${purpose}|Event=LaunchWait|Detail=${detail}`);
         if (loadingNotificationId) updateNotification(loadingNotificationId, { detail });
       });
+      log(`AOE2_PROCESS_PREP|Purpose=${purpose}|Event=LaunchWindowResult|Ready=${ready}`);
       if (!ready) throw new Error("AoE2 started, but its game window did not become ready in time.");
 
       updateNotification(loadingNotificationId, { detail: "Finishing game startup." });
       scheduleAoe2LocalizationRefresh();
       await delayForStartup(aoe2PostWindowReadyDelayMs);
+      log(`AOE2_PROCESS_PREP|Purpose=${purpose}|Event=PostWindowSettleComplete|DelayMs=${aoe2PostWindowReadyDelayMs}`);
       setState((previous) => ({ ...previous, gameStatus: "running" }));
       updateNotification(loadingNotificationId, {
         message: "AoE2 DE is ready",
@@ -722,8 +752,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         detail: purpose === "custom" ? "Continuing with your custom game." : "Starting matchmaking.",
         durationMs: 3000
       });
+      log(`AOE2_PROCESS_PREP|Purpose=${purpose}|Event=Complete|Action=LaunchedFreshProcess`);
       return true;
     } catch (error) {
+      log(`AOE2_PROCESS_PREP|Purpose=${purpose}|Event=Failed|Reason=${error instanceof Error ? error.message : String(error)}`);
       if (loadingNotificationId) dismissNotificationById(loadingNotificationId);
       setState((previous) => ({ ...previous, gameStatus: "installed" }));
       notify(error instanceof Error ? error.message : "AoE2 DE could not be launched.", "danger");
@@ -740,6 +772,83 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
     return launchAoe2ForActivity(purpose);
+  }
+
+  async function waitForAutomationSafeScreen(
+    phase: "queue-entry" | "host-start",
+    timeoutMs = 10_000
+  ): Promise<{ ready: boolean; last?: Aoe2AutomationPreflightResult }> {
+    if (!window.electronApi) return { ready: true };
+    const deadline = Date.now() + timeoutMs;
+    let consecutiveSafeReads = 0;
+    let attempt = 0;
+    let last: Aoe2AutomationPreflightResult | undefined;
+    while (Date.now() < deadline) {
+      attempt += 1;
+      last = await window.electronApi.inspectAoe2AutomationState(phase);
+      const safe = last.captureReady && (last.state === "main-menu" || last.state === "main-menu-news");
+      consecutiveSafeReads = safe ? consecutiveSafeReads + 1 : 0;
+      log(
+        `AOE2_PREFLIGHT|Phase=${phase}|Attempt=${attempt}|Safe=${safe}`
+        + `|Consecutive=${consecutiveSafeReads}|Running=${last.running}|Pid=${last.pid ?? "none"}`
+        + `|Owned=${last.owned}|WindowReady=${last.windowReady === true}`
+        + `|CaptureReady=${last.captureReady}|State=${last.state}`
+      );
+      if (consecutiveSafeReads >= 2) return { ready: true, last };
+      if (last.captureReady && !["main-menu", "main-menu-news", "loading-screen", "unknown"].includes(last.state)) {
+        log(`AOE2_PREFLIGHT|Phase=${phase}|Decision=Restart|Reason=UnsafeStableState|State=${last.state}`);
+        return { ready: false, last };
+      }
+      await delayForStartup(500);
+    }
+    log(
+      `AOE2_PREFLIGHT|Phase=${phase}|Decision=Restart|Reason=VerificationTimeout`
+      + `|LastState=${last?.state ?? "unavailable"}|LastCaptureReady=${last?.captureReady ?? false}`
+    );
+    return { ready: false, last };
+  }
+
+  async function prepareAoe2ForAutomation(phase: "queue-entry" | "host-start"): Promise<boolean> {
+    if (isPreviewMode || !window.electronApi) return true;
+    log(`AOE2_PREFLIGHT|Phase=${phase}|Event=Started`);
+    const initial = await waitForAutomationSafeScreen(phase);
+    if (initial.ready) {
+      log(`AOE2_PREFLIGHT|Phase=${phase}|Event=Complete|Recovery=None|State=${initial.last?.state ?? "main-menu"}`);
+      return true;
+    }
+
+    log(
+      `AOE2_PREFLIGHT|Phase=${phase}|Event=RecoveryStarted|Action=ForceCloseAndRelaunch`
+      + `|State=${initial.last?.state ?? "unavailable"}|Pid=${initial.last?.pid ?? "none"}`
+    );
+    const closed = await window.electronApi.closeAoe2(true).catch((error) => ({
+      closed: false,
+      running: true,
+      message: error instanceof Error ? error.message : String(error)
+    }));
+    log(
+      `AOE2_PREFLIGHT|Phase=${phase}|Event=CloseComplete|Closed=${closed.closed}`
+      + `|Running=${closed.running}|Message=${closed.message ?? "none"}`
+    );
+    if (!closed.closed) {
+      notify("AoE2 could not be reset for matchmaking.", "danger", { detail: closed.message });
+      return false;
+    }
+
+    const launched = await launchAoe2ForActivity("matchmaking");
+    log(`AOE2_PREFLIGHT|Phase=${phase}|Event=RelaunchComplete|Ready=${launched}`);
+    if (!launched) return false;
+    const recovered = await waitForAutomationSafeScreen(phase, 15_000);
+    if (!recovered.ready) {
+      const state = recovered.last?.state ?? "unavailable";
+      log(`AOE2_PREFLIGHT|Phase=${phase}|Event=Failed|Reason=PostRelaunchState|State=${state}`);
+      notify("AoE2 did not reach a matchmaking-ready screen.", "danger", {
+        detail: `Detected screen: ${state}. Return to the main menu and try again.`
+      });
+      return false;
+    }
+    log(`AOE2_PREFLIGHT|Phase=${phase}|Event=Complete|Recovery=Relaunched|State=${recovered.last?.state ?? "main-menu"}`);
+    return true;
   }
 
   function log(message: string): void {
@@ -933,6 +1042,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         queueJoinInFlightRef.current = false;
         return;
       }
+      log(`AOE2_PREFLIGHT|Phase=queue-entry|Queue=${queue.id}|Event=Requested`);
+      if (!(await prepareAoe2ForAutomation("queue-entry"))) {
+        queueJoinInFlightRef.current = false;
+        return;
+      }
 
       if (ticketRef.current) {
         const staleTicketId = ticketRef.current;
@@ -1036,9 +1150,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             status: event.role === "host" ? "creating_lobby" as const : "waiting_for_opponent" as const
           };
           const setupEstimateMs = estimateLobbySetupMs(acceptedSession);
-          startRoomSetupWatchdog(event.role === "guest"
-            ? Math.max(roomSetupTimeoutMs, setupEstimateMs + roomSetupEstimateMarginMs)
-            : roomSetupTimeoutMs);
+          if (event.role === "guest") {
+            startRoomSetupWatchdog(Math.max(roomSetupTimeoutMs, setupEstimateMs + roomSetupEstimateMarginMs));
+          }
           matchedSessionRef.current = acceptedSession;
           startLobbyTimingAudit(acceptedSession, event.role === "host" ? "host" : "guest");
           setState((previous) => ({
@@ -1053,16 +1167,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }));
           log("Both players accepted");
           if (event.role === "host" && window.electronApi) {
-            void services.matchmaking.reportLobbySetupEstimate(
-              acceptedSession.id,
-              setupEstimateMs
-            ).catch((error: unknown) => {
-              log(`Could not synchronize lobby countdown: ${error instanceof Error ? error.message : "unknown error"}`);
-            });
             log("Assigned as host; waiting for AoE2 lobby automation to settle");
             lobbyAutomationRef.current = delayForLobbyInput(lobbySetupTiming.hostLobbyAutomationSettleMs)
-              .then(() => {
+              .then(async () => {
+                auditLobbyPhase("preflight-start");
+                setState((previous) => ({ ...previous, roomSetupMilestone: "Verifying AoE2 main menu" }));
+                const prepared = await prepareAoe2ForAutomation("host-start");
+                auditLobbyPhase(prepared ? "preflight-complete" : "preflight-failed");
+                if (!prepared) throw new Error("AoE2 could not be prepared at the main menu for lobby automation.");
+                void services.matchmaking.reportLobbySetupEstimate(
+                  acceptedSession.id,
+                  setupEstimateMs
+                ).catch((error: unknown) => {
+                  log(`Could not synchronize lobby countdown: ${error instanceof Error ? error.message : "unknown error"}`);
+                });
                 startRoomSetupWatchdog();
+                setState((previous) => ({ ...previous, roomSetupMilestone: "Setting up lobby room" }));
                 log("Starting AoE2 lobby automation");
                 return window.electronApi!.runAoe2CreateLobbySequence(
                   getLobbyMapName(acceptedSession.selectedMap),
