@@ -15,7 +15,10 @@ export const lobbySetupTiming = {
   multiplayerMenuMs: 1000,
   hostGameMenuMs: 2000,
   lobbyCreationMs: 8000,
-  resetFocusMs: 250,
+  // Opening Reset Settings can keep AoE2's window thread busy for over a
+  // second on high-resolution clients. Let the confirmation dialog settle
+  // before dispatching Enter so the synchronous key message does not time out.
+  resetFocusMs: 1_000,
   resetConfirmationMs: 1000,
   clipboardReadMs: 800,
   lobbyMetadataMs: 700,

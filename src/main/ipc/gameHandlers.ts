@@ -3582,15 +3582,13 @@ export function registerGameHandlers(): void {
         emitLog(`MAP_SELECT|Complete=True|Map=${normalizedMapName}`);
       }
       let contentLobbyState = readAoe2HostSetupState(process.pid);
-      if (isCustomAutomation) {
-        const contentLobbyDeadline = Date.now() + 15_000;
-        while (contentLobbyState.state !== "lobby-room" && Date.now() < contentLobbyDeadline) {
-          if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
-          await delay(250);
-          contentLobbyState = readAoe2HostSetupState(process.pid);
-        }
-        emitLog(`STEP_VERIFY|Content Selection|Expected=lobby-room|${contentLobbyState.detail}`);
+      const contentLobbyDeadline = Date.now() + 15_000;
+      while (contentLobbyState.state !== "lobby-room" && Date.now() < contentLobbyDeadline) {
+        if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
+        await delay(250);
+        contentLobbyState = readAoe2HostSetupState(process.pid);
       }
+      emitLog(`STEP_VERIFY|Content Selection|Expected=lobby-room|${contentLobbyState.detail}`);
       if (contentLobbyState.state !== "lobby-room") {
         throw new Error(`${normalizedMapName} selection did not return to the lobby room.`);
       }
