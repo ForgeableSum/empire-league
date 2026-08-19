@@ -129,7 +129,7 @@ export async function setupObs(password?: string): Promise<ObsSetupResult> {
       capture_cursor: true,
       anti_cheat_hook: true
     });
-    const appReady = await ensureWindowTarget(client, appSourceName, appCaptureExecutable);
+    const appReady = await ensureAppCaptureTarget(client);
     await ensureAoe2CaptureTarget(client);
     await fitManagedSourcesToCanvas(client);
     await setSceneCapture(client, "app");
@@ -182,7 +182,7 @@ export async function setObsCaptureMode(mode: "app" | "game"): Promise<boolean> 
   try {
     await client.connect(await loadPassword());
     if (mode === "game" && !await ensureAoe2CaptureTarget(client)) return false;
-    if (mode === "app" && !await ensureWindowTarget(client, appSourceName, appCaptureExecutable)) return false;
+    if (mode === "app" && !await ensureAppCaptureTarget(client)) return false;
     await fitManagedSourcesToCanvas(client);
     await setSceneCapture(client, mode);
     return true;
@@ -219,7 +219,7 @@ async function readOutputStatus(client: ObsClient): Promise<ObsOutputStatus> {
   ]);
   const captureReady = desiredCapture === "game"
     ? await ensureAoe2CaptureTarget(client)
-    : await ensureWindowTarget(client, appSourceName, appCaptureExecutable);
+    : await ensureAppCaptureTarget(client);
   const streaming = Boolean(stream.outputActive);
   const recording = Boolean(record.outputActive);
   if (captureReady && (streaming || recording)) await setSceneCapture(client, desiredCapture);
@@ -250,7 +250,7 @@ async function readRawOutputStatus(client: ObsClient): Promise<{ streaming: bool
 async function prepareDesiredCapture(client: ObsClient): Promise<void> {
   const ready = desiredCapture === "game"
     ? await ensureAoe2CaptureTarget(client)
-    : await ensureWindowTarget(client, appSourceName, appCaptureExecutable);
+    : await ensureAppCaptureTarget(client);
   if (!ready) throw new Error("The active OBS capture window is not ready.");
   await fitManagedSourcesToCanvas(client);
   await setSceneCapture(client, desiredCapture);
@@ -260,8 +260,29 @@ async function ensureAoe2CaptureTarget(client: ObsClient): Promise<boolean> {
   return ensureWindowTarget(client, gameSourceName, "aoe2de_s.exe");
 }
 
-async function ensureWindowTarget(client: ObsClient, inputName: string, executable: string): Promise<boolean> {
+async function ensureAppCaptureTarget(client: ObsClient): Promise<boolean> {
+  return ensureWindowTarget(
+    client,
+    appSourceName,
+    appCaptureExecutable,
+    `:Chrome_WidgetWin_1:${appCaptureExecutable}`
+  );
+}
+
+async function ensureWindowTarget(
+  client: ObsClient,
+  inputName: string,
+  executable: string,
+  fallbackWindow?: string
+): Promise<boolean> {
   try {
+    const normalizedExecutable = executable.toLowerCase();
+    const current = await client.request("GetInputSettings", { inputName });
+    const settings = (current.inputSettings as JsonObject | undefined) ?? {};
+    const configuredWindow = typeof settings.window === "string" ? settings.window : "";
+    const gameModeNeedsUpdate = inputName === gameSourceName && settings.capture_mode !== "window";
+    if (configuredWindow.toLowerCase().includes(normalizedExecutable) && !gameModeNeedsUpdate) return true;
+
     const properties = await client.request("GetInputPropertiesListPropertyItems", {
       inputName,
       propertyName: "window"
@@ -269,17 +290,15 @@ async function ensureWindowTarget(client: ObsClient, inputName: string, executab
     const items = Array.isArray(properties.propertyItems) ? properties.propertyItems : [];
     const target = items.find((item) => {
       const value = (item as { itemValue?: unknown }).itemValue;
-      return typeof value === "string" && value.toLowerCase().includes(executable);
+      return typeof value === "string" && value.toLowerCase().includes(normalizedExecutable);
     }) as { itemValue?: string } | undefined;
-    if (!target?.itemValue) return false;
+    const targetWindow = target?.itemValue || fallbackWindow;
+    if (!targetWindow) return false;
 
-    const current = await client.request("GetInputSettings", { inputName });
-    const settings = (current.inputSettings as JsonObject | undefined) ?? {};
-    const gameModeNeedsUpdate = inputName === gameSourceName && settings.capture_mode !== "window";
-    if (settings.window !== target.itemValue || gameModeNeedsUpdate) {
+    if (settings.window !== targetWindow || gameModeNeedsUpdate) {
       await client.request("SetInputSettings", {
         inputName,
-        inputSettings: { ...(inputName === gameSourceName ? { capture_mode: "window" } : {}), window: target.itemValue, priority: 2 },
+        inputSettings: { ...(inputName === gameSourceName ? { capture_mode: "window" } : {}), window: targetWindow, priority: 2 },
         overlay: true
       });
     }
