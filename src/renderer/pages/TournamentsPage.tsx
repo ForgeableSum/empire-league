@@ -385,6 +385,12 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
     : false;
   const entryStatus = joinedEntry?.status;
   const queueAvailable = ["idle", "cancelled", "completed"].includes(queueStatus);
+  const finalRoundNumber = Math.log2(tournament.participantCapacity);
+  const finalWinnerId = tournament.matches.find((match) =>
+    match.roundNumber === finalRoundNumber && match.matchPosition === 1
+  )?.winnerPlayerId;
+  const champion = tournament.entries.find((entry) => entry.playerId === finalWinnerId)
+    ?? tournament.entries.find((entry) => entry.status === "winner");
 
   return (
     <section className="tournament-detail-page">
@@ -395,6 +401,15 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           <span className="eyebrow">Single elimination · Hosted by {tournament.creatorDisplayName}</span>
           <h2>{tournament.name}</h2>
           <p>Win your match to advance. One loss eliminates you from the tournament.</p>
+          {tournament.status === "completed" && (
+            <div className={`tournament-champion${champion ? "" : " empty"}`}>
+              <Trophy size={27} />
+              <span>
+                <small>{champion ? "Tournament champion" : "Tournament complete"}</small>
+                <strong>{champion?.displayName ?? "No champion awarded"}</strong>
+              </span>
+            </div>
+          )}
           <div className="tournament-detail-facts">
             <div><MapIcon size={18} /><span><small>Map</small><strong>{mapDisplayName}</strong></span></div>
             <div><Shield size={18} /><span><small>Civilizations</small><strong>{tournament.civilizationMode === "pick" ? "Players pick" : "Random"}</strong></span></div>
@@ -403,9 +418,9 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           </div>
         </div>
         <aside className="tournament-entry-card">
-          <span>{tournament.status === "registration" ? "Begins in" : tournament.status === "started" ? "Tournament" : "Status"}</span>
-          <strong>{tournament.status === "registration" ? formatCountdown(Date.parse(tournament.startsAt) - now) : tournament.status === "started" ? "In progress" : "Complete"}</strong>
-          <small>{tournament.status === "registration" ? formatFullStartTime(tournament.startsAt) : currentMatch?.readyDeadline ? `Ready by ${formatStartTime(currentMatch.readyDeadline)}` : formatFullStartTime(tournament.startsAt)}</small>
+          <span>{tournament.status === "registration" ? "Begins in" : tournament.status === "started" ? "Tournament" : tournament.status === "completed" ? "Champion" : "Status"}</span>
+          <strong>{tournament.status === "registration" ? formatCountdown(Date.parse(tournament.startsAt) - now) : tournament.status === "started" ? "In progress" : tournament.status === "completed" ? champion?.displayName ?? "No winner" : "Canceled"}</strong>
+          <small>{tournament.status === "completed" ? champion ? "Tournament winner" : "No champion was awarded" : tournament.status === "registration" ? formatFullStartTime(tournament.startsAt) : currentMatch?.readyDeadline ? `Ready by ${formatStartTime(currentMatch.readyDeadline)}` : formatFullStartTime(tournament.startsAt)}</small>
           <div className="tournament-capacity-track"><span style={{ width: `${tournament.entries.length / tournament.participantCapacity * 100}%` }} /></div>
           {tournament.status === "registration" ? (
             <>
@@ -431,6 +446,8 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
             <p>You advanced. Waiting for your next opponent.</p>
           ) : tournament.status === "completed" && entryStatus === "winner" ? (
             <p>You won the tournament.</p>
+          ) : tournament.status === "completed" ? (
+            <p>{champion ? `${champion.displayName} won the tournament.` : "The tournament ended without a winner."}</p>
           ) : joinedEntry ? (
             <p>Your tournament run has ended.</p>
           ) : (
