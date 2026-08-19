@@ -27,7 +27,13 @@ lobby message loop can be throttled while AoE2 is in the background.
    confirm with Enter. The live dropdown is ordered `2` through `8`, and AoE2
    remembers the previous value, so this is repeated for every ranked 1v1.
 5. `createLobby` (`click`)
-6. Apply the standard lobby settings.
+6. Apply the standard lobby settings. Reset Settings applies directly and does
+   not open a confirmation dialog, so no Enter input is required afterward.
+   AoE2 can keep its window thread busy beyond the initial settle delay while
+   applying the reset. Continue only after harmless, bounded `WM_NULL` probes
+   show that the thread is responsive and the lobby surface is stable across
+   consecutive captures; log the click, every probe and retry, window health,
+   every state verification, and total duration.
 7. Select the matchmaker's map:
    1. Open the lobby's Location picker.
    2. Open Map Style and explicitly select Custom for a map listed in

@@ -15,11 +15,20 @@ export const lobbySetupTiming = {
   multiplayerMenuMs: 1000,
   hostGameMenuMs: 2000,
   lobbyCreationMs: 8000,
-  // Opening Reset Settings can keep AoE2's window thread busy for over a
-  // second on high-resolution clients. Let the confirmation dialog settle
-  // before dispatching Enter so the synchronous key message does not time out.
+  // Reset applies immediately without a confirmation dialog and can keep
+  // AoE2's window thread busy beyond the initial settle delay. Do not send the
+  // unnecessary Enter input: probe the thread harmlessly until reset completes.
+  resetSettleMs: 1_000,
+  // Countdown compatibility values describe the same direct-reset wait and
+  // stable-read allowance. They are not a dialog focus/confirmation action.
   resetFocusMs: 1_000,
-  resetConfirmationMs: 1000,
+  resetConfirmationMs: 500,
+  resetProbeTimeoutMs: 5_000,
+  resetProbeAttempts: 2,
+  resetProbeRetryMs: 250,
+  resetVerificationPollMs: 250,
+  resetVerificationTimeoutMs: 5_000,
+  resetStableLobbyReads: 2,
   clipboardReadMs: 800,
   lobbyMetadataMs: 700,
   guestJoinMs: 13000,

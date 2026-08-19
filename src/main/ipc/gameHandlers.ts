@@ -71,6 +71,7 @@ import {
   keepAoe2NativeWindowBehind,
   postAoe2Enter,
   postAoe2DesignClick,
+  probeAoe2WindowResponsive,
   readAoe2CivilizationPickerState,
   readAoe2CivilizationTileState,
   readAoe2ContentWarningState,
@@ -2130,11 +2131,8 @@ Start-Sleep -Milliseconds ${lobbySetupTiming.hostGameMenuMs}
 Click-Step 'Create Lobby' 1688 1614 6
 Start-Sleep -Milliseconds ${lobbySetupTiming.lobbyCreationMs}
 Click-Step 'Reset Settings' 3101 1976 7
-Start-Sleep -Milliseconds ${lobbySetupTiming.resetFocusMs}
-$window = [AoeForegroundMouseClick]::Find([uint32]$game.Id)
-$confirmReset = [AoeForegroundMouseClick]::SendEnter($window)
-Write-Output "STEP|Confirm Reset|Key=ENTER|$confirmReset"
-Start-Sleep -Milliseconds ${lobbySetupTiming.resetConfirmationMs}
+Start-Sleep -Milliseconds ${lobbySetupTiming.resetSettleMs}
+Write-Output "STEP|Reset Settings Settled|DelayMs=${lobbySetupTiming.resetSettleMs}"
 Set-Clipboard -Value 'EL_CURSOR_COPY_PENDING'
 Click-Step 'Copy Game ID' 3245 372 8
 Start-Sleep -Milliseconds ${lobbySetupTiming.clipboardReadMs}
@@ -3509,14 +3507,58 @@ export function registerGameHandlers(): void {
       if (!confirmPlayerCount.sent) throw new Error(`The ${playerCount}-player lobby size could not be confirmed.`);
       await delay(250);
       await actionStep("createLobby");
+      const resetStartedAt = performance.now();
+      const resetStateBeforeClick = readAoe2HostSetupState(process.pid);
+      emitLog(`RESET_SETTINGS|Phase=BeforeClick|Expected=lobby-room|${resetStateBeforeClick.detail}`);
       await clickStep("Reset Settings", 3101, 1976);
-      await delay(lobbySetupTiming.resetFocusMs);
-      // Use the same verified keyboard path as ranked. Custom-only settling and
-      // state verification remain below, but input dispatch must not diverge.
-      const reset = await sendAoe2Enter(process.pid);
-      emitLog(`STEP|Confirm Reset|Key=ENTER|${reset.detail}`);
-      if (!reset.sent) throw new Error("The reset confirmation could not be sent.");
-      await delay(lobbySetupTiming.resetConfirmationMs);
+      emitLog(
+        `RESET_SETTINGS|Phase=ClickDispatched|SettleMs=${lobbySetupTiming.resetSettleMs}`
+        + `|ProbeTimeoutMs=${lobbySetupTiming.resetProbeTimeoutMs}`
+        + `|ProbeAttempts=${lobbySetupTiming.resetProbeAttempts}`
+      );
+      await delay(lobbySetupTiming.resetSettleMs);
+
+      let resetResponsive = false;
+      for (let attempt = 1; attempt <= lobbySetupTiming.resetProbeAttempts; attempt += 1) {
+        const probe = await probeAoe2WindowResponsive(process.pid, lobbySetupTiming.resetProbeTimeoutMs);
+        emitLog(`RESET_SETTINGS|Phase=ResponsivenessProbe|Attempt=${attempt}|${probe.detail}`);
+        if (probe.sent) {
+          resetResponsive = true;
+          break;
+        }
+        if (attempt < lobbySetupTiming.resetProbeAttempts) {
+          emitLog(`RESET_SETTINGS|Phase=ProbeRetryWait|Attempt=${attempt}|DelayMs=${lobbySetupTiming.resetProbeRetryMs}`);
+          await delay(lobbySetupTiming.resetProbeRetryMs);
+        }
+      }
+      if (!resetResponsive) {
+        throw new Error("AoE2 did not become responsive after Reset Settings.");
+      }
+
+      let resetVerification = readAoe2HostSetupState(process.pid);
+      let stableLobbyReads = 0;
+      let verificationAttempt = 0;
+      const resetVerificationDeadline = Date.now() + lobbySetupTiming.resetVerificationTimeoutMs;
+      do {
+        verificationAttempt += 1;
+        stableLobbyReads = resetVerification.state === "lobby-room" ? stableLobbyReads + 1 : 0;
+        emitLog(
+          `RESET_SETTINGS|Phase=VerifyLobby|Attempt=${verificationAttempt}`
+          + `|StableReads=${stableLobbyReads}/${lobbySetupTiming.resetStableLobbyReads}`
+          + `|${resetVerification.detail}`
+        );
+        if (stableLobbyReads >= lobbySetupTiming.resetStableLobbyReads) break;
+        if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
+        await delay(lobbySetupTiming.resetVerificationPollMs);
+        resetVerification = readAoe2HostSetupState(process.pid);
+      } while (Date.now() < resetVerificationDeadline);
+      if (stableLobbyReads < lobbySetupTiming.resetStableLobbyReads) {
+        throw new Error(`Reset Settings did not stabilize in the lobby room; state was ${resetVerification.state}.`);
+      }
+      emitLog(
+        `RESET_SETTINGS|Phase=Complete|StableReads=${stableLobbyReads}`
+        + `|DurationMs=${Math.round(performance.now() - resetStartedAt)}`
+      );
 
       if (contentKind === "scenario") {
         const picker = aoe2UiManifest.scenarioPicker;

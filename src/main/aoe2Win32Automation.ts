@@ -571,6 +571,46 @@ export async function postAoe2Enter(processId: number): Promise<NativeInputResul
   };
 }
 
+export async function probeAoe2WindowResponsive(
+  processId: number,
+  timeoutMs = 5_000
+): Promise<NativeInputResult> {
+  ensureWindowsBindings();
+  const window = findLargestProcessWindow(processId);
+  if (!window) return { sent: false, detail: "WINDOW_NOT_FOUND" };
+  const boundedTimeoutMs = Math.max(1, Math.round(timeoutMs));
+  const ownerPid: [number | null] = [null];
+  const ownerThread = Number(GetWindowThreadProcessId!(window, ownerPid));
+  const hungBefore = Boolean(IsHungAppWindow!(window));
+  // WM_NULL has no UI effect. A successful bounded response proves AoE2's
+  // window thread finished the expensive Reset Settings handler without
+  // depending on the unnecessary Enter input that previously caused failures.
+  const probe = await sendWindowMessageAsync(window, 0x0000, 0, 0, boundedTimeoutMs);
+  const hungAfter = Boolean(IsHungAppWindow!(window));
+  return {
+    sent: probe.dispatched,
+    detail: [
+      probe.dispatched ? "RESPONSIVE" : "UNRESPONSIVE",
+      "Mode=WindowMessageProbe",
+      "Message=WM_NULL",
+      `Window=${String(window)}`,
+      `TimeoutMs=${boundedTimeoutMs}`,
+      `TargetPid=${processId}`,
+      `WindowPid=${ownerPid[0] ?? 0}`,
+      `WindowThread=${ownerThread}`,
+      `IsWindow=${Boolean(IsWindow!(window))}`,
+      `Visible=${Boolean(IsWindowVisible!(window))}`,
+      `Enabled=${Boolean(IsWindowEnabled!(window))}`,
+      `HungBefore=${hungBefore}`,
+      `HungAfter=${hungAfter}`,
+      `ProbeMs=${probe.elapsedMs}`,
+      `ProbeResult=${probe.result}`,
+      `ProbeError=${probe.error}`,
+      `ProbeForeground=${probe.foreground}`
+    ].join("|")
+  };
+}
+
 export async function sendAoe2Home(processId: number): Promise<NativeInputResult> {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
@@ -1290,6 +1330,41 @@ function sendMouseMessage(
       lParam,
       0x0002,
       1000,
+      result,
+      (error: Error | null, nativeResult: bigint | number | null) => {
+        const win32Error = Number(GetLastError!());
+        resolve({
+          dispatched: !error && Boolean(nativeResult),
+          elapsedMs: Math.round((performance.now() - started) * 10) / 10,
+          result: String(result[0] ?? 0),
+          error: win32Error,
+          foreground: sameHandle(GetForegroundWindow!(), window)
+        });
+      }
+    );
+  });
+}
+
+function sendWindowMessageAsync(
+  window: NativeHandle,
+  message: number,
+  wParam: number,
+  lParam: number,
+  timeoutMs: number
+): Promise<MessageDispatchResult> {
+  const result: [number | null] = [null];
+  const started = performance.now();
+  SetLastError!(0);
+  return new Promise((resolve) => {
+    // Run bounded responsiveness probes off Electron's main thread so the
+    // cover, input guard, capture, and diagnostics remain responsive.
+    SendMessageTimeoutW!.async(
+      window,
+      message,
+      wParam,
+      lParam,
+      0x0002,
+      timeoutMs,
       result,
       (error: Error | null, nativeResult: bigint | number | null) => {
         const win32Error = Number(GetLastError!());
