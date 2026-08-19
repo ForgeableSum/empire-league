@@ -1018,11 +1018,11 @@ export function readAoe2CivilizationTileState(
     [tileDesignX - 124, tileDesignY],
     [tileDesignX - 124, tileDesignY + 80]
   ] as const;
+  const transform = designTransform(width, height);
   const samples = sampleDesignPoints
     .map(([designX, designY]) => {
-      const x = Math.round(designX * width / aoe2DesignWidth);
-      const y = Math.round(designY * height / aoe2DesignHeight);
-      return { x, y, rgb: readWindowRgb(window, x, y) };
+      const point = transformDesignPoint(designX, designY, transform);
+      return { ...point, rgb: readWindowRgb(window, point.x, point.y) };
     })
     .filter((sample): sample is { x: number; y: number; rgb: [number, number, number] } => Boolean(sample.rgb));
   if (samples.length === 0) {
