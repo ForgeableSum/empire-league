@@ -3344,9 +3344,10 @@ export function registerGameHandlers(): void {
     try {
       gameProcess = await prepareHiddenAoe2WindowBehind();
     } catch (error) {
-      emitLog(`ERROR|${error instanceof Error ? error.message : "AoE2 process detection failed."}`);
+      const detail = error instanceof Error ? error.message : "AoE2 process detection failed.";
+      emitLog(`ERROR|${detail}`);
       activeCreateLobbySequence = undefined;
-      return { sent: false, message: "The AoE2 game window could not be detected." };
+      return { sent: false, message: detail };
     }
     if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
       emitLog("Complete=False|Reason=GameWindowNotReady");
@@ -3740,8 +3741,9 @@ export function registerGameHandlers(): void {
       sequenceCompleted = true;
       return { sent: true, message: "Cursor lobby creation completed.", lobbyUri };
     } catch (error) {
-      emitLog(`ERROR|${error instanceof Error ? error.message : "Native lobby automation failed."}`);
-      return { sent: false, message: "The Create Lobby sequence stopped before completion." };
+      const detail = error instanceof Error ? error.message : "Native lobby automation failed.";
+      emitLog(`ERROR|${detail}`);
+      return { sent: false, message: detail };
     } finally {
       if (sequenceSafetyTimer) clearTimeout(sequenceSafetyTimer);
       setMainWindowGameCoverClickThrough(false);
@@ -3906,14 +3908,17 @@ export function registerGameHandlers(): void {
         sent,
         message: sent
           ? `${target} ready state verified.`
-          : `${target} ready state could not be verified.`
+          : `${target} ready state could not be verified: ${readyState?.detail ?? result.detail}`
       };
     } catch (error) {
       console.error(`[AoE2 automation] Cursor action ${target} failed`, error);
       setWindowsInputBlocked(false);
       stopInputGuard();
       console.info(`[AoE2 automation] INPUT_LOCK|Requested=False|Source=LobbyActionFailure|Target=${target}`);
-      return { sent: false, message: `${target} cursor action failed.` };
+      return {
+        sent: false,
+        message: error instanceof Error ? error.message : `${target} cursor action failed.`
+      };
     } finally {
       setMainWindowGameCoverClickThrough(false);
     }

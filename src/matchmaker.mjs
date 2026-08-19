@@ -1390,7 +1390,7 @@ async function handleRequest(request, response) {
         const failurePageSize = 5;
         const [[countRows], [summaryRows]] = await Promise.all([
           database.query("SELECT COUNT(*) AS failureCount FROM admin_events WHERE event_type = 'lobby_automation_failure' AND severity = 'critical' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR)"),
-          database.query("SELECT event_code AS eventCode, phase, COUNT(*) AS occurrenceCount, MAX(created_at) AS latestAt FROM admin_events WHERE event_type = 'lobby_automation_failure' AND severity = 'critical' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR) GROUP BY event_code, phase ORDER BY occurrenceCount DESC, latestAt DESC")
+          database.query("SELECT event_code AS eventCode, phase, message, COUNT(*) AS occurrenceCount, MAX(created_at) AS latestAt FROM admin_events WHERE event_type = 'lobby_automation_failure' AND severity = 'critical' AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR) GROUP BY event_code, phase, message ORDER BY occurrenceCount DESC, latestAt DESC")
         ]);
         const failureCount = Number(countRows[0]?.failureCount ?? 0);
         const failurePageCount = Math.max(1, Math.ceil(failureCount / failurePageSize));
