@@ -1509,7 +1509,7 @@ async function handleRequest(request, response) {
     }
 
     if (request.method === "GET" && url.pathname === "/tournaments") {
-      return send(response, 200, { tournaments: await getTournaments(authenticatedPlayer.id) });
+      return send(response, 200, { tournaments: await getTournaments() });
     }
 
     if (request.method === "POST" && url.pathname === "/tournaments") {

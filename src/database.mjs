@@ -49,7 +49,7 @@ export class TournamentOperationError extends Error {
   }
 }
 
-export async function getTournaments(playerId) {
+export async function getTournaments() {
   const [tournamentRows] = await database.query(
     `SELECT t.id, t.creator_player_id, creator.display_name AS creator_display_name,
             t.name, t.format, t.civilization_mode, t.participant_capacity,
@@ -60,17 +60,12 @@ export async function getTournaments(playerId) {
      JOIN players creator ON creator.id = t.creator_player_id
      WHERE (t.status = 'registration' AND t.starts_at >= UTC_TIMESTAMP(3))
         OR t.status = 'started'
-        OR (t.status = 'completed' AND (
-          t.creator_player_id = ? OR EXISTS (
-            SELECT 1 FROM tournament_entries mine WHERE mine.tournament_id = t.id AND mine.player_id = ?
-          )
-        ))
+        OR t.status = 'completed'
      ORDER BY FIELD(t.status, 'started', 'registration', 'completed'),
               CASE WHEN t.status = 'completed' THEN COALESCE(t.completed_at, t.starts_at) END DESC,
               CASE WHEN t.status <> 'completed' THEN t.starts_at END ASC,
               CASE WHEN t.status = 'completed' THEN t.created_at END DESC,
-              CASE WHEN t.status <> 'completed' THEN t.created_at END ASC`,
-    [playerId, playerId]
+              CASE WHEN t.status <> 'completed' THEN t.created_at END ASC`
   );
   return tournamentsWithEntries(tournamentRows);
 }
