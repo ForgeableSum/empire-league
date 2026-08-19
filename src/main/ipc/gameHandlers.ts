@@ -397,9 +397,11 @@ function isAutomationSensitiveUiPath(path: string): boolean {
   // that merely contain other widgetui files (HUDs, minimaps, etc.) are safe.
   if (normalized.includes("/widgetui/") && automationSensitiveWidgetUiFiles.has(fileName)) return true;
 
-  // These images are sampled to recognize the main menu and Ready state. A
-  // replacement can break verification even when it does not move a control.
-  return normalized.includes("/widgetui/textures/menu/buttons/button_ready_")
+  // The civilization card controls picker layout, while the listed images are
+  // sampled to recognize the main menu and Ready state. Replacing either can
+  // invalidate fixed coordinates or pixel verification.
+  return normalized.includes("/resources/_common/wpfg/wpfui/paphos/civselection/")
+    || normalized.includes("/widgetui/textures/menu/buttons/button_ready_")
     || normalized.includes("/widgetui/textures/menu/buttons/button_red_")
     || normalized.includes("/resources/_common/wpfg/resources/simplemainmenu/")
     || normalized.includes("/resources/_common/wpfg/resources/button_large/");
