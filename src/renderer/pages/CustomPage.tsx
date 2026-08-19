@@ -7,6 +7,7 @@ import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runtimeConfig";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { customLobbyService } from "../services/customLobbyService";
+import { buildDiagnosticLogSnapshot } from "../services/diagnosticLog";
 import { estimateCustomLobbySetupMs } from "../services/lobbyTimingService";
 import { replayHasEnded } from "../services/replayMetadataService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
@@ -209,6 +210,8 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   weeklyView?: ReactNode;
 }) {
   const {
+    state,
+    appendDiagnosticLog,
     setLobbyAutomationActive,
     setCustomLobbyAutomationActive,
     claimCustomLobbyAutomationStep,
@@ -235,6 +238,13 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   })();
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
+
+  const reportAutomationFailure = async (error: unknown, automationAttemptId: string): Promise<void> => {
+    const message = messageFor(error);
+    const entry = `[${new Date().toLocaleTimeString()}] CRITICAL | custom lobby automation | ${message}`;
+    appendDiagnosticLog(`CRITICAL | custom lobby automation | ${message}`);
+    await customLobbyService.failStart(room.id, message, automationAttemptId, buildDiagnosticLogSnapshot(state.eventLog, entry));
+  };
 
   useEffect(() => () => {
     activeAutomationAttemptRef.current = undefined;
@@ -317,7 +327,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           if (!result.sent || !result.lobbyUri) throw new Error(result.message || "AoE2 lobby creation failed.");
           await customLobbyService.publish(room.id, result.lobbyUri, automationAttemptId);
         } catch (error) {
-          await customLobbyService.failStart(room.id, messageFor(error), automationAttemptId);
+          await reportAutomationFailure(error, automationAttemptId);
           releaseCustomLobbyAutomationStep(hostSetupKey);
         }
       })();
@@ -406,7 +416,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           if (!ready.sent) throw new Error(ready.message || "AoE2 could not ready the host.");
           await customLobbyService.reportAoeReady(room.id);
         } catch (error) {
-          await customLobbyService.failStart(room.id, messageFor(error), automationAttemptId);
+          await reportAutomationFailure(error, automationAttemptId);
           releaseCustomLobbyAutomationStep(hostReadyKey);
         }
       })();
@@ -426,7 +436,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
             new Date(Date.now() - lobbySetupTiming.startGameSettleMs).toISOString()
           );
         } catch (error) {
-          await customLobbyService.failStart(room.id, messageFor(error), automationAttemptId);
+          await reportAutomationFailure(error, automationAttemptId);
           releaseCustomLobbyAutomationStep(startKey);
         }
       })();

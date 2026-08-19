@@ -18,6 +18,7 @@ export interface AutomationFailureReport {
   code: string;
   phase: string;
   message: string;
+  diagnosticLog?: string;
 }
 
 export interface MatchmakingService {
@@ -34,7 +35,7 @@ export interface MatchmakingService {
   reportGuestContentAccepted(matchId: string): Promise<void>;
   reportGuestLobbyReady(matchId: string): Promise<void>;
   reportGameStartAttempted(matchId: string): Promise<void>;
-  reportGameStartFailed(matchId: string): Promise<void>;
+  reportGameStartFailed(matchId: string, diagnosticLog?: string): Promise<void>;
   reportGameStarted(matchId: string): Promise<void>;
   reportMatchResult(report: MatchResultReport): Promise<void>;
 }
@@ -136,15 +137,15 @@ export class LocalMatchmakingService implements MatchmakingService {
     await this.reportGameStartState(matchId, "start-attempted");
   }
 
-  async reportGameStartFailed(matchId: string): Promise<void> {
-    await this.reportGameStartState(matchId, "start-failed");
+  async reportGameStartFailed(matchId: string, diagnosticLog?: string): Promise<void> {
+    await this.reportGameStartState(matchId, "start-failed", diagnosticLog);
   }
 
-  private async reportGameStartState(matchId: string, state: "start-attempted" | "start-failed"): Promise<void> {
+  private async reportGameStartState(matchId: string, state: "start-attempted" | "start-failed", diagnosticLog?: string): Promise<void> {
     if (!this.activeTicketId) throw new Error("No active matchmaking ticket.");
     await matchmakerTransport.request(`/matches/${encodeURIComponent(matchId)}/${state}`, {
       method: "POST",
-      body: { ticketId: this.activeTicketId }
+      body: { ticketId: this.activeTicketId, ...(diagnosticLog ? { diagnosticLog } : {}) }
     });
   }
 

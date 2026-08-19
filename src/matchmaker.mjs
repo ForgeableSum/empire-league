@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
+import { gzipSync, gunzipSync } from "node:zlib";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { playerRatingForQueue, ratingPoolForQueue } from "./rating-pool.mjs";
@@ -101,6 +102,7 @@ let eventSequence = 0;
 let rematchCooldownCleanupTimer;
 let weeklyRotationTimer;
 let tournamentLifecycleTimer;
+let adminLogCleanupTimer;
 const socialPresence = new Map();
 const socialFriendIds = new Map();
 const socialMessages = new Map();
@@ -524,14 +526,46 @@ function connectedAdminUsers() {
   }).sort((left, right) => left.displayName.localeCompare(right.displayName));
 }
 
-async function recordAutomationFailure({ player, contextType, contextId, message, code = "AUTOMATION_FAILED", phase = "lobby_setup" }) {
+const maximumDiagnosticLogBytes = 512 * 1024;
+
+function sanitizeDiagnosticLog(value) {
+  let contents = String(value ?? "")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTED]")
+    .replace(/((?:token|password|authorization)\s*[=:]\s*)[^\s|,;]+/gi, "$1[REDACTED]")
+    .replace(/([A-Za-z]:\\Users\\)[^\\\r\n]+/g, "$1[USER]");
+  let bytes = Buffer.from(contents, "utf8");
+  if (bytes.length > maximumDiagnosticLogBytes) {
+    const notice = Buffer.from("[Earlier diagnostic entries omitted by the matchmaker upload limit.]\n", "utf8");
+    bytes = Buffer.concat([notice, bytes.subarray(bytes.length - (maximumDiagnosticLogBytes - notice.length))]);
+    contents = bytes.toString("utf8");
+  }
+  return contents;
+}
+
+async function recordAutomationFailure({ player, contextType, contextId, message, code = "AUTOMATION_FAILED", phase = "lobby_setup", diagnosticLog }) {
   try {
+    const eventId = randomUUID();
     await database.execute(
       "INSERT INTO admin_events (id, event_type, severity, event_code, phase, player_id, player_name, context_type, context_id, message) VALUES (?, 'lobby_automation_failure', 'critical', ?, ?, ?, ?, ?, ?, ?)",
-      [randomUUID(), code, phase, player?.id ?? null, player?.displayName ?? null, contextType, contextId, String(message).slice(0, 500)]
+      [eventId, code, phase, player?.id ?? null, player?.displayName ?? null, contextType, contextId, String(message).slice(0, 500)]
     );
+    if (typeof diagnosticLog === "string" && diagnosticLog.trim()) {
+      const sanitizedLog = sanitizeDiagnosticLog(diagnosticLog);
+      await database.execute(
+        "INSERT INTO admin_event_logs (event_id, log_data, uncompressed_bytes) VALUES (?, ?, ?)",
+        [eventId, gzipSync(sanitizedLog), Buffer.byteLength(sanitizedLog, "utf8")]
+      );
+    }
   } catch (error) {
     console.error("[matchmaker] Could not record automation failure:", error);
+  }
+}
+
+async function cleanupExpiredAdminLogs() {
+  try {
+    await database.execute("DELETE FROM admin_event_logs WHERE created_at < DATE_SUB(NOW(3), INTERVAL 30 DAY)");
+  } catch (error) {
+    console.error("[matchmaker] Could not clean up expired diagnostic logs:", error);
   }
 }
 
@@ -1364,7 +1398,8 @@ async function handleRequest(request, response) {
         const failureOffset = (failurePage - 1) * failurePageSize;
         const [rows] = await database.query(
           `SELECT id, severity, event_code AS eventCode, phase, player_name AS playerName,
-             context_type AS contextType, context_id AS contextId, message, created_at AS createdAt
+             context_type AS contextType, context_id AS contextId, message, created_at AS createdAt,
+             EXISTS(SELECT 1 FROM admin_event_logs WHERE event_id = admin_events.id) AS logAvailable
            FROM admin_events
            WHERE event_type = 'lobby_automation_failure' AND severity = 'critical'
              AND created_at >= DATE_SUB(NOW(3), INTERVAL 24 HOUR)
@@ -1383,6 +1418,26 @@ async function handleRequest(request, response) {
           failureSummary: summaryRows.map((item) => ({ ...item, occurrenceCount: Number(item.occurrenceCount) })),
           failurePagination: { page: failurePage, pageSize: failurePageSize, pageCount: failurePageCount, total: failureCount }
         });
+      }
+      const adminLogMatch = url.pathname.match(/^\/admin\/api\/failures\/([0-9a-f-]{36})\/log$/i);
+      if (request.method === "GET" && adminLogMatch) {
+        const [rows] = await database.execute(
+          `SELECT logs.log_data AS logData
+           FROM admin_event_logs logs
+           INNER JOIN admin_events events ON events.id = logs.event_id
+           WHERE logs.event_id = ? AND events.event_type = 'lobby_automation_failure'`,
+          [adminLogMatch[1]]
+        );
+        if (!rows.length) return send(response, 404, { error: "Diagnostic log not found or expired." });
+        const contents = gunzipSync(rows[0].logData);
+        response.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Content-Disposition": `attachment; filename="empire-league-failure-${adminLogMatch[1]}.txt"`,
+          "Content-Length": contents.length,
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff"
+        });
+        return response.end(contents);
       }
       if (request.method === "POST" && url.pathname === "/admin/api/messages") {
         const body = await readJson(request);
@@ -1953,7 +2008,8 @@ async function handleRequest(request, response) {
         contextId: room.id,
         message: room.automationError,
         code: "CUSTOM_LOBBY_AUTOMATION_FAILED",
-        phase: "lobby_creation"
+        phase: "lobby_creation",
+        diagnosticLog: body.diagnosticLog
       });
       room.platformLobbyId = undefined;
       for (const player of room.players) {
@@ -2316,7 +2372,8 @@ async function handleRequest(request, response) {
             contextId: match.id,
             message: automationFailure.message.trim(),
             code: automationFailure.code,
-            phase: automationFailure.phase
+            phase: automationFailure.phase,
+            diagnosticLog: automationFailure.diagnosticLog
           });
         }
         emitToMatch(match, {
@@ -2540,7 +2597,8 @@ async function handleRequest(request, response) {
         contextId: match.id,
         message: failureMessage,
         code: "GAME_START_NOT_DETECTED",
-        phase: "game_start"
+        phase: "game_start",
+        diagnosticLog: body.diagnosticLog
       });
       deleteMatch(match);
       console.warn(`[matchmaker] ${match.id}: ${failedRole} reported no loading or replay signal after Start Game`);
@@ -2962,8 +3020,11 @@ if (recoveredTournamentIds.length) {
   console.warn(`[matchmaker] Recovered ${recoveredTournamentIds.length} interrupted tournament(s) with a fresh ready check.`);
 }
 await runTournamentLifecycle();
+await cleanupExpiredAdminLogs();
 tournamentLifecycleTimer = setInterval(() => void runTournamentLifecycle(), 5_000);
 tournamentLifecycleTimer.unref?.();
+adminLogCleanupTimer = setInterval(() => void cleanupExpiredAdminLogs(), 24 * 60 * 60 * 1000);
+adminLogCleanupTimer.unref?.();
 server.listen(port, host, () => {
   console.log(`[matchmaker] listening on http://${host}:${port}`);
 });
@@ -2974,6 +3035,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
     clearTimeout(rematchCooldownCleanupTimer);
     clearTimeout(weeklyRotationTimer);
     clearInterval(tournamentLifecycleTimer);
+    clearInterval(adminLogCleanupTimer);
     for (const socket of webSocketServer.clients) socket.close(1001, "Server shutting down");
     server.close(() => database.end().finally(() => process.exit(0)));
   });

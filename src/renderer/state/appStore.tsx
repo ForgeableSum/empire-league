@@ -14,6 +14,7 @@ import { maps, currentUser } from "../mocks/mockPlayers";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
 import { MockGameIntegrationService } from "../services/gameIntegrationService";
 import { LocalMatchmakingService, MockMatchmakingService, type AutomationFailureReport } from "../services/matchmakingService";
+import { buildDiagnosticLogSnapshot } from "../services/diagnosticLog";
 import { MockMatchResultService } from "../services/matchResultService";
 import { nowLog } from "../services/timing";
 import { authService } from "../services/authService";
@@ -954,7 +955,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const criticalFailure: AutomationFailureReport | undefined = options.criticalFailure
       ? { severity: "critical", ...options.criticalFailure, message }
       : undefined;
-    if (criticalFailure) log(`CRITICAL | ${criticalFailure.phase.replaceAll("_", " ")} | ${message}`);
+    if (criticalFailure) {
+      log(`CRITICAL | ${criticalFailure.phase.replaceAll("_", " ")} | ${message}`);
+      criticalFailure.diagnosticLog = buildDiagnosticLogSnapshot(
+        stateRef.current.eventLog,
+        `${nowLog(`CRITICAL | ${criticalFailure.phase.replaceAll("_", " ")} | ${message}`)}`
+      );
+    }
     auditLobbyPhase(`failed:${message.replaceAll("|", "/")}`, true);
     void window.electronApi?.stopMatchFoundAlert();
     clearRoomSetupWatchdog();
@@ -1434,7 +1441,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               const confirmed = await startConfirmation;
               if (!confirmed) {
                 log("Start Game was clicked, but no loading-screen or replay signal was detected");
-                await services.matchmaking.reportGameStartFailed(event.matchId);
+                await services.matchmaking.reportGameStartFailed(
+                  event.matchId,
+                  buildDiagnosticLogSnapshot(stateRef.current.eventLog, nowLog("CRITICAL | game start | Loading screen or replay was not detected."))
+                );
                 return;
               }
               clearRoomSetupWatchdog();
@@ -1460,7 +1470,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               return;
             }
             log("Guest did not detect a loading-screen or replay signal after Start Game");
-            await services.matchmaking.reportGameStartFailed(event.matchId);
+            await services.matchmaking.reportGameStartFailed(
+              event.matchId,
+              buildDiagnosticLogSnapshot(stateRef.current.eventLog, nowLog("CRITICAL | game start | Loading screen or replay was not detected."))
+            );
           }).catch((error) => {
             void handleLobbySetupFailure(
               queue,

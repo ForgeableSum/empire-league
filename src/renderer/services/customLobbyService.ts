@@ -88,9 +88,9 @@ export const customLobbyService = {
     if (isPreviewMode) return;
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/finish`, { method: "POST" });
   },
-  async failStart(roomId: string, error: string, automationAttemptId: string): Promise<void> {
+  async failStart(roomId: string, error: string, automationAttemptId: string, diagnosticLog?: string): Promise<void> {
     if (isPreviewMode) return;
-    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/fail-start`, { method: "POST", body: { error, automationAttemptId } });
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/fail-start`, { method: "POST", body: { error, automationAttemptId, diagnosticLog } });
   },
   onEvent(listener: Parameters<typeof matchmakerTransport.onCustomLobbyEvent>[0]) {
     if (isPreviewMode) return () => undefined;
