@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { focusMainWindow, minimizeMainWindowToTaskbar } from "../window.js";
 import { getPendingUpdate, installDownloadedUpdate, retryPendingUpdate, setAutoUpdateChecksPaused } from "../autoUpdate.js";
 import { getLoginItemSettings as getSystemLoginItemSettings, setLoginItemOpenAtLogin } from "../loginItem.js";
+import { isExternalNavigationLockedForSender } from "./gameHandlers.js";
 
 let steamLoginParent: BrowserWindow | null = null;
 
@@ -105,6 +106,9 @@ export function registerSystemHandlers(): void {
   ipcMain.handle("system:get-app-version", async () => app.getVersion());
   ipcMain.handle("system:get-preferred-languages", async () => app.getPreferredSystemLanguages());
   ipcMain.handle("system:open-external-url", async (event, value: string) => {
+    if (isExternalNavigationLockedForSender(event.sender.id)) {
+      throw new Error("External links are unavailable while lobby automation is active.");
+    }
     const url = new URL(value);
     if (url.protocol !== "https:") throw new Error("Invalid external URL.");
     const parent = BrowserWindow.fromWebContents(event.sender);

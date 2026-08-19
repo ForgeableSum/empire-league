@@ -20,6 +20,7 @@ import type { MouseTestPointerInfo } from "../shared/contracts/gameIntegration";
 import loadingScreenArtwork from "./assets/el5-loading.png";
 import { socialService } from "./services/socialService";
 import { matchmakerTransport } from "./services/matchmakerTransport";
+import { isRankedInputGuardActive } from "./services/automationLock";
 import { tournamentService } from "./services/tournamentService";
 import { isPreviewMode } from "./previewMode";
 import { previewFriendRequests, previewFriends } from "./mocks/previewData";
@@ -44,8 +45,7 @@ export function App() {
   }, []);
 
   const { page, setPage, state, lobbyAutomationActive, authStatus, authError, signInWithSteam, notify } = useAppStore();
-  const rankedLobbyTransition = ["creating_lobby", "waiting_for_opponent", "verifying_lobby", "ready"].includes(state.queueStatus) && !state.error;
-  const rankedInputGuardActive = ["match_found", "accepting"].includes(state.queueStatus) || rankedLobbyTransition;
+  const rankedInputGuardActive = isRankedInputGuardActive(state);
   const gameInSession = state.queueStatus === "in_game" || state.gameStatus === "in_match";
 
   useEffect(() => {
@@ -286,7 +286,7 @@ export function App() {
 
   return (
     <>
-      <LobbyInputForwarding active={lobbyAutomationActive || rankedInputGuardActive} manageNativeLock={rankedInputGuardActive} />
+      <LobbyInputForwarding active={lobbyAutomationActive || rankedInputGuardActive} />
       <Shell socialUnreadCount={friends.reduce((total, friend) => total + (friend.unread ?? 0), 0)}>
         {page === "home" && <HomePage />}
         {page === "ranked" && <QueuePage />}
@@ -336,7 +336,7 @@ function initialsFor(name: string): string {
   return (parts.length > 1 ? `${parts[0][0]}${parts.at(-1)?.[0]}` : name.slice(0, 2)).toUpperCase();
 }
 
-function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; manageNativeLock: boolean }) {
+function LobbyInputForwarding({ active }: { active: boolean }) {
   const pointerElementRef = useRef<HTMLSpanElement | null>(null);
   const latestPointerRef = useRef<{ x: number; y: number; sequence: number } | null>(null);
   const pointerFrameRef = useRef<number | null>(null);
@@ -366,7 +366,7 @@ function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; m
       clearPointer();
       return;
     }
-    if (manageNativeLock) void window.electronApi?.setLobbyInputLock(true);
+    void window.electronApi?.setLobbyInputLock(true);
     const removePointerListener = window.electronApi?.onLobbyGuardPointer((point) => {
       latestPointerRef.current = point;
       window.electronApi?.acknowledgeLobbyGuardPointer(point.sequence);
@@ -384,10 +384,10 @@ function LobbyInputForwarding({ active, manageNativeLock }: { active: boolean; m
     (document.activeElement as HTMLElement | null)?.blur?.();
     return () => {
       clearPointer();
-      if (manageNativeLock) void window.electronApi?.setLobbyInputLock(false);
+      void window.electronApi?.setLobbyInputLock(false);
       removePointerListener?.();
     };
-  }, [active, manageNativeLock]);
+  }, [active]);
 
   useEffect(() => {
     if (!active) return;

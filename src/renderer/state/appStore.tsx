@@ -15,6 +15,7 @@ import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
 import { MockGameIntegrationService } from "../services/gameIntegrationService";
 import { LocalMatchmakingService, MockMatchmakingService, type AutomationFailureReport } from "../services/matchmakingService";
 import { buildDiagnosticLogSnapshot } from "../services/diagnosticLog";
+import { isExternalNavigationLocked } from "../services/automationLock";
 import { MockMatchResultService } from "../services/matchResultService";
 import { nowLog } from "../services/timing";
 import { authService } from "../services/authService";
@@ -2143,7 +2144,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function openExternalUrl(url: string): Promise<void> {
-    if (lobbyAutomationActive || customLobbyAutomationActive || state.transitionInputLocked) {
+    if (isExternalNavigationLocked(stateRef.current, lobbyAutomationActive, customLobbyAutomationActive)) {
       notify("External links are unavailable while the game is being prepared.", "warning", {
         detail: "Wait for the countdown and lobby automation to finish before opening this link."
       });

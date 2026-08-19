@@ -98,6 +98,8 @@ let ownedAoe2WindowReady = false;
 let quittingAfterGameCleanup = false;
 let tabTestProcess: ChildProcess | undefined;
 let inputGuardProcess: ChildProcess | undefined;
+const rendererLobbyInputLocks = new Set<number>();
+const rendererLobbyInputLockCleanupRegistered = new WeakSet<object>();
 let inputGuardHeartbeatTimer: NodeJS.Timeout | undefined;
 let inputGuardWindow: BrowserWindow | undefined;
 let inputGuardStopTimer: NodeJS.Timeout | undefined;
@@ -2717,6 +2719,10 @@ async function inspectCreateLobbyUi(gamePath: string): Promise<string[]> {
   return lines;
 }
 
+export function isExternalNavigationLockedForSender(senderId: number): boolean {
+  return rendererLobbyInputLocks.has(senderId);
+}
+
 export function registerGameHandlers(): void {
   ipcMain.handle("game:begin-match-audio-suppression", () => {
     beginAoe2MatchAudioSuppression();
@@ -2741,6 +2747,15 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:disable-enabled-ui-mods", disableEnabledUiMods);
   ipcMain.handle("game:set-lobby-input-lock", async (event, locked: boolean) => {
     const requested = locked === true;
+    if (requested) {
+      rendererLobbyInputLocks.add(event.sender.id);
+      if (!rendererLobbyInputLockCleanupRegistered.has(event.sender)) {
+        rendererLobbyInputLockCleanupRegistered.add(event.sender);
+        event.sender.once("destroyed", () => rendererLobbyInputLocks.delete(event.sender.id));
+      }
+    } else {
+      rendererLobbyInputLocks.delete(event.sender.id);
+    }
     // The hook remains able to observe and selectively route physical input;
     // BlockInput would also make the Electron chat surface unusable.
     const applied = requested ? false : setWindowsInputBlocked(false);

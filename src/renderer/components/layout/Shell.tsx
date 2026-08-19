@@ -9,6 +9,7 @@ import { isPreviewMode } from "../../previewMode";
 import { aoe2Languages } from "../../../shared/aoe2Languages";
 import type { PendingAppUpdate } from "../../../shared/contracts/electronApi";
 import { liveStreamsService, type LiveStream } from "../../services/liveStreamsService";
+import { isExternalNavigationLocked } from "../../services/automationLock";
 
 // TEST ONLY: set this to false before release to show the prompt only once per
 // account, and only when the software environment reports a non-English locale.
@@ -33,6 +34,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
     page,
     setPage,
     state,
+    lobbyAutomationActive,
     customLobbyAutomationActive,
     weeklyQueueActive,
     signOut,
@@ -45,6 +47,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
     openExternalUrl
   } = useAppStore();
   const viewingLinkedProfile = page === "profile" && selectedProfileId !== null && selectedProfileId !== state.currentUser.id;
+  const externalNavigationLocked = isExternalNavigationLocked(state, lobbyAutomationActive, customLobbyAutomationActive);
   const record = `${state.currentUser.wins}-${state.currentUser.losses}`;
   const [onlinePlayers, setOnlinePlayers] = useState<number | null>(null);
   const [liveStreams, setLiveStreams] = useState<LiveStream[]>([]);
@@ -270,6 +273,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
                   className="sidebar-stream"
                   type="button"
                   key={stream.id}
+                  disabled={externalNavigationLocked}
                   title={`${stream.creatorName}: ${stream.title}`}
                   onClick={() => void openExternalUrl(stream.streamUrl)}
                 >
@@ -345,7 +349,7 @@ export function Shell({ children, socialUnreadCount = 0 }: { children: ReactNode
                   <RotateCcw className={retryingUpdate ? "spin" : undefined} size={17} aria-hidden="true" />
                   {retryingUpdate ? "Retrying…" : "Retry download"}
                 </button>
-                <button className="secondary" type="button" onClick={() => void openExternalUrl("https://empireleague.gg/updates/windows/Empire-League-Setup.exe")}>
+                <button className="secondary" type="button" disabled={externalNavigationLocked} onClick={() => void openExternalUrl("https://empireleague.gg/updates/windows/Empire-League-Setup.exe")}>
                   Download manually
                 </button>
               </>}
