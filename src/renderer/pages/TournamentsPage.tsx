@@ -16,6 +16,7 @@ type BracketMatch = {
   players: BracketPlayer[];
   playerIds: Array<string | undefined>;
   spectatorUri?: string;
+  tournamentMatch?: Tournament["matches"][number];
 };
 
 const fallbackTournamentMaps: TournamentMapOption[] = enabledMapCatalogEntries.map((map) => ({
@@ -494,13 +495,22 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
                       const isPlayingInMatch = match.playerIds.includes(currentPlayerId);
                       return (
                         <article className={`tournament-bracket-match${match.spectatorUri ? " live" : ""}`} key={match.id || `${round.name}-${matchIndex}`}>
-                          {match.players.map((player, playerIndex) => (
-                            <div className={bracketPlayerClass(player, currentPlayerId)} key={playerIndex}>
-                              <span>{typeof player === "object" ? player.bracketSlot : "—"}</span>
-                              <strong>{typeof player === "object" ? player.displayName : player === "open" ? "Open spot" : "TBD"}</strong>
-                              {typeof player === "object" && player.playerId === currentPlayerId && <em>You</em>}
-                            </div>
-                          ))}
+                          {match.players.map((player, playerIndex) => {
+                            const activity = typeof player === "object"
+                              ? bracketPlayerActivity(tournament, match, playerIndex, now)
+                              : null;
+                            return (
+                              <div className={bracketPlayerClass(player, currentPlayerId)} key={playerIndex}>
+                                <span>{typeof player === "object" ? player.bracketSlot : "—"}</span>
+                                <strong>
+                                  {typeof player === "object"
+                                    ? `${player.displayName}${activity ? ` - ${activity}` : ""}`
+                                    : player === "open" ? "Open spot" : "TBD"}
+                                </strong>
+                                {typeof player === "object" && player.playerId === currentPlayerId && <em>You</em>}
+                              </div>
+                            );
+                          })}
                           {match.spectatorUri && (
                             <button className="tournament-watch-live" type="button" disabled={isPlayingInMatch || !queueAvailable || spectatingUri === match.spectatorUri} onClick={() => onWatch(match.spectatorUri!)}>
                               <Eye size={13} />
@@ -641,6 +651,7 @@ function buildBracket(tournament: Tournament): Array<{ name: string; matches: Br
           return {
             id: persisted.id,
             playerIds,
+            tournamentMatch: persisted,
             ...(persisted.spectatorUri ? { spectatorUri: persisted.spectatorUri } : {}),
             players: playerIds.map((playerId) =>
               playerId ? entrantsById.get(playerId) ?? "tbd" : roundIndex === 0 ? "open" : "tbd"
@@ -658,6 +669,33 @@ function buildBracket(tournament: Tournament): Array<{ name: string; matches: Br
     });
   }
   return rounds;
+}
+
+function bracketPlayerActivity(
+  tournament: Tournament,
+  bracketMatch: BracketMatch,
+  playerIndex: number,
+  now: number
+): string | null {
+  const match = bracketMatch.tournamentMatch;
+  if (!match) {
+    const untilReadyMs = Date.parse(tournament.startsAt) - now;
+    if (tournament.status === "registration" && untilReadyMs > 0 && untilReadyMs <= 5 * 60_000) {
+      return `${Math.ceil(untilReadyMs / 1000)} seconds till can ready`;
+    }
+    return null;
+  }
+  if (match.status === "waiting") {
+    const ready = playerIndex === 0 ? match.playerOneReady : match.playerTwoReady;
+    return ready ? "ready" : null;
+  }
+  if (match.status !== "in_progress") return null;
+  if (match.gameStartedAt || match.spectatorUri) return "in game";
+  if (!match.countdownStartedAt || !match.countdownEstimateMs) return "ready";
+  const remaining = Math.max(0, Math.ceil(
+    (Date.parse(match.countdownStartedAt) + match.countdownEstimateMs - now) / 1000
+  ));
+  return `Game starts in ${remaining}`;
 }
 
 function tournamentStatusLabel(status: Tournament["status"]): string {

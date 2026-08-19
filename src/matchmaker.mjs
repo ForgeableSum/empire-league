@@ -435,6 +435,25 @@ function broadcastTournamentChanged(tournamentId) {
   }
 }
 
+function withLiveTournamentCountdowns(tournament) {
+  if (!tournament) return tournament;
+  return {
+    ...tournament,
+    matches: tournament.matches.map((tournamentMatch) => {
+      if (tournamentMatch.status !== "in_progress" || tournamentMatch.gameStartedAt || !tournamentMatch.gameMatchId) {
+        return tournamentMatch;
+      }
+      const liveMatch = matches.get(tournamentMatch.gameMatchId);
+      if (!liveMatch?.setupStartedAt) return tournamentMatch;
+      return {
+        ...tournamentMatch,
+        countdownStartedAt: liveMatch.setupStartedAt,
+        countdownEstimateMs: liveMatch.setupEstimateMs ?? 60_000
+      };
+    })
+  };
+}
+
 function tournamentChatMember(tournament, playerId) {
   return tournament.creatorPlayerId === playerId
     || tournament.entries.some((entry) => entry.playerId === playerId);
@@ -1564,7 +1583,8 @@ async function handleRequest(request, response) {
     }
 
     if (request.method === "GET" && url.pathname === "/tournaments") {
-      return send(response, 200, { tournaments: await getTournaments() });
+      const tournaments = await getTournaments();
+      return send(response, 200, { tournaments: tournaments.map(withLiveTournamentCountdowns) });
     }
 
     if (request.method === "POST" && url.pathname === "/tournaments") {
@@ -1626,7 +1646,7 @@ async function handleRequest(request, response) {
     if (request.method === "GET" && tournamentDetail) {
       const tournament = await getTournamentById(decodeURIComponent(tournamentDetail[1]));
       return tournament
-        ? send(response, 200, { tournament })
+        ? send(response, 200, { tournament: withLiveTournamentCountdowns(tournament) })
         : send(response, 404, { error: "Tournament not found." });
     }
     if (request.method === "DELETE" && tournamentDetail) {
@@ -2411,6 +2431,7 @@ async function handleRequest(request, response) {
       match.accepted.add(body.ticketId);
       if (match.accepted.size === matchTickets(match).length) {
         clearTimeout(match.expirationTimer);
+        match.setupStartedAt ??= new Date().toISOString();
         refreshMatchSetupTimeout(match);
         for (const participant of matchTickets(match)) {
           emit(participant, {
@@ -2419,6 +2440,7 @@ async function handleRequest(request, response) {
             role: participant.id === match.host.id ? "host" : "guest"
           });
         }
+        if (match.tournamentId) broadcastTournamentChanged(match.tournamentId);
       }
       return send(response, 200, {
         accepted: true,
@@ -2472,9 +2494,11 @@ async function handleRequest(request, response) {
       if (!Number.isFinite(estimateMs) || estimateMs < 10_000 || estimateMs > 180_000) {
         return send(response, 400, { error: "invalid lobby setup estimate" });
       }
+      match.setupEstimateMs = Math.round(estimateMs);
       for (const guestTicket of matchGuests(match)) {
-        emit(guestTicket, { type: "lobby_setup_estimate", matchId: match.id, estimateMs: Math.round(estimateMs) });
+        emit(guestTicket, { type: "lobby_setup_estimate", matchId: match.id, estimateMs: match.setupEstimateMs });
       }
+      if (match.tournamentId) broadcastTournamentChanged(match.tournamentId);
       return send(response, 200, { published: true });
     }
 
