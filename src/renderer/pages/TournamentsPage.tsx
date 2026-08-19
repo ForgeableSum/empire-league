@@ -38,7 +38,7 @@ export function TournamentsPage({ tournamentToOpen, onTournamentOpened }: {
   const [name, setName] = useState("Weekend Showdown");
   const [capacity, setCapacity] = useState("16");
   const [minimumElo, setMinimumElo] = useState("1000");
-  const [maximumElo, setMaximumElo] = useState("2000");
+  const [maximumElo, setMaximumElo] = useState("4000");
   const [beginsAt, setBeginsAt] = useState(() => formatDateTimeInput(Date.now() + 24 * 60 * 60_000));
   const [tournamentMaps, setTournamentMaps] = useState<TournamentMapOption[]>(fallbackTournamentMaps);
   const [mapId, setMapId] = useState(enabledMapCatalogEntries.find((map) => map.id === "arabia")?.id ?? fallbackTournamentMaps[0]?.id ?? "");
