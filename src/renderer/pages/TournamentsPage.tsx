@@ -497,7 +497,7 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
                         <article className={`tournament-bracket-match${match.spectatorUri ? " live" : ""}`} key={match.id || `${round.name}-${matchIndex}`}>
                           {match.players.map((player, playerIndex) => {
                             const activity = typeof player === "object"
-                              ? bracketPlayerActivity(tournament, match, playerIndex, now)
+                              ? bracketPlayerActivity(match, playerIndex, now)
                               : null;
                             return (
                               <div className={bracketPlayerClass(player, currentPlayerId)} key={playerIndex}>
@@ -672,22 +672,18 @@ function buildBracket(tournament: Tournament): Array<{ name: string; matches: Br
 }
 
 function bracketPlayerActivity(
-  tournament: Tournament,
   bracketMatch: BracketMatch,
   playerIndex: number,
   now: number
 ): string | null {
   const match = bracketMatch.tournamentMatch;
-  if (!match) {
-    const untilReadyMs = Date.parse(tournament.startsAt) - now;
-    if (tournament.status === "registration" && untilReadyMs > 0 && untilReadyMs <= 5 * 60_000) {
-      return `${Math.ceil(untilReadyMs / 1000)} seconds till can ready`;
-    }
-    return null;
-  }
+  if (!match) return null;
   if (match.status === "waiting") {
     const ready = playerIndex === 0 ? match.playerOneReady : match.playerTwoReady;
-    return ready ? "ready" : null;
+    if (ready) return "ready";
+    if (!match.readyDeadline) return null;
+    const remaining = Math.max(0, Math.ceil((Date.parse(match.readyDeadline) - now) / 1000));
+    return `${remaining} sec or forfeit`;
   }
   if (match.status !== "in_progress") return null;
   if (match.gameStartedAt || match.spectatorUri) return "in game";
