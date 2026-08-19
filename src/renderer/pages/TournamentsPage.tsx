@@ -38,6 +38,7 @@ export function TournamentsPage({ tournamentToOpen, onTournamentOpened }: {
   const [name, setName] = useState("Weekend Showdown");
   const [capacity, setCapacity] = useState("16");
   const [minimumElo, setMinimumElo] = useState("1000");
+  const [maximumElo, setMaximumElo] = useState("2000");
   const [beginsAt, setBeginsAt] = useState(() => formatDateTimeInput(Date.now() + 24 * 60 * 60_000));
   const [tournamentMaps, setTournamentMaps] = useState<TournamentMapOption[]>(fallbackTournamentMaps);
   const [mapId, setMapId] = useState(enabledMapCatalogEntries.find((map) => map.id === "arabia")?.id ?? fallbackTournamentMaps[0]?.id ?? "");
@@ -108,6 +109,7 @@ export function TournamentsPage({ tournamentToOpen, onTournamentOpened }: {
         name: name.trim(),
         participantCapacity: Number(capacity),
         minimumElo: Number(minimumElo),
+        maximumElo: Number(maximumElo),
         mapId,
         mapName: selectedMap.gameName,
         civilizationMode,
@@ -274,6 +276,7 @@ export function TournamentsPage({ tournamentToOpen, onTournamentOpened }: {
             <TournamentDateTimePicker value={beginsAt} onChange={setBeginsAt} />
             <ThemedSelect label="Participants" value={capacity} onChange={setCapacity} options={[8, 16, 32, 64].map((count) => ({ value: String(count), label: `${count} players` }))} />
             <label>Minimum Elo<input min="0" max="5000" step="50" type="number" value={minimumElo} onChange={(event) => setMinimumElo(event.target.value)} /></label>
+            <label>Maximum Elo<input min={minimumElo || "0"} max="5000" step="50" type="number" value={maximumElo} onChange={(event) => setMaximumElo(event.target.value)} /></label>
             <ThemedSelect label="Map" value={mapId} onChange={setMapId} options={tournamentMaps
               .map((map) => ({ value: map.id, label: localizeAoe2Name(map.gameName) }))
               .sort((left, right) => left.label.localeCompare(right.label))} />
@@ -294,7 +297,7 @@ export function TournamentsPage({ tournamentToOpen, onTournamentOpened }: {
             <div><Trophy size={18} /><span><strong>Single elimination</strong><small>{capacity} players · {Math.max(0, Number(capacity) - 1)} matches</small></span></div>
             <div className="tournament-form-actions">
               <button className="secondary" type="button" disabled={pendingAction === "create"} onClick={() => setCreating(false)}>Cancel</button>
-              <button className="primary" type="submit" disabled={pendingAction === "create" || !name.trim() || !mapId || !beginsAt || minimumElo === ""}>{pendingAction === "create" ? "Creating…" : "Create Tournament"}</button>
+              <button className="primary" type="submit" disabled={pendingAction === "create" || !name.trim() || !mapId || !beginsAt || minimumElo === "" || maximumElo === "" || Number(maximumElo) < Number(minimumElo)}>{pendingAction === "create" ? "Creating…" : "Create Tournament"}</button>
             </div>
           </div>
         </form>
@@ -384,7 +387,8 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
   const rounds = buildBracket(tournament);
   const joinedEntry = tournament.entries.find((entry) => entry.playerId === currentPlayerId);
   const spotsLeft = Math.max(0, tournament.participantCapacity - tournament.entries.length);
-  const ratingEligible = currentPlayerRating >= tournament.minimumElo;
+  const ratingEligible = currentPlayerRating >= tournament.minimumElo
+    && (tournament.maximumElo === undefined || currentPlayerRating <= tournament.maximumElo);
   const currentMatch = tournament.matches.find((match) =>
     ["waiting", "in_progress"].includes(match.status)
     && (match.playerOneId === currentPlayerId || match.playerTwoId === currentPlayerId)
@@ -422,7 +426,7 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           <div className="tournament-detail-facts">
             <div><MapIcon size={18} /><span><small>Map</small><strong>{mapDisplayName}</strong></span></div>
             <div><Shield size={18} /><span><small>Civilizations</small><strong>{tournament.civilizationMode === "pick" ? "Players pick" : "Random"}</strong></span></div>
-            <div><Swords size={18} /><span><small>Minimum Elo</small><strong>{tournament.minimumElo > 0 ? tournament.minimumElo : "Open"}</strong></span></div>
+            <div><Swords size={18} /><span><small>Elo range</small><strong>{tournamentEloRange(tournament)}</strong></span></div>
             <div><Users size={18} /><span><small>Entrants</small><strong>{tournament.entries.length}/{tournament.participantCapacity}</strong></span></div>
           </div>
         </div>
@@ -438,7 +442,7 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
                 <label className="tournament-join-password"><span><Lock size={14} /> Tournament password</span><input type="password" maxLength={64} autoComplete="current-password" value={joinPassword} disabled={pending} onChange={(event) => onJoinPasswordChange(event.target.value)} /></label>
               )}
               <button className={joinedEntry ? "secondary wide" : "primary wide"} type="button" disabled={pending || cancelling || (!joinedEntry && (!spotsLeft || !ratingEligible))} onClick={onToggleJoin}>
-                {pending ? "Updating…" : joinedEntry ? "Leave Tournament" : !ratingEligible ? `Requires ${tournament.minimumElo} Elo` : spotsLeft === 0 ? "Tournament Full" : "Join Tournament"}
+                {pending ? "Updating…" : joinedEntry ? "Leave Tournament" : !ratingEligible ? tournamentRatingRequirement(tournament, currentPlayerRating) : spotsLeft === 0 ? "Tournament Full" : "Join Tournament"}
               </button>
             </>
           ) : tournament.status === "started" && currentMatch?.status === "waiting" ? (
@@ -678,8 +682,18 @@ function compareTournaments(left: Tournament, right: Tournament): number {
 }
 
 function tournamentAccessLabel(tournament: Tournament): string {
-  const rating = tournament.minimumElo > 0 ? `${tournament.minimumElo}+ Elo` : "Open rating";
+  const rating = tournamentEloRange(tournament);
   return tournament.passwordProtected ? `Password · ${rating}` : rating;
+}
+
+function tournamentEloRange(tournament: Tournament): string {
+  if (tournament.maximumElo === undefined) return tournament.minimumElo > 0 ? `${tournament.minimumElo}+ Elo` : "Open rating";
+  return `${tournament.minimumElo}–${tournament.maximumElo} Elo`;
+}
+
+function tournamentRatingRequirement(tournament: Tournament, playerRating: number): string {
+  if (playerRating < tournament.minimumElo) return `Requires at least ${tournament.minimumElo} Elo`;
+  return `Requires at most ${tournament.maximumElo} Elo`;
 }
 
 function bracketRoundName(playersInRound: number): string {

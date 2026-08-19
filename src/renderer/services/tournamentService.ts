@@ -32,6 +32,7 @@ export const tournamentService = {
         civilizationMode: input.civilizationMode,
         participantCapacity: input.participantCapacity,
         minimumElo: input.minimumElo,
+        maximumElo: input.maximumElo,
         mapId: input.mapId,
         mapName: input.mapName,
         passwordProtected: Boolean(input.password),
@@ -67,6 +68,12 @@ export const tournamentService = {
       const tournament = requirePreviewTournament(tournamentId);
       if (tournament.passwordProtected && previewPasswords.get(tournamentId) !== password) {
         throw new Error("Incorrect tournament password.");
+      }
+      if (1426 < tournament.minimumElo) {
+        throw new Error(`This tournament requires at least ${tournament.minimumElo} Elo.`);
+      }
+      if (tournament.maximumElo !== undefined && 1426 > tournament.maximumElo) {
+        throw new Error(`This tournament allows at most ${tournament.maximumElo} Elo.`);
       }
       if (!tournament.entries.some((entry) => entry.playerId === "user-1")) {
         const occupied = new Set(tournament.entries.map((entry) => entry.bracketSlot));

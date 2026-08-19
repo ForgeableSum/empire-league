@@ -48,6 +48,7 @@ export interface Tournament {
   civilizationMode: TournamentCivilizationMode;
   participantCapacity: number;
   minimumElo: number;
+  maximumElo?: number;
   mapId: string;
   mapName: string;
   passwordProtected: boolean;
@@ -65,6 +66,7 @@ export interface CreateTournamentInput {
   civilizationMode: TournamentCivilizationMode;
   participantCapacity: number;
   minimumElo: number;
+  maximumElo: number;
   mapId: string;
   mapName: string;
   startsAt: string;

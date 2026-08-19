@@ -1524,6 +1524,13 @@ async function handleRequest(request, response) {
       if (!Number.isInteger(minimumElo) || minimumElo < 0 || minimumElo > 5000) {
         return send(response, 400, { error: "Minimum Elo must be a whole number between 0 and 5000." });
       }
+      const maximumElo = Number(body.maximumElo);
+      if (!Number.isInteger(maximumElo) || maximumElo < 0 || maximumElo > 5000) {
+        return send(response, 400, { error: "Maximum Elo must be a whole number between 0 and 5000." });
+      }
+      if (maximumElo < minimumElo) {
+        return send(response, 400, { error: "Maximum Elo must be greater than or equal to minimum Elo." });
+      }
       const civilizationMode = body.civilizationMode;
       if (civilizationMode !== "pick" && civilizationMode !== "random") {
         return send(response, 400, { error: "Civilization mode must be pick or random." });
@@ -1546,6 +1553,7 @@ async function handleRequest(request, response) {
           civilizationMode,
           participantCapacity,
           minimumElo,
+          maximumElo,
           mapId: map.id,
           mapName: map.name,
           startsAt: new Date(startsAtMs),

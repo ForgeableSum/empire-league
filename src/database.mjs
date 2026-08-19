@@ -53,7 +53,7 @@ export async function getTournaments() {
   const [tournamentRows] = await database.query(
     `SELECT t.id, t.creator_player_id, creator.display_name AS creator_display_name,
             t.name, t.format, t.civilization_mode, t.participant_capacity,
-            t.minimum_elo, t.map_id, t.map_name, (t.password_hash IS NOT NULL) AS password_protected,
+            t.minimum_elo, t.maximum_elo, t.map_id, t.map_name, (t.password_hash IS NOT NULL) AS password_protected,
             t.status, t.starts_at, t.started_at,
             t.completed_at, t.created_at
      FROM tournaments t
@@ -74,7 +74,7 @@ export async function getTournamentById(tournamentId) {
   const [rows] = await database.execute(
     `SELECT t.id, t.creator_player_id, creator.display_name AS creator_display_name,
             t.name, t.format, t.civilization_mode, t.participant_capacity,
-            t.minimum_elo, t.map_id, t.map_name, (t.password_hash IS NOT NULL) AS password_protected,
+            t.minimum_elo, t.maximum_elo, t.map_id, t.map_name, (t.password_hash IS NOT NULL) AS password_protected,
             t.status, t.starts_at, t.started_at,
             t.completed_at, t.created_at
      FROM tournaments t
@@ -154,6 +154,7 @@ async function tournamentsWithEntries(tournamentRows) {
     civilizationMode: row.civilization_mode,
     participantCapacity: Number(row.participant_capacity),
     minimumElo: Number(row.minimum_elo),
+    ...(row.maximum_elo == null ? {} : { maximumElo: Number(row.maximum_elo) }),
     mapId: row.map_id,
     mapName: row.map_name,
     passwordProtected: Boolean(row.password_protected),
@@ -191,8 +192,8 @@ export async function createTournament(input) {
     await connection.execute(
       `INSERT INTO tournaments
         (id, creator_player_id, name, format, civilization_mode, participant_capacity,
-         minimum_elo, map_id, map_name, password_hash, password_salt, status, starts_at)
-       VALUES (?, ?, ?, 'single_elimination', ?, ?, ?, ?, ?, ?, ?, 'registration', ?)`,
+         minimum_elo, maximum_elo, map_id, map_name, password_hash, password_salt, status, starts_at)
+       VALUES (?, ?, ?, 'single_elimination', ?, ?, ?, ?, ?, ?, ?, ?, 'registration', ?)`,
       [
         input.id,
         input.creatorPlayerId,
@@ -200,6 +201,7 @@ export async function createTournament(input) {
         input.civilizationMode,
         input.participantCapacity,
         input.minimumElo,
+        input.maximumElo,
         input.mapId,
         input.mapName,
         passwordCredentials?.hash ?? null,
@@ -265,7 +267,7 @@ export async function joinTournament(tournamentId, playerId, password = "") {
   try {
     await connection.beginTransaction();
     const [tournamentRows] = await connection.execute(
-      `SELECT participant_capacity, minimum_elo, password_hash, password_salt, status,
+      `SELECT participant_capacity, minimum_elo, maximum_elo, password_hash, password_salt, status,
               (starts_at <= UTC_TIMESTAMP(3)) AS already_started
        FROM tournaments WHERE id = ? FOR UPDATE`,
       [tournamentId]
@@ -296,6 +298,9 @@ export async function joinTournament(tournamentId, playerId, password = "") {
     const playerRating = Number(playerRows[0]?.rating ?? 0);
     if (playerRating < Number(tournament.minimum_elo)) {
       throw new TournamentOperationError(`This tournament requires at least ${Number(tournament.minimum_elo)} Elo.`, 403);
+    }
+    if (tournament.maximum_elo !== null && playerRating > Number(tournament.maximum_elo)) {
+      throw new TournamentOperationError(`This tournament allows at most ${Number(tournament.maximum_elo)} Elo.`, 403);
     }
 
     const [entryRows] = await connection.execute(
