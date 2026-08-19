@@ -683,7 +683,7 @@ function bracketPlayerActivity(
     if (ready) return "ready";
     if (!match.readyDeadline) return null;
     const remaining = Math.max(0, Math.ceil((Date.parse(match.readyDeadline) - now) / 1000));
-    return `${remaining} sec or forfeit`;
+    return `ready in ${remaining}s or forfeit`;
   }
   if (match.status !== "in_progress") return null;
   if (match.gameStartedAt || match.spectatorUri) return "in game";
