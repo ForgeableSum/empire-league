@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Eye, Lock, Map as MapIcon, Minus, Plus, RefreshCw, Send, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
+import { ArrowLeft, BellRing, CalendarDays, ChevronLeft, ChevronRight, Eye, Lock, Map as MapIcon, Minus, Plus, RefreshCw, Send, Shield, Swords, Trash2, Trophy, Users, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import type { Tournament, TournamentChatMessage, TournamentEntry, TournamentCivilizationMode } from "../../shared/contracts/tournaments";
 import { builtInTournamentMapId } from "../../tournament-map.mjs";
@@ -142,7 +142,7 @@ export function TournamentsPage({ tournamentToOpen, onTournamentOpened }: {
         : await tournamentService.join(tournament.id, tournament.passwordProtected ? joinPassword : undefined);
       setTournaments((current) => current.map((item) => item.id === updated.id ? updated : item));
       notify(joined ? "You left the tournament." : "You joined the tournament.", joined ? "info" : "success", {
-        detail: joined ? undefined : "Your first-round bracket position is now reserved."
+        detail: joined ? undefined : "Stay in the app when the countdown ends. You will have 5 minutes to ready when your match is called."
       });
       if (!joined) setJoinPassword("");
     } catch (error) {
@@ -473,6 +473,15 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
           )}
         </aside>
       </article>
+      {tournament.status === "registration" && joinedEntry && (
+        <aside className="tournament-player-notice">
+          <BellRing size={22} />
+          <div>
+            <strong>Be ready when the tournament begins</strong>
+            <p>Keep Empire League open and connected when the countdown reaches zero. When it is your turn to play, the app will alert you. Open that alert and click Ready for Match within 5 minutes or you will forfeit.</p>
+          </div>
+        </aside>
+      )}
       <div className="tournament-detail-content">
         <section className="tournament-bracket-section">
           <div className="tournament-bracket-scroll">

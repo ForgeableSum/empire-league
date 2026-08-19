@@ -829,6 +829,22 @@
 .tournament-capacity-track { height: 5px; margin-top: 17px; overflow: hidden; border-radius: 999px; background: #312b25; }
 .tournament-capacity-track span { display: block; height: 100%; background: linear-gradient(90deg, #9c6528, #e2b56d); }
 
+.tournament-player-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 18px;
+  color: #f0c66e;
+  border: 1px solid rgba(226, 181, 109, .45);
+  background: linear-gradient(105deg, rgba(111, 73, 26, .3), rgba(31, 26, 20, .92));
+  box-shadow: inset 0 0 20px rgba(226, 181, 109, .05);
+}
+
+.tournament-player-notice > svg { flex: 0 0 auto; margin-top: 1px; }
+.tournament-player-notice > div { display: grid; gap: 5px; }
+.tournament-player-notice strong { color: #f5d58f; font-size: 14px; }
+.tournament-player-notice p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+
 .tournament-detail-content {
   min-width: 0;
   display: block;
