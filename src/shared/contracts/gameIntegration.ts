@@ -76,6 +76,7 @@ export interface MouseTestPointerInfo {
 
 export interface CreateLobbyRequest {
   matchId: string;
+  password?: string;
   hostProfileId: number;
   guestProfileId: number;
   map: MapDefinition;

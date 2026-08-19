@@ -3277,14 +3277,19 @@ export function registerGameHandlers(): void {
     mapName: string,
     playerCount = 2,
     contentKind: "map" | "scenario" = "map",
-    automationRequest: "ranked" | "tournament" | "custom" | { context: "custom"; gameSettings: CustomLobbyGameSettings } = "ranked",
+    automationRequest: "ranked" | "tournament" | "custom" | { context: "tournament"; password: string } | { context: "custom"; gameSettings: CustomLobbyGameSettings } = "ranked",
     requestedGameSettings?: CustomLobbyGameSettings
   ) => {
     stopTabTest();
     setMouseCoordinateOverlayEnabled(false);
     const normalizedMapName = typeof mapName === "string" ? mapName.trim() : "";
     const automationContext = typeof automationRequest === "object" ? automationRequest.context : automationRequest;
-    requestedGameSettings = typeof automationRequest === "object" ? automationRequest.gameSettings : requestedGameSettings;
+    requestedGameSettings = typeof automationRequest === "object" && automationRequest.context === "custom"
+      ? automationRequest.gameSettings
+      : requestedGameSettings;
+    const tournamentLobbyPassword = typeof automationRequest === "object" && automationRequest.context === "tournament"
+      ? automationRequest.password
+      : undefined;
     const isCustomAutomation = automationContext === "custom";
     const isTournamentAutomation = automationContext === "tournament";
     if (process.platform !== "win32") {
@@ -3298,6 +3303,9 @@ export function registerGameHandlers(): void {
     }
     if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 8) {
       return { sent: false, message: "The lobby must contain between 2 and 8 players." };
+    }
+    if (isTournamentAutomation && !/^[A-Za-z0-9]{12}$/.test(tournamentLobbyPassword ?? "")) {
+      return { sent: false, message: "A valid tournament lobby password is required." };
     }
     const installation = await detectAoe2Installation();
     const localization = installation.installed && installation.path
@@ -3482,13 +3490,16 @@ export function registerGameHandlers(): void {
       await actionStep("multiplayer");
       await actionStep("hostGame");
       await actionStep("lobbyVisibility");
-      const privateVisibility = await sendAoe2End(process.pid);
-      emitLog(`STEP|Select Private Visibility|Key=END|${privateVisibility.detail}`);
-      if (!privateVisibility.sent) throw new Error("Private lobby visibility could not be selected.");
+      const visibility = isTournamentAutomation
+        ? await sendAoe2Home(process.pid)
+        : await sendAoe2End(process.pid);
+      const visibilityName = isTournamentAutomation ? "Public" : "Private";
+      emitLog(`STEP|Select ${visibilityName} Visibility|Key=${isTournamentAutomation ? "HOME" : "END"}|${visibility.detail}`);
+      if (!visibility.sent) throw new Error(`${visibilityName} lobby visibility could not be selected.`);
       await delay(100);
       const confirmVisibility = await sendAoe2Enter(process.pid);
-      emitLog(`STEP|Confirm Private Visibility|Key=ENTER|${confirmVisibility.detail}`);
-      if (!confirmVisibility.sent) throw new Error("Private lobby visibility could not be confirmed.");
+      emitLog(`STEP|Confirm ${visibilityName} Visibility|Key=ENTER|${confirmVisibility.detail}`);
+      if (!confirmVisibility.sent) throw new Error(`${visibilityName} lobby visibility could not be confirmed.`);
       await delay(250);
       await actionStep("playerCount");
       if (playerCount === 8) {
@@ -3506,6 +3517,16 @@ export function registerGameHandlers(): void {
       emitLog(`STEP|Confirm ${playerCount} Players|Key=ENTER|${confirmPlayerCount.detail}`);
       if (!confirmPlayerCount.sent) throw new Error(`The ${playerCount}-player lobby size could not be confirmed.`);
       await delay(250);
+      if (isTournamentAutomation) {
+        await actionStep("lobbyPassword");
+        const clearPassword = await clearAoe2TextField(process.pid);
+        emitLog(`STEP|Clear Lobby Password|${clearPassword.detail}`);
+        if (!clearPassword.sent) throw new Error("The tournament lobby password field could not be cleared.");
+        const enterPassword = await sendAoe2Text(process.pid, tournamentLobbyPassword!);
+        emitLog(`STEP|Enter Lobby Password|Length=${tournamentLobbyPassword!.length}|${enterPassword.detail}`);
+        if (!enterPassword.sent) throw new Error("The tournament lobby password could not be entered.");
+        await actionStep("allowSpectators");
+      }
       await actionStep("createLobby");
       const resetStartedAt = performance.now();
       const resetStateBeforeClick = readAoe2HostSetupState(process.pid);
@@ -4381,7 +4402,7 @@ export function registerGameHandlers(): void {
       lobby: {
         platformLobbyId: `AOE-${Math.floor(100000 + Math.random() * 899999)}`,
         lobbyName: `Empire League ${request.matchId.slice(-4).toUpperCase()}`,
-        password: "empire",
+        password: request.password ?? "empire",
         hostProfileId: request.hostProfileId,
         guestProfileId: request.guestProfileId,
         map: request.map,
@@ -4413,9 +4434,13 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:open-lobby", async (
     event,
     lobbyId: string,
-    _allowCustomContentPrompt = false
+    _allowCustomContentPrompt = false,
+    password?: string
   ) => {
     if (!/^aoe2de:\/\/0\/\d+$/.test(lobbyId)) {
+      return { opened: false };
+    }
+    if (password !== undefined && !/^[A-Za-z0-9]{12}$/.test(password)) {
       return { opened: false };
     }
     const appWindow = BrowserWindow.fromWebContents(event.sender);
@@ -4493,6 +4518,31 @@ export function registerGameHandlers(): void {
         `LOBBY_HANDOFF_WAIT|Method=AoeUrlHelperExecutable`
         + `|Completed=True|SettleMs=${lobbySetupTiming.guestJoinMs}`
       );
+      if (password) {
+        const prompt = aoe2UiManifest.passwordPrompt;
+        const focusPassword = await postAoe2DesignClick(game.pid, prompt.inputPoint[0], prompt.inputPoint[1], {
+          synchronous: true,
+          requireMove: true
+        });
+        emitLog(`LOBBY_PASSWORD|Step=FocusInput|${focusPassword.detail}`);
+        if (!focusPassword.sent) return { opened: false };
+        await delay(prompt.inputSettleMs);
+        const clearPassword = await clearAoe2TextField(game.pid);
+        emitLog(`LOBBY_PASSWORD|Step=ClearInput|${clearPassword.detail}`);
+        if (!clearPassword.sent) return { opened: false };
+        const enterPassword = await sendAoe2Text(game.pid, password);
+        emitLog(`LOBBY_PASSWORD|Step=EnterPassword|Length=${password.length}|${enterPassword.detail}`);
+        if (!enterPassword.sent) return { opened: false };
+        const confirmPassword = await postAoe2DesignClick(game.pid, prompt.confirmPoint[0], prompt.confirmPoint[1], {
+          synchronous: true,
+          requireMove: true
+        });
+        emitLog(`LOBBY_PASSWORD|Step=Confirm|${confirmPassword.detail}`);
+        if (!confirmPassword.sent) return { opened: false };
+        await delay(prompt.confirmSettleMs);
+        keepAoe2NativeWindowBehind(game.pid);
+        emitLog(`LOBBY_PASSWORD|Complete=True|SettleMs=${prompt.confirmSettleMs}`);
+      }
     } finally {
       clearInterval(keepGameBehind);
       keepAoe2NativeWindowBehind(game.pid);

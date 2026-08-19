@@ -113,7 +113,7 @@ export interface ElectronGameApi {
   startAoe2TabTest(): Promise<GameInputTestResult>;
   stopAoe2TabTest(): Promise<void>;
   sendAoe2Key(key: GameInputKey): Promise<GameInputResult>;
-  runAoe2CreateLobbySequence(mapName: string, playerCount?: number, contentKind?: "map" | "scenario", context?: "ranked" | "tournament" | "custom" | { context: "custom"; gameSettings: import("./customLobby.js").CustomLobbyGameSettings }, gameSettings?: import("./customLobby.js").CustomLobbyGameSettings): Promise<GameInputResult>;
+  runAoe2CreateLobbySequence(mapName: string, playerCount?: number, contentKind?: "map" | "scenario", context?: "ranked" | "tournament" | "custom" | { context: "tournament"; password: string } | { context: "custom"; gameSettings: import("./customLobby.js").CustomLobbyGameSettings }, gameSettings?: import("./customLobby.js").CustomLobbyGameSettings): Promise<GameInputResult>;
   runAoe2LobbyCursorAction(target: "content-confirm" | "guest-ready" | "host-ready" | "start", context?: "ranked" | "custom"): Promise<GameInputResult>;
   selectAoe2Civilization(selection: Aoe2CivilizationSelection, slot: number, context?: "ranked" | "custom"): Promise<GameInputResult>;
   selectAoe2Team(team: 1 | 2, slot: number, context?: "ranked" | "custom"): Promise<GameInputResult>;
@@ -127,7 +127,7 @@ export interface ElectronGameApi {
   onMouseTestModeChanged(listener: (active: boolean) => void): () => void;
   onAoe2AutomationLog(listener: (message: string) => void): () => void;
   createRanked1v1Lobby(request: CreateLobbyRequest): Promise<CreateLobbyResult>;
-  openAoe2Lobby(lobbyId: string, allowCustomContentPrompt?: boolean): Promise<OpenLobbyResult>;
+  openAoe2Lobby(lobbyId: string, allowCustomContentPrompt?: boolean, password?: string): Promise<OpenLobbyResult>;
   openAoe2Spectator(spectatorUri: string): Promise<import("./gameIntegration.js").OpenSpectatorResult>;
   openSteamLogin(url: string): Promise<void>;
   completeSteamLogin(): Promise<void>;

@@ -100,10 +100,11 @@ const electronApi: ElectronGameApi = {
     return () => ipcRenderer.removeListener("game:automation-log", handler);
   },
   createRanked1v1Lobby: (request) => ipcRenderer.invoke("game:create-ranked-1v1-lobby", request),
-  openAoe2Lobby: (lobbyId, allowCustomContentPrompt) => ipcRenderer.invoke(
+  openAoe2Lobby: (lobbyId, allowCustomContentPrompt, password) => ipcRenderer.invoke(
     "game:open-lobby",
     lobbyId,
-    allowCustomContentPrompt
+    allowCustomContentPrompt,
+    password
   ),
   openAoe2Spectator: (spectatorUri) => ipcRenderer.invoke("game:open-spectator", spectatorUri),
   openSteamLogin: (url) => ipcRenderer.invoke("auth:open-steam-login", url),

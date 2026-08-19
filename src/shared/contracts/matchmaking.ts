@@ -180,6 +180,7 @@ export interface LobbySession {
 
 export interface MatchSession {
   id: string;
+  lobbyPassword?: string;
   status: QueueStatus;
   queue: QueueDefinition;
   opponentCivilizationPreference?: CivilizationPreference;

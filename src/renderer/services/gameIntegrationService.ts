@@ -54,7 +54,7 @@ export class MockGameIntegrationService implements GameIntegrationService {
       lobby: {
         platformLobbyId: `AOE-${Math.floor(100000 + Math.random() * 899999)}`,
         lobbyName: `Empire League ${config.matchId.slice(-4).toUpperCase()}`,
-        password: "empire",
+        password: config.password ?? "empire",
         hostProfileId: config.hostProfileId,
         guestProfileId: config.guestProfileId,
         map: config.map,

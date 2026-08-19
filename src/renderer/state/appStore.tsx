@@ -92,6 +92,14 @@ const aoe2LanguageRefreshIntervalMs = 5_000;
 const aoe2LanguageRefreshDurationMs = 5 * 60_000;
 const roomSetupTimeoutMs = 65_000;
 const roomSetupEstimateMarginMs = 15_000;
+const tournamentLobbyPasswordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+
+function generateTournamentLobbyPassword(): string {
+  const randomBytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(randomBytes, (value) =>
+    tournamentLobbyPasswordAlphabet[value % tournamentLobbyPasswordAlphabet.length]
+  ).join("");
+}
 
 function isLobbyAutomationProgress(message: string): boolean {
   if (message.includes("INPUT_GUARD|GUARD_HEALTH")) return false;
@@ -1145,6 +1153,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           void window.electronApi?.stopMatchFoundAlert();
           const acceptedSession = {
             ...matchedSession,
+            ...(event.role === "host" && matchedSession.matchType === "tournament"
+              ? { lobbyPassword: generateTournamentLobbyPassword() }
+              : {}),
             acceptedByPlayer: true,
             acceptedByOpponent: true,
             status: event.role === "host" ? "creating_lobby" as const : "waiting_for_opponent" as const
@@ -1190,7 +1201,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     ? ((acceptedSession.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
                     : 2,
                   "map",
-                  acceptedSession.matchType === "tournament" ? "tournament" : "ranked"
+                  acceptedSession.matchType === "tournament"
+                    ? { context: "tournament", password: acceptedSession.lobbyPassword! }
+                    : "ranked"
                 );
               });
             void prepareLobby(acceptedSession);
@@ -1228,7 +1241,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             const allowCustomContentPrompt = isCustomLobbyMap(matchedSessionRef.current?.selectedMap);
             void window.electronApi.openAoe2Lobby(
               event.lobby.platformLobbyId,
-              allowCustomContentPrompt
+              allowCustomContentPrompt,
+              matchedSessionRef.current?.matchType === "tournament" ? event.lobby.password : undefined
             ).then(async (result) => {
               log(result.opened ? "Opened the host lobby in AoE2" : "The host lobby URI was rejected");
               if (result.opened) {
@@ -1694,7 +1708,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           lobbyAutomationRef.current
           ?? window.electronApi.runAoe2CreateLobbySequence(
             getLobbyMapName(match.selectedMap),
-            match.queue.format === "team" ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8 : 2
+            match.queue.format === "team" ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8 : 2,
+            "map",
+            match.matchType === "tournament"
+              ? { context: "tournament", password: match.lobbyPassword! }
+              : "ranked"
           )
         );
         lobbyAutomationRef.current = null;
@@ -1728,6 +1746,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         log(`Lobby URI discovered: ${automation.lobbyUri}`);
         const lobbyResult = await services.game.createLobby({
           matchId: match.id,
+          ...(match.lobbyPassword ? { password: match.lobbyPassword } : {}),
           hostProfileId: match.player.aoeProfileId,
           guestProfileId: match.opponent.aoeProfileId,
           map: match.selectedMap,
@@ -1750,6 +1769,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       const lobbyResult = await services.game.createLobby({
         matchId: match.id,
+        ...(match.lobbyPassword ? { password: match.lobbyPassword } : {}),
         hostProfileId: match.player.aoeProfileId,
         guestProfileId: match.opponent.aoeProfileId,
         map: match.selectedMap,

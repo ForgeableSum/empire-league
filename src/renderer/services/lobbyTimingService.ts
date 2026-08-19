@@ -52,6 +52,9 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
     + lobbySetupEstimateTiming.hostSetupSafetyMarginMs;
   total += (multiplayerTabCount * multiplayerTabDelayMs) + actions.multiplayer.settleMs;
   total += actionDuration(actions.hostGame) + clickEnterDelayMs;
+  if (match.matchType === "tournament") {
+    total += actionDuration(actions.lobbyPassword) + actionDuration(actions.allowSpectators);
+  }
   total += actionDuration(actions.createLobby);
   total += defaultClickDurationMs() + lobbySetupTiming.resetFocusMs + lobbySetupTiming.resetConfirmationMs;
   total += defaultClickDurationMs() + mapPicker.openSettleMs;
@@ -63,6 +66,12 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
   total += civilizationSelectionDuration(match.queue.civilizationPreference);
   total += lobbySetupTiming.lobbyMetadataMs;
   total += lobbySetupEstimateTiming.guestJoinMs + lobbySetupTiming.guestReadySettleMs;
+  if (match.matchType === "tournament") {
+    total += (defaultClickDurationMs() * 2)
+      + aoe2UiManifest.passwordPrompt.inputSettleMs
+      + (12 * 15)
+      + aoe2UiManifest.passwordPrompt.confirmSettleMs;
+  }
   total += civilizationSelectionDuration(match.opponentCivilizationPreference);
   total += lobbySetupTiming.hostReadySettleMs + actionDuration(actions.hostReady);
 

@@ -48,6 +48,18 @@ export const aoe2UiManifest = {
       activation: "click",
       settleMs: 250
     },
+    allowSpectators: {
+      label: "Allow Spectators",
+      point: [1530, 1264],
+      activation: "click",
+      settleMs: 250
+    },
+    lobbyPassword: {
+      label: "Set Lobby Password",
+      point: [2133, 1189],
+      activation: "click",
+      settleMs: 100
+    },
     createLobby: {
       label: "Create Lobby",
       point: [1688, 1614],
@@ -151,6 +163,12 @@ export const aoe2UiManifest = {
     searchSettleMs: 750,
     selectionSettleMs: 300,
     loadSettleMs: 2_000
+  },
+  passwordPrompt: {
+    inputPoint: [1920, 1070] as const,
+    confirmPoint: [1671, 1255] as const,
+    inputSettleMs: 100,
+    confirmSettleMs: 5_000
   },
   advancedSettings: {
     // Measured from the native 2560x1440 PNG pixel grid (not the inspection

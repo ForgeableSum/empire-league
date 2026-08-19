@@ -19,22 +19,28 @@ lobby message loop can be throttled while AoE2 is in the background.
 
 1. `multiplayer` (`clickEnter`)
 2. `hostGame` (`clickEnter`)
-3. Open the Visibility dropdown, send End to select its last entry (`Private`),
-   and confirm with Enter. The live dropdown is ordered `Public`, `Private`;
-   this keeps matchmade games out of the public lobby browser while preserving
-   direct lobby-URI joining.
+3. Open the Visibility dropdown and explicitly select the required entry. The
+   live dropdown is ordered `Public`, `Private`: tournament matches select
+   `Public` because AoE2 only enables `Allow Spectators` for public lobbies;
+   ranked and custom matches select `Private` to stay out of the public lobby
+   browser while preserving direct lobby-URI joining.
 4. Open the Players dropdown, send Home to select its first entry (`2`), and
    confirm with Enter. The live dropdown is ordered `2` through `8`, and AoE2
    remembers the previous value, so this is repeated for every ranked 1v1.
-5. `createLobby` (`click`)
-6. Apply the standard lobby settings. Reset Settings applies directly and does
+5. For tournament matches, enter a newly generated 12-character lobby password,
+   then enable `Allow Spectators` on the Create Lobby dialog so the tournament's
+   live-view link can open the game without leaving player slots unprotected.
+   The password is carried in the published lobby metadata for the guest join
+   flow. Ranked and custom lobbies leave both controls unchanged.
+6. `createLobby` (`click`)
+7. Apply the standard lobby settings. Reset Settings applies directly and does
    not open a confirmation dialog, so no Enter input is required afterward.
    AoE2 can keep its window thread busy beyond the initial settle delay while
    applying the reset. Continue only after harmless, bounded `WM_NULL` probes
    show that the thread is responsive and the lobby surface is stable across
    consecutive captures; log the click, every probe and retry, window health,
    every state verification, and total duration.
-7. Select the matchmaker's map:
+8. Select the matchmaker's map:
    1. Open the lobby's Location picker.
    2. Open Map Style and explicitly select Custom for a map listed in
       `customMapNames`, or Standard for every other map. AoE2 remembers this
@@ -42,21 +48,21 @@ lobby message loop can be throttled while AoE2 is in the background.
    3. Focus the picker search field and send the selected map name with window-local `WM_CHAR` messages.
    4. Resolve the exact map's filtered-result index from the manifest and click that tile. This matters for substring collisions such as Aquarena/Arena and Land Nomad/Nomad.
    5. Verify that the lobby screen is present again before continuing.
-8. Optionally select a civilization:
+9. Optionally select a civilization:
    1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
    2. For a named civilization, enter its exact name in the picker search field.
    3. Click the fixed first civilization result after the four generic selector options.
    4. Dispatch Enter once to confirm the selected result and close the picker.
    5. Verify that AoE2 returned to the lobby room.
-9. `copyLobbyUri` (`click`)
-10. Verify the clipboard matches `aoe2de://0/<digits>`.
-11. Publish that URI to the guest. This URI is the normal automated invitation path.
-12. If an explicit in-game invite is needed, use `hostInvite`.
-13. Wait for the guest-joined report.
-14. `hostReady` (`click`) to finalize custom lobby files and release any required transfer.
-15. If the guest reports accepting unverified content, verify `hostReady` again because AoE2 may automatically clear the host's Ready state.
-16. Wait for the guest-ready report.
-17. `startGame` (`click`)
+10. `copyLobbyUri` (`click`)
+11. Verify the clipboard matches `aoe2de://0/<digits>`.
+12. Publish that URI to the guest. This URI is the normal automated invitation path.
+13. If an explicit in-game invite is needed, use `hostInvite`.
+14. Wait for the guest-joined report.
+15. `hostReady` (`click`) to finalize custom lobby files and release any required transfer.
+16. If the guest reports accepting unverified content, verify `hostReady` again because AoE2 may automatically clear the host's Ready state.
+17. Wait for the guest-ready report.
+18. `startGame` (`click`)
 
 The first three transitions are verified from stable points on AoE2's rendered
 window surface. If the expected next screen is not present, that step is
@@ -67,14 +73,15 @@ wrong screen.
 
 1. Receive the published `aoe2de://0/<digits>` URI.
 2. Pass the URI directly to AoE2's bundled `Tools_Builds/AOEURLHelper.exe`; do not depend on Windows having the optional `aoe2de://` protocol association. The helper performs the Steam handoff required by an already-running game.
-3. Wait 13 seconds for AoE2 to process the asynchronous handoff and settle in the lobby. Join-time pixel polling is intentionally avoided because transient and resolution-dependent lobby colors can reject successful joins.
-4. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), a cleared search field, and the filtered result coordinate. A persistent white outline proves selection; a gray outline proves the requested tile acquired hover/focus and permits Enter activation. Unverified input falls back immediately instead of repeating the same click. Random fallback clears the filter, makes one selection attempt, and verifies the picker closed.
-5. Report that the guest joined so the host can ready and release custom lobby files.
-6. After the host-ready report, poll `guestReady`.
-7. Only when the selected map is listed in `customMapNames`, an unavailable Ready control triggers an attempt at AoE2's unverified user-generated-content warning. After a successful confirmation click, report content acceptance once so the host can verify and, if AoE2 cleared it, reapply Ready. The guest continues polling during this handshake.
-8. Continue until AoE2 enables and verifies the guest Ready control or the transfer timeout expires. The guest and host lobby layouts intentionally use different ready points.
-9. Report guest readiness to the matchmaker.
-10. Wait for the host to start the match.
+3. Wait 13 seconds for AoE2 to process the asynchronous handoff. Join-time pixel polling is intentionally avoided because transient and resolution-dependent lobby colors can reject successful joins.
+4. For tournament matches, focus the password prompt, enter the password published by the host without logging its value, click Connect, and allow the lobby to settle. Ranked and custom joins skip this step. Spectator links use their separate handoff and never receive the password.
+5. Optionally select a civilization using the client's lobby-slot civilization button (slot 2 in the automated 1v1 guest flow), a cleared search field, and the filtered result coordinate. A persistent white outline proves selection; a gray outline proves the requested tile acquired hover/focus and permits Enter activation. Unverified input falls back immediately instead of repeating the same click. Random fallback clears the filter, makes one selection attempt, and verifies the picker closed.
+6. Report that the guest joined so the host can ready and release custom lobby files.
+7. After the host-ready report, poll `guestReady`.
+8. Only when the selected map is listed in `customMapNames`, an unavailable Ready control triggers an attempt at AoE2's unverified user-generated-content warning. After a successful confirmation click, report content acceptance once so the host can verify and, if AoE2 cleared it, reapply Ready. The guest continues polling during this handshake.
+9. Continue until AoE2 enables and verifies the guest Ready control or the transfer timeout expires. The guest and host lobby layouts intentionally use different ready points.
+10. Report guest readiness to the matchmaker.
+11. Wait for the host to start the match.
 
 AoE2's unverified-content modal is accepted with one window-local Tab followed by Enter. The guest sends this sequence only once, then continues polling Ready while the host verifies its Ready state again.
 
