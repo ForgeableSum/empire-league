@@ -1129,6 +1129,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           };
           matchedSessionRef.current = matchedSession;
           if (window.electronApi) {
+            const inputLock = await window.electronApi.setLobbyInputLock(true).catch((error: unknown) => {
+              log(`MATCH_FOUND_INPUT_LOCK_FAILED | ${error instanceof Error ? error.message : "Unknown error"}`);
+              return { locked: false };
+            });
+            log(`MATCH_FOUND_INPUT_LOCK|Locked=${inputLock.locked}`);
             await window.electronApi.alertMatchFound(state.settings.matchNotifications).catch((error: unknown) => {
               log(`MATCH_FOUND_FOCUS_FAILED | ${error instanceof Error ? error.message : "Unknown error"}`);
             });
@@ -1684,6 +1689,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function declineMatchById(matchId?: string): Promise<void> {
     void window.electronApi?.stopMatchFoundAlert();
+    await window.electronApi?.setLobbyInputLock(false).catch((error: unknown) => {
+      log(`MATCH_DECLINE_INPUT_UNLOCK_FAILED | ${error instanceof Error ? error.message : "Unknown error"}`);
+      return { locked: false };
+    });
     clearRoomSetupWatchdog();
     unsubscribeRef.current?.();
     unsubscribeRef.current = null;
