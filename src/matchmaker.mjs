@@ -501,14 +501,26 @@ function connectedAdminUsers() {
     ...[...tickets.values()].filter((ticket) => !ticket.matchId).map((ticket) => ticket.player.id),
     ...weeklyQueue.keys()
   ]);
+  const countdownIds = new Set(
+    [...matches.values()]
+      .filter((match) => !match.startedAt && match.accepted.size === matchTickets(match).length)
+      .flatMap((match) => matchTickets(match).map((ticket) => ticket.player.id))
+  );
   const inGameIds = new Set([...socialPresence].filter(([, value]) => value?.presence === "in_game").map(([id]) => id));
   for (const room of customLobbies.values()) {
     if (room.status === "started") for (const player of room.players) inGameIds.add(player.id);
   }
   return [...users.values()].map((user) => {
     const presence = socialPresence.get(user.id);
-    const status = inGameIds.has(user.id) ? "in-game" : searchingIds.has(user.id) ? "searching" : "online";
-    return { ...user, status, activity: presence?.activity ?? (status === "searching" ? "Looking for a match" : status === "in-game" ? "In game" : "Online") };
+    const status = inGameIds.has(user.id)
+      ? "in-game"
+      : countdownIds.has(user.id)
+        ? "countdown"
+        : searchingIds.has(user.id) ? "searching" : "online";
+    const activity = status === "countdown"
+      ? "Countdown"
+      : presence?.activity ?? (status === "searching" ? "Looking for a match" : status === "in-game" ? "In game" : "Online");
+    return { ...user, status, activity };
   }).sort((left, right) => left.displayName.localeCompare(right.displayName));
 }
 
