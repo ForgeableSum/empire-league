@@ -1011,12 +1011,12 @@ export function readAoe2CivilizationTileState(
   // only indicates hover, so sample several text-free points on the top and left
   // borders and require more than one bright neutral hit before accepting it.
   const sampleDesignPoints = [
-    [tileDesignX - 80, tileDesignY - 118],
-    [tileDesignX, tileDesignY - 118],
-    [tileDesignX + 80, tileDesignY - 118],
-    [tileDesignX - 118, tileDesignY - 80],
-    [tileDesignX - 118, tileDesignY],
-    [tileDesignX - 118, tileDesignY + 80]
+    [tileDesignX - 80, tileDesignY - 126],
+    [tileDesignX, tileDesignY - 126],
+    [tileDesignX + 80, tileDesignY - 126],
+    [tileDesignX - 124, tileDesignY - 80],
+    [tileDesignX - 124, tileDesignY],
+    [tileDesignX - 124, tileDesignY + 80]
   ] as const;
   const samples = sampleDesignPoints
     .map(([designX, designY]) => {
