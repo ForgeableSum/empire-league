@@ -23,7 +23,10 @@ const fallbackTournamentMaps: TournamentMapOption[] = enabledMapCatalogEntries.m
   gameName: map.gameMapName
 }));
 
-export function TournamentsPage() {
+export function TournamentsPage({ tournamentToOpen, onTournamentOpened }: {
+  tournamentToOpen?: string | null;
+  onTournamentOpened?: () => void;
+}) {
   const { state, notify, startQueue, localizeAoe2Name } = useAppStore();
   const [creating, setCreating] = useState(previewSection === "create");
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(previewSection === "detail" ? "arabia-open" : null);
@@ -68,6 +71,12 @@ export function TournamentsPage() {
   }, []);
 
   useEffect(() => setJoinPassword(""), [selectedTournamentId]);
+
+  useEffect(() => {
+    if (!tournamentToOpen) return;
+    setSelectedTournamentId(tournamentToOpen);
+    onTournamentOpened?.();
+  }, [tournamentToOpen, onTournamentOpened]);
 
   useEffect(() => {
     if (!window.electronApi) return;

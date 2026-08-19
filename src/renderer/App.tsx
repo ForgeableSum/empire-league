@@ -33,6 +33,7 @@ export function App() {
   const [requests, setRequests] = useState<FriendRequest[]>(isPreviewMode ? previewFriendRequests : []);
   const [outgoingRequestIds, setOutgoingRequestIds] = useState<string[]>([]);
   const [chats, setChats] = useState<OpenChat[]>([]);
+  const [tournamentToOpen, setTournamentToOpen] = useState<string | null>(null);
   const chatsRef = useRef<OpenChat[]>([]);
   const notifiedTournamentMatchesRef = useRef(new Set<string>());
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
@@ -59,7 +60,8 @@ export function App() {
     notify("Message from Empire League", "info", { detail: message, durationMs: 15_000 });
   }), [notify]);
 
-  useEffect(() => window.electronApi?.onTournamentNotificationClicked(() => {
+  useEffect(() => window.electronApi?.onTournamentNotificationClicked((tournamentId) => {
+    setTournamentToOpen(tournamentId);
     setPage("tournaments");
   }), [setPage]);
 
@@ -78,11 +80,17 @@ export function App() {
         : readyMatch.playerTwoReady;
       if (playerReady) return;
       notifiedTournamentMatchesRef.current.add(notificationKey);
-      void window.electronApi?.alertTournamentReady(tournament.name).catch(() => undefined);
+      void window.electronApi?.alertTournamentReady(tournament.id, tournament.name).catch(() => undefined);
       notify("Your tournament match is ready.", "warning", {
         detail: `${tournament.name} is waiting for you. Ready up before the deadline.`,
         durationMs: 60_000,
-        action: { label: "Open Tournament", run: () => setPage("tournaments") }
+        action: {
+          label: "Open Tournament",
+          run: () => {
+            setTournamentToOpen(tournament.id);
+            setPage("tournaments");
+          }
+        }
       });
     };
     void tournamentService.list().then((tournaments) => tournaments.forEach(inspectTournament)).catch(() => undefined);
@@ -285,7 +293,12 @@ export function App() {
         <div className="persistent-page" hidden={page !== "weekly"}>
           <WeeklyPage />
         </div>
-        {page === "tournaments" && <TournamentsPage />}
+        {page === "tournaments" && (
+          <TournamentsPage
+            tournamentToOpen={tournamentToOpen}
+            onTournamentOpened={() => setTournamentToOpen(null)}
+          />
+        )}
         {page === "custom" && <CustomPage />}
         {page === "match-history" && <MatchHistoryPage />}
         {page === "leaderboard" && <LeaderboardPage />}

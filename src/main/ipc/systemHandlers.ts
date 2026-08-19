@@ -50,12 +50,13 @@ export function registerSystemHandlers(): void {
       notification.show();
     }
   });
-  ipcMain.handle("system:alert-tournament-ready", async (event, tournamentName: string) => {
+  ipcMain.handle("system:alert-tournament-ready", async (event, tournamentId: string, tournamentName: string) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return;
     const safeTournamentName = typeof tournamentName === "string"
       ? tournamentName.trim().slice(0, 64)
       : "Tournament";
+    const safeTournamentId = typeof tournamentId === "string" ? tournamentId.slice(0, 64) : "";
     if (!window.isFocused()) window.flashFrame(true);
 
     if (Notification.isSupported()) {
@@ -72,7 +73,7 @@ export function registerSystemHandlers(): void {
         window.moveTop();
         window.focus();
         window.flashFrame(false);
-        window.webContents.send("system:tournament-notification-clicked");
+        window.webContents.send("system:tournament-notification-clicked", safeTournamentId);
       });
       notification.show();
     }
