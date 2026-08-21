@@ -312,6 +312,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const roomSetupWatchdogDurationRef = useRef(roomSetupTimeoutMs);
   const replayResultInFlightRef = useRef(false);
   const gameRevealInFlightRef = useRef<Promise<void> | null>(null);
+  const gameRevealedMatchIdRef = useRef<string | null>(null);
   const gameStartSignalInFlightRef = useRef<Promise<boolean> | null>(null);
   const rankedSessionRetirementRef = useRef<Promise<void> | null>(null);
   const lobbyTimingAuditRef = useRef<{ matchId: string; startedAt: number; previousAt: number; expectedMs: number; role: "host" | "guest" } | null>(null);
@@ -2043,7 +2044,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!window.electronApi) return;
     const matchId = stateRef.current.activeMatch?.id;
     if (!matchId) return;
+    if (gameRevealedMatchIdRef.current === matchId) {
+      return gameRevealInFlightRef.current ?? undefined;
+    }
     if (gameRevealInFlightRef.current) return gameRevealInFlightRef.current;
+    gameRevealedMatchIdRef.current = matchId;
     gameRevealInFlightRef.current = (async () => {
       auditLobbyPhase("game-reveal-start", true);
       const completedState = stateRef.current;

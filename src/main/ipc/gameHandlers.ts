@@ -123,6 +123,17 @@ let replayDetectionGeneration = 0;
 const builtInGameMapNames = new Set<string>();
 let createLobbySequenceCounter = 0;
 let activeCreateLobbySequence: { id: number; context: "ranked" | "tournament" | "custom" } | undefined;
+let activeGameplayHandoffMatchId: string | undefined;
+
+function showAutomationCover(window: BrowserWindow): void {
+  if (activeGameplayHandoffMatchId) {
+    console.info(
+      `[AoE2 automation] COVER_SKIPPED|Reason=GameplayHandoff|Match=${activeGameplayHandoffMatchId}`
+    );
+    return;
+  }
+  showMainWindowAsGameCover(window);
+}
 
 function startLoadingScreenWatch(processId: number, sender: WebContents): boolean {
   if (loadingScreenWatchers.has(sender)) return true;
@@ -579,6 +590,7 @@ function clearReplayFocusTimers(): void {
 }
 
 function focusMainWindowAfterReplay(window: BrowserWindow, manageRunningGame = false): void {
+  activeGameplayHandoffMatchId = undefined;
   void setObsCaptureMode("app");
   clearReplayFocusTimers();
   const manageGameWindow = (): void => {
@@ -1541,6 +1553,10 @@ function scheduleInputGuardStop(): void {
 }
 
 async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> {
+  if (activeGameplayHandoffMatchId) {
+    stopInputGuard();
+    return false;
+  }
   if (inputGuardStopTimer) clearTimeout(inputGuardStopTimer);
   inputGuardStopTimer = undefined;
   if (window && !window.isDestroyed()) {
@@ -1548,7 +1564,11 @@ async function startInputGuard(window?: BrowserWindow | null): Promise<boolean> 
     // foreground. Reassert the automation cover and give Windows a few event
     // turns to complete activation before starting (or reusing) the guard.
     for (let attempt = 1; !window.isFocused() && attempt <= 4; attempt += 1) {
-      showMainWindowAsGameCover(window);
+      if (activeGameplayHandoffMatchId) {
+        stopInputGuard();
+        return false;
+      }
+      showAutomationCover(window);
       await delay(50);
     }
     if (!window.isFocused()) {
@@ -2930,6 +2950,9 @@ export function registerGameHandlers(): void {
   });
 
   ipcMain.handle("game:launch", async (event) => {
+    // Launch begins a new automation lifecycle. A previous match's handoff
+    // must no longer suppress the cover used for lobby setup.
+    activeGameplayHandoffMatchId = undefined;
     // A managed AoE2 session is silent from launch through matchmaking and
     // lobby automation. Game-start is the sole path that restores its audio.
     beginAoe2MatchAudioSuppression();
@@ -2982,7 +3005,7 @@ export function registerGameHandlers(): void {
       const appWindow = BrowserWindow.fromWebContents(event.sender);
       // Arm both layers before Steam is allowed to create the game window. The
       // old ordering left an unavoidable interval where AoE2 could paint first.
-      if (cursorAutomationEnabled && appWindow) showMainWindowAsGameCover(appWindow);
+      if (cursorAutomationEnabled && appWindow) showAutomationCover(appWindow);
       moveAoe2WindowOffscreen();
 
       const gameProcess = spawn(steamExecutable, ["-applaunch", aoe2AppId, "SKIPINTRO"], {
@@ -3023,6 +3046,17 @@ export function registerGameHandlers(): void {
     if (typeof matchId !== "string" || !matchId.trim()) {
       throw new Error("A match ID is required for the gameplay handoff.");
     }
+    if (activeGameplayHandoffMatchId === matchId) {
+      const game = detectAoe2NativeProcess();
+      return {
+        focused: Boolean(game.pid) && isAoe2NativeWindowForeground(game.pid as number)
+      };
+    }
+    // From this point until post-game recovery, gameplay exclusively owns the
+    // foreground. In-flight lobby tasks may finish, but they cannot re-present
+    // Electron or restart its input guard over AoE2.
+    activeGameplayHandoffMatchId = matchId;
+    releaseAllInputSuppression("GameplayHandoffBegin");
     const startedAt = Date.now();
     let gameplayAudioVerificationPending = false;
     const beginGameplayAudioInBackground = (phase: "initial" | "post-handoff") => {
@@ -3354,7 +3388,7 @@ export function registerGameHandlers(): void {
     emitLog(`PLAYER_COUNT_REQUEST|Value=${playerCount}`);
     emitLog(`GAME_SETTINGS_PAYLOAD|${JSON.stringify(requestedGameSettings ?? null)}`);
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    if (appWindow) showMainWindowAsGameCover(appWindow);
+    if (appWindow) showAutomationCover(appWindow);
     let gameProcess: Awaited<ReturnType<typeof detectAoe2Process>>;
     try {
       gameProcess = await prepareHiddenAoe2WindowBehind();
@@ -3783,7 +3817,7 @@ export function registerGameHandlers(): void {
       return { sent: false, message: "That lobby cursor action is not supported." };
     }
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    if (appWindow) showMainWindowAsGameCover(appWindow);
+    if (appWindow) showAutomationCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
       const inputGuardStarted = await startInputGuard(appWindow);
@@ -3964,7 +3998,7 @@ export function registerGameHandlers(): void {
       : { languageCode: "en", names: {} as Record<string, string> };
     const localizedSelection = localization.names[selection] ?? selection;
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    if (appWindow) showMainWindowAsGameCover(appWindow);
+    if (appWindow) showAutomationCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
       const gameProcess = await prepareHiddenAoe2WindowBehind();
@@ -4309,7 +4343,7 @@ export function registerGameHandlers(): void {
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    if (appWindow) showMainWindowAsGameCover(appWindow);
+    if (appWindow) showAutomationCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
       const gameProcess = await prepareHiddenAoe2WindowBehind();
@@ -4466,7 +4500,7 @@ export function registerGameHandlers(): void {
       return { opened: false };
     }
     const appWindow = BrowserWindow.fromWebContents(event.sender);
-    if (appWindow) showMainWindowAsGameCover(appWindow);
+    if (appWindow) showAutomationCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     const game = await prepareHiddenAoe2WindowBehind();
     if (!game.running || !game.pid || !game.windowReady) {
@@ -4492,7 +4526,7 @@ export function registerGameHandlers(): void {
     const keepGameBehind = setInterval(() => {
       if (isAoe2NativeWindowForeground(game.pid!)) {
         keepAoe2NativeWindowBehind(game.pid!);
-        if (appWindow && !appWindow.isDestroyed()) showMainWindowAsGameCover(appWindow);
+        if (appWindow && !appWindow.isDestroyed()) showAutomationCover(appWindow);
       }
     }, 25);
     keepGameBehind.unref();
