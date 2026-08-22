@@ -59,6 +59,7 @@ import { adminDashboardHtml, adminLoginHtml } from "./admin-dashboard.mjs";
 import { tournamentSpectatorUri } from "./tournament-spectator.mjs";
 import { createTournamentChatStore } from "./tournament-chat.mjs";
 import { tournamentMapFromInput } from "./tournament-map.mjs";
+import { parseMatchmakerRequestUrl } from "./matchmaker-request-url.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -1373,8 +1374,9 @@ async function expireMatch(match) {
 }
 
 async function handleRequest(request, response) {
+  const url = parseMatchmakerRequestUrl(request.url, request.headers.host);
+  if (!url) return send(response, 400, { error: "invalid request URL" });
   if (request.method === "OPTIONS") return send(response, 204, {});
-  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
 
   try {
     if (request.method === "GET" && (url.pathname === "/admin" || url.pathname === "/admin/")) {
@@ -2804,8 +2806,8 @@ function unsubscribeSocket(socket) {
 }
 
 server.on("upgrade", (request, socket, head) => {
-  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1"}`);
-  if (url.pathname !== "/events") {
+  const url = parseMatchmakerRequestUrl(request.url, request.headers.host);
+  if (!url || url.pathname !== "/events") {
     socket.destroy();
     return;
   }
