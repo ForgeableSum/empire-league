@@ -710,6 +710,7 @@ async function startReplayEndDetection(
   let replayStartedEmitted = false;
   let activeCreatedDuringWatch = false;
   let lastCandidateKey: string | undefined;
+  let lastCandidateNotificationAt = 0;
   let observedInGameScreen = false;
   let consecutiveMainMenuReads = 0;
   let recoveredFromMainMenu = false;
@@ -830,11 +831,15 @@ async function startReplayEndDetection(
             ? replayStartupStableForMs
             : replayRunningStableForMs;
           const candidateKey = `${current.path}|${current.size}|${current.modifiedMs}`;
-          if (now - lastGrowthAt >= stableForMs && candidateKey !== lastCandidateKey) {
+          const candidateChanged = candidateKey !== lastCandidateKey;
+          const retryDue = now - lastCandidateNotificationAt >= stableForMs;
+          if (now - lastGrowthAt >= stableForMs && (candidateChanged || retryDue)) {
             lastCandidateKey = candidateKey;
+            lastCandidateNotificationAt = now;
             emitReplayEnded(current, "QuietFallback");
             console.info(
-              `[AoE2 replay] INSPECT|Reason=QuietFallback|File=${current.path}|StableMs=${stableForMs}|ElapsedMs=${elapsedMs}`
+              `[AoE2 replay] INSPECT|Reason=QuietFallback|Retry=${!candidateChanged}`
+              + `|File=${current.path}|StableMs=${stableForMs}|ElapsedMs=${elapsedMs}`
             );
           }
         }

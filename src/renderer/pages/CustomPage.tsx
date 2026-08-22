@@ -222,6 +222,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const [draft, setDraft] = useState("");
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const replayResultInFlight = useRef(false);
+  const pendingReplayResultPath = useRef<string | null>(null);
   const gameStartRevealRef = useRef<Promise<void> | null>(null);
   const activeAutomationAttemptRef = useRef(room.automationAttemptId);
   const startRequestInFlight = useRef(false);
@@ -451,25 +452,30 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   useEffect(() => {
     if (room.status !== "started" || !window.electronApi) return;
     return window.electronApi.onReplayEnded((filePath) => {
+      pendingReplayResultPath.current = filePath;
       if (replayResultInFlight.current) return;
       replayResultInFlight.current = true;
-      void replayHasEnded(
-        filePath,
-        replayCompletionMode,
-        replayCompletionMode === "standard" ? undefined : room.maxPlayers
-      )
-        .then(async (ended) => {
-          if (!ended) {
-            replayResultInFlight.current = false;
+      void (async () => {
+        try {
+          while (pendingReplayResultPath.current) {
+            const replayPath = pendingReplayResultPath.current;
+            pendingReplayResultPath.current = null;
+            const ended = await replayHasEnded(
+              replayPath,
+              replayCompletionMode,
+              replayCompletionMode === "standard" ? undefined : room.maxPlayers
+            );
+            if (!ended) continue;
+            await window.electronApi!.confirmReplayEnded();
+            await customLobbyService.finish(room.id);
             return;
           }
-          await window.electronApi!.confirmReplayEnded();
-          await customLobbyService.finish(room.id);
-        })
-        .catch((error) => {
-          replayResultInFlight.current = false;
+        } catch (error) {
           notify("The finished custom game could not be detected.", "danger", { detail: messageFor(error) });
-        });
+        } finally {
+          replayResultInFlight.current = false;
+        }
+      })();
     });
   }, [room.id, room.maxPlayers, room.status, replayCompletionMode, notify]);
 
