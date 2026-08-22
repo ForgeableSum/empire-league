@@ -94,6 +94,10 @@ const aoe2LanguageRefreshIntervalMs = 5_000;
 const aoe2LanguageRefreshDurationMs = 5 * 60_000;
 const roomSetupTimeoutMs = 65_000;
 const roomSetupEstimateMarginMs = 15_000;
+const roomReadyPhaseTimeoutMs = Math.max(
+  roomSetupTimeoutMs,
+  lobbySetupTiming.customMapTransferTimeoutMs + roomSetupEstimateMarginMs
+);
 const tournamentLobbyPasswordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
 function generateTournamentLobbyPassword(): string {
@@ -108,7 +112,10 @@ function isLobbyAutomationProgress(message: string): boolean {
   return message.includes("SEQUENCE|")
     || message.includes("MAP_SELECT|")
     || message.includes("CIV_SELECT|")
+    || message.includes("TEAM_SELECT|")
     || message.includes("CURSOR_ACTION|")
+    || message.includes("ACTION_WINDOW|")
+    || message.includes("READY_VERIFY|")
     || message.includes("START_RETRY|");
 }
 
@@ -882,6 +889,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const expectedRemainingMs = Math.max(0, audit.expectedMs - elapsedMs);
     const suffix = complete ? `|DeltaMs=${elapsedMs - audit.expectedMs}` : "";
     log(`LOBBY_TIMING|Match=${audit.matchId}|Role=${audit.role}|Phase=${phase}|ElapsedMs=${elapsedMs}|PhaseMs=${phaseMs}|ExpectedTotalMs=${audit.expectedMs}|ExpectedRemainingMs=${expectedRemainingMs}${suffix}`);
+    // Server milestones are real setup progress too. In team games, one client
+    // can otherwise sit idle while the remaining guests configure their slots
+    // and inherit a nearly expired watchdog when the next phase begins.
+    touchRoomSetupWatchdog();
     audit.previousAt = now;
     if (complete) lobbyTimingAuditRef.current = null;
   }
@@ -1334,6 +1345,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         if (event.type === "host_lobby_ready" && window.electronApi) {
           void window.electronApi.beginAoe2MatchAudioSuppression();
+          // Ready verification can spend up to ten seconds waiting for window
+          // capture on each poll. Give the transfer/Ready phase its own full
+          // budget instead of inheriting time spent waiting for other guests.
+          startRoomSetupWatchdog(roomReadyPhaseTimeoutMs);
           auditLobbyPhase("host-ready");
           const customContentFlow = isCustomLobbyMap(matchedSessionRef.current?.selectedMap);
           setState((previous) => ({
