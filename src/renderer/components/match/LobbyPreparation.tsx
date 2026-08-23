@@ -27,6 +27,7 @@ export function LobbyPreparation() {
     : canonicalMapDescription;
   const teams = getCivilizationTeams(match);
   const civilizationRows = Math.max(teams.player.length, teams.opponent.length, 1);
+  const isTeamGame = match?.queue.format === "team" || civilizationRows > 1;
 
   useEffect(() => {
     const update = () => setRemaining(getRemaining(state.roomSetupStartedAt, countdownMs));
@@ -54,7 +55,7 @@ export function LobbyPreparation() {
         )}
       </div>
       <MatchmakingBrand />
-      <div className="civilization-matchup" style={{ "--civilization-rows": civilizationRows } as CSSProperties}>
+      <div className={`civilization-matchup${isTeamGame ? " team-game" : ""}`} style={{ "--civilization-rows": civilizationRows } as CSSProperties}>
         <article className="upcoming-map-card">
           <span className="eyebrow">Map</span>
           <h3>{selectedMap ? localizeAoe2Name(selectedMap.name) : "Map pending"}</h3>
@@ -65,24 +66,49 @@ export function LobbyPreparation() {
           )}
           {mapDescription && <p className="upcoming-map-description">{mapDescription}</p>}
         </article>
-        {teams.player.map((participant, index) => (
-          <CivilizationBonuses
-            key={`${participant.player.id}-${participant.lobbySlot}`}
-            civilization={resolveParticipantCivilization(participant, teams.opponent)}
-            label={participant.isCurrentPlayer ? "Your civilization" : participant.player.displayName}
-            row={index + 1}
-            side="player"
-          />
-        ))}
-        {teams.opponent.map((participant, index) => (
-          <CivilizationBonuses
-            key={`${participant.player.id}-${participant.lobbySlot}`}
-            civilization={resolveParticipantCivilization(participant, teams.player)}
-            label={participant.player.displayName || "Opponent civilization"}
-            row={index + 1}
-            side="opponent"
-          />
-        ))}
+        {isTeamGame ? (
+          <>
+            <div className="civilization-team-column player">
+              <div className="civilization-team-heading player">Your team</div>
+              {teams.player.map((participant, index) => (
+                <CivilizationBonuses
+                  key={`${participant.player.id}-${participant.lobbySlot}`}
+                  civilization={resolveParticipantCivilization(participant, teams.opponent)}
+                  label={participant.isCurrentPlayer ? "Your civilization" : participant.player.displayName}
+                  row={index + 1}
+                  side="player"
+                />
+              ))}
+            </div>
+            <div className="civilization-team-column opponent">
+              <div className="civilization-team-heading opponent">Opposing team</div>
+              {teams.opponent.map((participant, index) => (
+                <CivilizationBonuses
+                  key={`${participant.player.id}-${participant.lobbySlot}`}
+                  civilization={resolveParticipantCivilization(participant, teams.player)}
+                  label={participant.player.displayName || "Opponent civilization"}
+                  row={index + 1}
+                  side="opponent"
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <CivilizationBonuses
+              civilization={resolveParticipantCivilization(teams.player[0], teams.opponent)}
+              label="Your civilization"
+              row={1}
+              side="player"
+            />
+            <CivilizationBonuses
+              civilization={resolveParticipantCivilization(teams.opponent[0], teams.player)}
+              label="Opponent civilization"
+              row={1}
+              side="opponent"
+            />
+          </>
+        )}
       </div>
     </section>
   );
@@ -164,7 +190,7 @@ function CivilizationBonuses({
     ? getLocalizedAoe2CivilizationBonuses(civilization) ?? civBonuses[civilization]
     : null;
   return (
-    <article className={`civ-bonus-card ${side}${row > 1 ? " additional" : ""}`} style={{ gridColumn: side === "player" ? 2 : 3, gridRow: row }}>
+    <article className={`civ-bonus-card ${side}${row > 1 ? " additional" : ""}`}>
       <span className="eyebrow">{label}</span>
       <h3>{civilization ? localizeAoe2Name(civilization) : "Random civilization"}</h3>
       {details ? (
