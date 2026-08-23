@@ -988,45 +988,117 @@ export async function recordMatchResultConflict(match, { reason, implicatedTicke
 
 export async function getPlayerMatchHistory(playerId) {
   const [rows] = await database.execute(
-    `SELECT m.id, opponent.id AS opponent_id, opponent.display_name AS opponent,
-       CASE WHEN m.queue_id = 'team-games' THEN opponent.team_rating ELSE opponent.rating END AS opponent_rating,
+    `SELECT m.id, m.host_player_id, host.display_name AS host_name,
+       CASE WHEN m.queue_id = 'team-games' THEN host.team_rating ELSE host.rating END AS host_rating,
+       m.guest_player_id, guest.display_name AS guest_name,
+       CASE WHEN m.queue_id = 'team-games' THEN guest.team_rating ELSE guest.rating END AS guest_rating,
        m.selected_map_name AS map_name, m.queue_id AS queue_type,
-       CASE WHEN m.host_player_id = ? THEN m.host_civilization ELSE m.guest_civilization END AS civilization,
-       CASE WHEN m.host_player_id = ? THEN m.guest_civilization ELSE m.host_civilization END AS opponent_civilization,
+       m.host_civilization, m.guest_civilization,
        CASE
          WHEN mr.verification_status <> 'verified' THEN 'no_contest'
          WHEN mr.result = 'no_contest' THEN 'no_contest'
-         WHEN mr.winner_player_id = ? THEN 'win'
+         WHEN self_participant.player_id IS NOT NULL
+           AND self_participant.team_number = winner_participant.team_number THEN 'win'
+         WHEN self_participant.player_id IS NULL AND mr.winner_player_id = ? THEN 'win'
          ELSE 'loss'
        END AS outcome,
        COALESCE(rh.rating_change, 0) AS rating_change,
        TIMESTAMPDIFF(MINUTE, m.created_at, m.completed_at) AS duration_minutes,
        COALESCE(m.completed_at, m.created_at) AS history_at, mr.verification_status
      FROM matches m
-     JOIN players opponent ON opponent.id = CASE WHEN m.host_player_id = ? THEN m.guest_player_id ELSE m.host_player_id END
+     JOIN players host ON host.id = m.host_player_id
+     JOIN players guest ON guest.id = m.guest_player_id
      JOIN match_results mr ON mr.match_id = m.id
+     LEFT JOIN match_participants self_participant
+       ON self_participant.match_id = m.id AND self_participant.player_id = ?
+     LEFT JOIN match_participants winner_participant
+       ON winner_participant.match_id = m.id AND winner_participant.player_id = mr.winner_player_id
      LEFT JOIN rating_history rh ON rh.match_id = m.id AND rh.player_id = ?
-     WHERE (m.host_player_id = ? OR m.guest_player_id = ?) AND m.status IN ('in_game', 'completed')
+     WHERE (m.host_player_id = ? OR m.guest_player_id = ? OR self_participant.player_id IS NOT NULL)
+       AND m.status IN ('in_game', 'completed')
      ORDER BY history_at DESC
      LIMIT 100`,
-    [playerId, playerId, playerId, playerId, playerId, playerId, playerId]
+    [playerId, playerId, playerId, playerId, playerId]
   );
-  return rows.map((row) => ({
-    id: row.id,
-    opponentId: row.opponent_id,
-    opponent: row.opponent,
-    opponentRating: Number(row.opponent_rating),
-    outcome: row.outcome,
-    map: row.map_name,
-    civilization: row.civilization ?? "",
-    opponentCivilization: row.opponent_civilization ?? "",
-    ratingChange: Number(row.rating_change),
-    durationMinutes: Number(row.duration_minutes ?? 0),
-    timestamp: new Date(row.history_at).toISOString(),
-    verified: row.verification_status === "verified",
-    verificationStatus: row.verification_status,
-    queueType: row.queue_type
-  }));
+
+  const participantsByMatch = new Map();
+  if (rows.length > 0) {
+    const placeholders = rows.map(() => "?").join(", ");
+    const [participantRows] = await database.execute(
+      `SELECT mp.match_id, mp.player_id, p.display_name,
+         CASE WHEN m.queue_id = 'team-games' THEN p.team_rating ELSE p.rating END AS rating,
+         mp.lobby_slot, mp.team_number, mp.civilization
+       FROM match_participants mp
+       JOIN matches m ON m.id = mp.match_id
+       JOIN players p ON p.id = mp.player_id
+       WHERE mp.match_id IN (${placeholders})
+       ORDER BY mp.match_id, mp.team_number, mp.lobby_slot`,
+      rows.map((row) => row.id)
+    );
+    for (const participant of participantRows) {
+      const list = participantsByMatch.get(participant.match_id) ?? [];
+      list.push({
+        playerId: participant.player_id,
+        displayName: participant.display_name,
+        rating: Number(participant.rating),
+        civilization: participant.civilization ?? "",
+        teamNumber: Number(participant.team_number),
+        lobbySlot: Number(participant.lobby_slot),
+        isCurrentPlayer: participant.player_id === playerId
+      });
+      participantsByMatch.set(participant.match_id, list);
+    }
+  }
+
+  return rows.map((row) => {
+    const isHost = row.host_player_id === playerId;
+    const participants = participantsByMatch.get(row.id) ?? [
+      {
+        playerId: row.host_player_id,
+        displayName: row.host_name,
+        rating: Number(row.host_rating),
+        civilization: row.host_civilization ?? "",
+        teamNumber: 1,
+        lobbySlot: 1,
+        isCurrentPlayer: isHost
+      },
+      {
+        playerId: row.guest_player_id,
+        displayName: row.guest_name,
+        rating: Number(row.guest_rating),
+        civilization: row.guest_civilization ?? "",
+        teamNumber: 2,
+        lobbySlot: 2,
+        isCurrentPlayer: !isHost
+      }
+    ];
+    const currentParticipant = participants.find((participant) => participant.isCurrentPlayer);
+    const opponent = participants.find((participant) => participant.teamNumber !== currentParticipant?.teamNumber)
+      ?? participants.find((participant) => !participant.isCurrentPlayer)
+      ?? participants[0];
+    const teamCounts = participants.reduce((sizes, participant) => {
+      sizes[participant.teamNumber] = (sizes[participant.teamNumber] ?? 0) + 1;
+      return sizes;
+    }, {});
+    return {
+      id: row.id,
+      opponentId: opponent.playerId,
+      opponent: opponent.displayName,
+      opponentRating: opponent.rating,
+      outcome: row.outcome,
+      map: row.map_name,
+      civilization: currentParticipant?.civilization ?? "",
+      opponentCivilization: opponent.civilization ?? "",
+      participants,
+      teamSize: Math.max(1, ...Object.values(teamCounts)),
+      ratingChange: Number(row.rating_change),
+      durationMinutes: Number(row.duration_minutes ?? 0),
+      timestamp: new Date(row.history_at).toISOString(),
+      verified: row.verification_status === "verified",
+      verificationStatus: row.verification_status,
+      queueType: row.queue_type
+    };
+  });
 }
 
 export async function getPlayerProfile(playerId) {

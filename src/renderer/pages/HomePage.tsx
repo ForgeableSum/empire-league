@@ -1,6 +1,7 @@
 import { formatDivisionForRating } from "../../shared/contracts/matchmaking";
 import { Metric } from "../components/common/Metric";
 import { FormPips } from "../components/common/FormPips";
+import { HistoryCivilizations, HistoryPlayers } from "../components/match/HistoryMatchup";
 import { MapPool } from "../components/common/MapPool";
 import { mapGroups } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
@@ -54,7 +55,7 @@ export function HomePage() {
         <div className="table recent-matches-table">
           <div className="table-row table-header">
             <strong>Result</strong>
-            <span>Opponent</span>
+            <span>Players</span>
             <span>Map</span>
             <span>Civilization</span>
             <span>Rating</span>
@@ -63,11 +64,9 @@ export function HomePage() {
           {state.recentMatches.slice(0, 7).map((match) => (
             <div className="table-row" key={match.id}>
               <strong className={match.outcome}>{match.outcome === "win" ? "Victory" : match.outcome === "loss" ? "Defeat" : "No Contest"}</strong>
-              <span>{match.opponent}</span>
+              <HistoryPlayers match={match} localizeAoe2Name={localizeAoe2Name} />
               <span>{localizeAoe2Name(match.map)}</span>
-              <span>{match.civilization && match.opponentCivilization
-                ? `${localizeAoe2Name(match.civilization)} vs. ${localizeAoe2Name(match.opponentCivilization)}`
-                : "Unknown civilizations"}</span>
+              <HistoryCivilizations match={match} localizeAoe2Name={localizeAoe2Name} />
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>{match.ratingChange > 0 ? "+" : ""}{match.ratingChange}</span>
               <span>{match.durationMinutes}m</span>
             </div>

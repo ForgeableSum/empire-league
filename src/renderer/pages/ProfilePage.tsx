@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FormPips } from "../components/common/FormPips";
+import { HistoryCivilizations, HistoryPlayers } from "../components/match/HistoryMatchup";
 import { Metric } from "../components/common/Metric";
 import { useAppStore } from "../state/appStore";
 import type { MatchSummary } from "../../shared/contracts/matches";
@@ -237,7 +238,7 @@ export function ProfilePage({
         <div className="table recent-matches-table">
           <div className="table-row table-header">
             <strong>Result</strong>
-            <span>Opponent</span>
+            <span>Players</span>
             <span>Map</span>
             <span>Civilization</span>
             <span>Rating</span>
@@ -248,13 +249,9 @@ export function ProfilePage({
               <strong className={match.outcome}>
                 {match.outcome === "win" ? "Victory" : match.outcome === "loss" ? "Defeat" : "No Contest"}
               </strong>
-              <button className="player-link" type="button" onClick={() => openPlayerProfile(match.opponentId)}>
-                {match.opponent}
-              </button>
+              <HistoryPlayers match={match} localizeAoe2Name={localizeAoe2Name} openPlayerProfile={openPlayerProfile} />
               <span>{localizeAoe2Name(match.map)}</span>
-              <span>{match.civilization && match.opponentCivilization
-                ? `${localizeAoe2Name(match.civilization)} vs. ${localizeAoe2Name(match.opponentCivilization)}`
-                : "Unknown civilizations"}</span>
+              <HistoryCivilizations match={match} localizeAoe2Name={localizeAoe2Name} />
               <span className={match.ratingChange >= 0 ? "win" : "loss"}>
                 {match.ratingChange > 0 ? "+" : ""}{match.ratingChange}
               </span>

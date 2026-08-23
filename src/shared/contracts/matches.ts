@@ -66,6 +66,17 @@ export interface ReplayMatchMetadata {
   reason: "resignation" | "defeat" | "disconnect" | "unknown";
 }
 
+export interface MatchSummaryParticipant {
+  playerId: string;
+  displayName: string;
+  rating: number;
+  civilization: string;
+  teamNumber: number;
+  lobbySlot: number;
+  /** True for the player whose history was requested. */
+  isCurrentPlayer: boolean;
+}
+
 export interface MatchSummary {
   id: string;
   opponentId: string;
@@ -75,6 +86,8 @@ export interface MatchSummary {
   map: string;
   civilization: string;
   opponentCivilization: string;
+  participants?: MatchSummaryParticipant[];
+  teamSize?: number;
   ratingChange: number;
   durationMinutes: number;
   timestamp: string;

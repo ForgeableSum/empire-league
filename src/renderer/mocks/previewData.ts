@@ -19,11 +19,21 @@ export const previewMatches: MatchSummary[] = [
   map: String(map),
   civilization: String(civilization),
   opponentCivilization: String(opponentCivilization),
+  participants: index === 0 ? [
+    { playerId: "user-1", displayName: "EmpireSum", rating: 1378, civilization: "Byzantines", teamNumber: 1, lobbySlot: 1, isCurrentPlayer: true },
+    { playerId: "preview-ally-1", displayName: "CastleClick", rating: 1401, civilization: "Mongols", teamNumber: 1, lobbySlot: 2, isCurrentPlayer: false },
+    { playerId: "preview-player-1", displayName: "StoneGate21", rating: 1452, civilization: "Franks", teamNumber: 2, lobbySlot: 3, isCurrentPlayer: false },
+    { playerId: "preview-opponent-2", displayName: "TownBell", rating: 1364, civilization: "Mayans", teamNumber: 2, lobbySlot: 4, isCurrentPlayer: false }
+  ] : [
+    { playerId: "user-1", displayName: "EmpireSum", rating: 1426, civilization: String(civilization), teamNumber: 1, lobbySlot: 1, isCurrentPlayer: true },
+    { playerId: `preview-player-${index + 1}`, displayName: String(opponent), rating: Number(opponentRating), civilization: String(opponentCivilization), teamNumber: 2, lobbySlot: 2, isCurrentPlayer: false }
+  ],
+  teamSize: index === 0 ? 2 : 1,
   ratingChange: Number(ratingChange),
   durationMinutes: Number(durationMinutes),
   timestamp: new Date(Date.now() - index * 86_400_000).toISOString(),
   verified: true,
-  queueType: "Ranked 1v1 Random Map"
+  queueType: index === 0 ? "team-games" : "Ranked 1v1 Random Map"
 }));
 
 export const previewCustomRooms: CustomLobbyRoom[] = [
