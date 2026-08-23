@@ -24,8 +24,10 @@
     "test:civilizations": "node --test src/civilization-roll.test.mjs",
     "test:replays": "node --test src/replay-rules.test.mjs",
     "test:replay-results": "node --test src/replay-result.test.mjs",
+    "test:replay-metadata": "node --test src/replay-metadata.test.mjs",
     "test:ratings": "node --test src/rating-pool.test.mjs",
     "test:matchmaker": "node --test src/matchmaker-request-url.test.mjs",
+    "test:custom-lobbies": "node --test src/custom-lobby-slots.test.mjs",
     "test:weekly": "node --test src/weekly-rotation.test.mjs",
     "test:tournaments": "node --test src/tournament-bracket.test.mjs src/tournament-chat.test.mjs src/tournament-map.test.mjs src/tournament-password.test.mjs src/tournament-spectator.test.mjs",
     "test:translations": "node scripts/extract-ui-strings.mjs --check && node scripts/audit-ui-translations.mjs"

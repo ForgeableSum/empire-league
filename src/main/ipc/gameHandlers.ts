@@ -31,6 +31,7 @@ import {
   customLobbyTreatyLengths,
   customLobbyVictoryConditions,
   defaultCustomLobbyGameSettings,
+  type CustomLobbyAiSlot,
   type CustomLobbyGameSettings
 } from "../../shared/contracts/customLobby.js";
 import { builtInMapNameFromFile, isSelectableBuiltInMapFile } from "../../shared/builtInMaps.js";
@@ -39,6 +40,7 @@ import {
   civilizationDesignPoint,
   civilizationSlotDesignPoint,
   mapDesignPoint,
+  playerTypeSlotDesignPoint,
   teamGameMapSizeSelection,
   teamSlotDesignPoint,
   type Aoe2ActionName,
@@ -135,6 +137,7 @@ let replayFocusTimers: NodeJS.Timeout[] = [];
 let returnToMenuPoller: NodeJS.Timeout | undefined;
 let returnToMenuWatchGeneration = 0;
 let replayDetectionGeneration = 0;
+let replayAlreadyRecoveredAtMainMenu = false;
 const builtInGameMapNames = new Set<string>();
 let createLobbySequenceCounter = 0;
 let activeCreateLobbySequence: { id: number; context: "ranked" | "tournament" | "custom" } | undefined;
@@ -540,6 +543,7 @@ async function disableEnabledUiMods(): Promise<{ disabled: string[] }> {
 }
 
 const replayPollIntervalMs = 1500;
+const customReplayPollIntervalMs = 250;
 const replayStartupWindowMs = 60_000;
 const replayStartupStableForMs = 6_000;
 const replayRunningStableForMs = 3_000;
@@ -713,10 +717,12 @@ function startReturnToMenuWatch(window: BrowserWindow): void {
 
 async function startReplayEndDetection(
   window: BrowserWindow,
-  configuredFolder?: string
+  configuredFolder?: string,
+  context: "ranked" | "custom" = "ranked"
 ): Promise<{ started: boolean; message?: string }> {
   clearReplayFocusTimers();
   stopReplayEndDetection();
+  replayAlreadyRecoveredAtMainMenu = false;
   const generation = replayDetectionGeneration;
   const startedAt = Date.now();
   let active: ReplaySnapshot | undefined;
@@ -752,7 +758,11 @@ async function startReplayEndDetection(
     console.info(`[AoE2 replay] STARTED|File=${replay.path}`);
   };
 
-  const emitReplayEnded = (replay: ReplaySnapshot, reason: "FileGrowth" | "QuietFallback"): void => {
+  const emitReplayEnded = (
+    replay: ReplaySnapshot,
+    reason: "FileGrowth" | "QuietFallback",
+    retry = false
+  ): void => {
     if (window.webContents.isDestroyed()) {
       if (reason !== "FileGrowth") {
         console.warn(
@@ -762,7 +772,7 @@ async function startReplayEndDetection(
       }
       return;
     }
-    window.webContents.send("game:replay-ended", replay.path);
+    window.webContents.send("game:replay-ended", replay.path, { reason, retry });
     if (reason !== "FileGrowth") {
       console.info(
         `[AoE2 replay] NOTIFY|Reason=${reason}|RendererDestroyed=False`
@@ -786,10 +796,13 @@ async function startReplayEndDetection(
         if (!window.webContents.isDestroyed()) window.webContents.send("game:process-exited");
         console.info("[AoE2 replay] RECOVER|Reason=ProcessExited");
       }
-      // Once the replay is growing, file activity is the source of truth for the
-      // active match. Do not keep capturing the game window throughout gameplay;
-      // the return-to-menu watcher is armed after replay completion.
-      if (!observedGrowth && game.pid && game.windowReady && !recoveredFromMainMenu) {
+      // Avoid capturing throughout active gameplay, but resume the visual
+      // fallback once replay writes have gone quiet. AI operations can make a
+      // completed replay unreadable, and returning to the main menu must still
+      // restore Electron even when the renderer cannot confirm the replay.
+      const replayQuietEnoughForVisualFallback = observedGrowth
+        && Date.now() - lastGrowthAt >= replayRunningStableForMs;
+      if ((!observedGrowth || (context === "custom" && replayQuietEnoughForVisualFallback)) && game.pid && game.windowReady && !recoveredFromMainMenu) {
         const screen = readAoe2HostSetupState(game.pid);
         if (screen.state === "unknown" || screen.state === "loading-screen") observedInGameScreen = true;
         consecutiveMainMenuReads = observedInGameScreen && screen.state === "main-menu"
@@ -797,6 +810,7 @@ async function startReplayEndDetection(
           : 0;
         if (consecutiveMainMenuReads >= 2) {
           recoveredFromMainMenu = true;
+          replayAlreadyRecoveredAtMainMenu = context === "custom";
           focusMainWindowAfterReplay(window, true);
           console.info("[AoE2 replay] RECOVER|Reason=MainMenuFallback");
         }
@@ -851,7 +865,7 @@ async function startReplayEndDetection(
           if (now - lastGrowthAt >= stableForMs && (candidateChanged || retryDue)) {
             lastCandidateKey = candidateKey;
             lastCandidateNotificationAt = now;
-            emitReplayEnded(current, "QuietFallback");
+            emitReplayEnded(current, "QuietFallback", !candidateChanged);
             console.info(
               `[AoE2 replay] INSPECT|Reason=QuietFallback|Retry=${!candidateChanged}`
               + `|File=${current.path}|StableMs=${stableForMs}|ElapsedMs=${elapsedMs}`
@@ -895,11 +909,18 @@ async function startReplayEndDetection(
       console.error("[AoE2 replay] Poll failed", error);
     }
     if (generation === replayDetectionGeneration) {
-      replayEndPoller = setTimeout(() => void poll(), replayPollIntervalMs);
+      replayEndPoller = setTimeout(
+        () => void poll(),
+        context === "custom" ? customReplayPollIntervalMs : replayPollIntervalMs
+      );
     }
   };
 
-  console.info(`[AoE2 replay] WATCH|Folder=${configuredFolder?.trim() || "auto"}|StartedAt=${new Date(startedAt).toISOString()}`);
+  console.info(
+    `[AoE2 replay] WATCH|Context=${context}|Folder=${configuredFolder?.trim() || "auto"}`
+    + `|PollMs=${context === "custom" ? customReplayPollIntervalMs : replayPollIntervalMs}`
+    + `|StartedAt=${new Date(startedAt).toISOString()}`
+  );
   void poll();
   return { started: true };
 }
@@ -3203,11 +3224,15 @@ export function registerGameHandlers(): void {
     return { started: startLoadingScreenWatch(game.pid, event.sender) };
   });
 
-  ipcMain.handle("game:start-replay-end-detection", async (event, replayFolder?: string) => {
+  ipcMain.handle("game:start-replay-end-detection", async (
+    event,
+    replayFolder?: string,
+    context: "ranked" | "custom" = "ranked"
+  ) => {
     stopReturnToMenuWatch();
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return { started: false, message: "The Empire League window was not found." };
-    return startReplayEndDetection(window, replayFolder);
+    return startReplayEndDetection(window, replayFolder, context === "custom" ? "custom" : "ranked");
   });
 
   ipcMain.handle("game:stop-replay-end-detection", async () => {
@@ -3217,11 +3242,20 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:confirm-replay-ended", async (event) => {
     stopReplayEndDetection();
     const window = BrowserWindow.fromWebContents(event.sender);
+    const alreadyRecovered = replayAlreadyRecoveredAtMainMenu;
+    replayAlreadyRecoveredAtMainMenu = false;
     console.info(
       `[AoE2 replay] CONFIRM|RendererDestroyed=${event.sender.isDestroyed()}`
-      + `|WindowFound=${Boolean(window)}|ReturnWatchStarted=${Boolean(window)}`
+      + `|WindowFound=${Boolean(window)}|AlreadyAtMainMenu=${alreadyRecovered}`
+      + `|ReturnWatchStarted=${Boolean(window) && !alreadyRecovered}`
     );
-    if (window) startReturnToMenuWatch(window);
+    if (!window) return;
+    if (alreadyRecovered) {
+      stopReturnToMenuWatch();
+      focusMainWindowAfterReplay(window, true);
+      return;
+    }
+    startReturnToMenuWatch(window);
   });
 
   ipcMain.handle("game:test-return-to-menu-recovery", async (event) => {
@@ -3348,7 +3382,7 @@ export function registerGameHandlers(): void {
     mapName: string,
     playerCount = 2,
     contentKind: "map" | "scenario" = "map",
-    automationRequest: "ranked" | "tournament" | "custom" | { context: "tournament"; password: string } | { context: "custom"; gameSettings: CustomLobbyGameSettings } = "ranked",
+    automationRequest: "ranked" | "tournament" | "custom" | { context: "tournament"; password: string } | { context: "custom"; gameSettings: CustomLobbyGameSettings; aiSlots?: CustomLobbyAiSlot[] } = "ranked",
     requestedGameSettings?: CustomLobbyGameSettings
   ) => {
     stopTabTest();
@@ -3358,6 +3392,9 @@ export function registerGameHandlers(): void {
     requestedGameSettings = typeof automationRequest === "object" && automationRequest.context === "custom"
       ? automationRequest.gameSettings
       : requestedGameSettings;
+    const requestedAiSlots = typeof automationRequest === "object" && automationRequest.context === "custom"
+      ? (automationRequest.aiSlots ?? [])
+      : [];
     const tournamentLobbyPassword = typeof automationRequest === "object" && automationRequest.context === "tournament"
       ? automationRequest.password
       : undefined;
@@ -3374,6 +3411,15 @@ export function registerGameHandlers(): void {
     }
     if (!Number.isInteger(playerCount) || playerCount < 2 || playerCount > 8) {
       return { sent: false, message: "The lobby must contain between 2 and 8 players." };
+    }
+    const aiSlotNumbers = requestedAiSlots.map((ai) => ai.slot);
+    if (requestedAiSlots.length && (
+      !isCustomAutomation
+      || contentKind === "scenario"
+      || aiSlotNumbers.some((slot) => !Number.isInteger(slot) || slot < 2 || slot > playerCount)
+      || new Set(aiSlotNumbers).size !== aiSlotNumbers.length
+    )) {
+      return { sent: false, message: "The requested AI lobby slots are not supported." };
     }
     if (isTournamentAutomation && !/^[A-Za-z0-9]{12}$/.test(tournamentLobbyPassword ?? "")) {
       return { sent: false, message: "A valid tournament lobby password is required." };
@@ -3865,6 +3911,9 @@ export function registerGameHandlers(): void {
         }
       }
 
+      // Capture the private lobby URI while the base lobby controls are in
+      // their verified state. AI rows are still configured before this method
+      // returns, so the renderer cannot publish the URI prematurely.
       clipboard.writeText("EL_CURSOR_COPY_PENDING");
       await actionStep("copyLobbyUri");
       await delay(lobbySetupTiming.clipboardReadMs);
@@ -3876,6 +3925,24 @@ export function registerGameHandlers(): void {
         lobbyUri = clipboard.readText().match(/aoe2de:\/\/0\/\d+/)?.[0];
       }
       if (!lobbyUri) throw new Error("Lobby URI was not copied.");
+
+      if (isCustomAutomation && contentKind !== "scenario") {
+        const playerTypeManifest = aoe2UiManifest.playerTypeSlotDropdowns;
+        for (const ai of [...requestedAiSlots].sort((left, right) => left.slot - right.slot)) {
+          const point = playerTypeSlotDesignPoint(ai.slot);
+          await clickStep(`Open AI slot ${ai.slot}`, point[0], point[1], { synchronous: true });
+          await delay(playerTypeManifest.openSettleMs);
+          await clickStep(
+            `Select normal AI for slot ${ai.slot}`,
+            playerTypeManifest.optionX,
+            point[1] + playerTypeManifest.normalAiOptionOffsetY,
+            { synchronous: true }
+          );
+          await delay(playerTypeManifest.selectionSettleMs);
+          emitLog(`AI_SLOT|Slot=${ai.slot}|Type=NormalAI|Complete=True`);
+        }
+      }
+
       emitLog(`LOBBY_URI|${lobbyUri}`);
       emitLog("SEQUENCE|Complete=True|Mode=WindowMessage");
       sequenceCompleted = true;
@@ -4068,7 +4135,8 @@ export function registerGameHandlers(): void {
     event,
     selection: Aoe2CivilizationSelection,
     slot: number,
-    automationContext: "ranked" | "custom" = "ranked"
+    automationContext: "ranked" | "custom" = "ranked",
+    useHostLayout = slot === 1
   ) => {
     if (process.platform !== "win32"
       || !Number.isInteger(slot)
@@ -4209,7 +4277,7 @@ export function registerGameHandlers(): void {
         await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
         if (explicitRandom) {
-          const readyDesignY = slot === 1
+          const readyDesignY = useHostLayout
             ? aoe2UiManifest.actions.hostReady.point[1]
             : aoe2UiManifest.actions.guestReady.point[1];
           let readyState = readAoe2ReadyState(gameProcess.pid!, readyDesignY, {
@@ -4418,12 +4486,13 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:select-team", async (
     event,
-    team: 1 | 2,
+    team: 1 | 2 | 3 | 4,
     slot: number,
-    automationContext: "ranked" | "custom" = "ranked"
+    automationContext: "ranked" | "custom" = "ranked",
+    useHostLayout = slot === 1
   ) => {
     if (process.platform !== "win32"
-      || (team !== 1 && team !== 2)
+      || ![1, 2, 3, 4].includes(team)
       || !Number.isInteger(slot)
       || slot < 1
       || slot > aoe2UiManifest.teamSlotButtons.rowCenters.length) {
@@ -4441,7 +4510,7 @@ export function registerGameHandlers(): void {
       if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
-      const [x, y] = teamSlotDesignPoint(slot);
+      const [x, y] = teamSlotDesignPoint(slot, useHostLayout);
       // AoE initializes the selector at "?": first click is "-", second is Team 1.
       const clicks = team + 1;
       for (let index = 0; index < clicks; index += 1) {
@@ -4451,7 +4520,7 @@ export function registerGameHandlers(): void {
           holdMs: 100,
           requireMove: true
         });
-        emitLog(`TEAM_SELECT|Slot=${slot}|Team=${team}|Click=${index + 1}/${clicks}|${result.detail}`);
+        emitLog(`TEAM_SELECT|Slot=${slot}|Team=${team}|HostLayout=${useHostLayout}|Click=${index + 1}/${clicks}|${result.detail}`);
         if (!result.sent) throw new Error(`Team ${team} could not be selected for lobby slot ${slot}.`);
         await delay(150);
       }

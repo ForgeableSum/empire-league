@@ -60,6 +60,11 @@ import { tournamentSpectatorUri } from "./tournament-spectator.mjs";
 import { createTournamentChatStore } from "./tournament-chat.mjs";
 import { tournamentMapFromInput } from "./tournament-map.mjs";
 import { parseMatchmakerRequestUrl } from "./matchmaker-request-url.mjs";
+import {
+  customLobbyAiSlots,
+  customLobbyOccupiedCount,
+  normalizeCustomLobbyHumanSlots
+} from "./custom-lobby-slots.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -246,6 +251,7 @@ function assembleWeeklyRooms() {
       hostId: players[0].id,
       map: mode.map,
       players,
+      aiSlots: [],
       messages: [],
       gameSettings: {
         ...defaultCustomLobbySelectSettings,
@@ -289,6 +295,10 @@ function broadcastCustomRooms(closedRoom) {
 
 function playerCustomLobby(playerId) {
   return [...customLobbies.values()].find((room) => room.players.some((player) => player.id === playerId));
+}
+
+function resetCustomLobbyReadyState(room) {
+  for (const player of room.players) player.ready = false;
 }
 
 function playerHasRankedActivity(playerId) {
@@ -1818,6 +1828,7 @@ async function handleRequest(request, response) {
           ...(authenticatedPlayer.avatarUrl ? { avatarUrl: authenticatedPlayer.avatarUrl } : {}),
           slot: 1, team: 1, civilization: "Random", ready: false, host: true
         }],
+        aiSlots: [],
         messages: [],
         gameSettings: {
           ...defaultCustomLobbySelectSettings,
@@ -1845,8 +1856,11 @@ async function handleRequest(request, response) {
       if (weeklyQueue.has(authenticatedPlayer.id)) return send(response, 409, { error: "Leave the weekly queue before joining a custom lobby." });
       if (playerHasRankedActivity(authenticatedPlayer.id)) return send(response, 409, { error: "Leave matchmaking before joining a custom lobby." });
       if (!room.players.some((player) => player.id === authenticatedPlayer.id)) {
-        if (room.players.length >= room.maxPlayers) return send(response, 409, { error: "That lobby is full." });
-        const occupied = new Set(room.players.map((player) => player.slot));
+        if (customLobbyOccupiedCount(room) >= room.maxPlayers) return send(response, 409, { error: "That lobby is full." });
+        const occupied = new Set([
+          ...room.players.map((player) => player.slot),
+          ...customLobbyAiSlots(room).map((ai) => ai.slot)
+        ]);
         const slot = Array.from({ length: room.maxPlayers }, (_, index) => index + 1).find((candidate) => !occupied.has(candidate));
         room.players.push({
           id: authenticatedPlayer.id, displayName: authenticatedPlayer.displayName,
@@ -1869,6 +1883,7 @@ async function handleRequest(request, response) {
       if (!room.players.length || room.hostId === authenticatedPlayer.id) {
         customLobbies.delete(room.id);
       } else {
+        normalizeCustomLobbyHumanSlots(room);
         addLobbySystemMessage(room, `${authenticatedPlayer.displayName} left the lobby.`);
       }
       broadcastCustomRooms();
@@ -1890,6 +1905,56 @@ async function handleRequest(request, response) {
     }
 
     const customLobbyMessages = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/messages$/);
+
+    const addCustomAi = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/ai$/);
+    if (request.method === "POST" && addCustomAi) {
+      const room = customLobbies.get(decodeURIComponent(addCustomAi[1]));
+      if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can add AI players." });
+      if (room.locked) return send(response, 403, { error: "Weekly lobbies cannot add AI players." });
+      if (room.status !== "open") return send(response, 409, { error: "The lobby automation has already begun." });
+      if (room.map?.kind === "scenario") return send(response, 409, { error: "Scenario player slots are defined by the scenario." });
+      if (customLobbyOccupiedCount(room) >= room.maxPlayers) return send(response, 409, { error: "That lobby is full." });
+      const body = await readJson(request);
+      const slot = Number(body.slot);
+      if (!Number.isInteger(slot) || slot < 2 || slot > room.maxPlayers) {
+        return send(response, 400, { error: "Choose an open lobby slot for the AI player." });
+      }
+      const occupied = room.players.some((player) => player.slot === slot)
+        || customLobbyAiSlots(room).some((ai) => ai.slot === slot);
+      if (occupied) return send(response, 409, { error: "That lobby slot is already occupied." });
+      room.aiSlots.push({ slot, team: 2, civilization: "Random" });
+      room.aiSlots.sort((left, right) => left.slot - right.slot);
+      normalizeCustomLobbyHumanSlots(room);
+      resetCustomLobbyReadyState(room);
+      addLobbySystemMessage(room, `AI added to slot ${slot}.`);
+      broadcastCustomRooms();
+      return send(response, 201, { aiSlots: room.aiSlots });
+    }
+
+    const updateCustomAi = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/ai\/(\d+)$/);
+    if ((request.method === "PATCH" || request.method === "DELETE") && updateCustomAi) {
+      const room = customLobbies.get(decodeURIComponent(updateCustomAi[1]));
+      if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can change AI players." });
+      if (room.locked) return send(response, 403, { error: "Weekly lobbies cannot change AI players." });
+      if (room.status !== "open") return send(response, 409, { error: "The lobby automation has already begun." });
+      const slot = Number(updateCustomAi[2]);
+      const ai = customLobbyAiSlots(room).find((candidate) => candidate.slot === slot);
+      if (!ai) return send(response, 404, { error: "AI player not found." });
+      if (request.method === "DELETE") {
+        room.aiSlots = room.aiSlots.filter((candidate) => candidate.slot !== slot);
+        normalizeCustomLobbyHumanSlots(room);
+        resetCustomLobbyReadyState(room);
+        addLobbySystemMessage(room, `AI removed from slot ${slot}.`);
+        broadcastCustomRooms();
+        return send(response, 200, { removed: true });
+      }
+      const body = await readJson(request);
+      if (Number.isInteger(body.team) && body.team >= 0 && body.team <= 4) ai.team = body.team;
+      if (typeof body.civilization === "string" && body.civilization.length <= 40) ai.civilization = body.civilization;
+      resetCustomLobbyReadyState(room);
+      broadcastCustomRooms();
+      return send(response, 200, { ai });
+    }
 
     const updateCustomSettings = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/settings$/);
     if (request.method === "PATCH" && updateCustomSettings) {
@@ -1927,10 +1992,12 @@ async function handleRequest(request, response) {
       const room = customLobbies.get(decodeURIComponent(kickCustomPlayer[1]));
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can remove players." });
       if (room.locked) return send(response, 403, { error: "Weekly queue players cannot be removed by the host." });
+      if (room.status !== "open") return send(response, 409, { error: "The lobby automation has already begun." });
       const playerId = decodeURIComponent(kickCustomPlayer[2]);
       if (playerId === room.hostId) return send(response, 400, { error: "The host cannot remove themselves." });
       const removed = room.players.find((player) => player.id === playerId);
       room.players = room.players.filter((player) => player.id !== playerId);
+      normalizeCustomLobbyHumanSlots(room);
       if (removed) addLobbySystemMessage(room, `${removed.displayName} was removed from the lobby.`);
       broadcastCustomRooms();
       return send(response, 200, { removed: Boolean(removed) });
@@ -1945,6 +2012,7 @@ async function handleRequest(request, response) {
       room.automationAttemptId = randomUUID();
       room.automationStartedAt = new Date().toISOString();
       room.gameStartedAt = undefined;
+      room.gamePlayerCount = customLobbyOccupiedCount(room);
       room.platformLobbyId = undefined;
       room.automationError = undefined;
       for (const player of room.players) {
@@ -2064,6 +2132,7 @@ async function handleRequest(request, response) {
       }
       room.status = "open";
       room.gameStartedAt = undefined;
+      room.gamePlayerCount = undefined;
       room.automationError = String(body.error ?? "AoE2 lobby automation failed.").slice(0, 300);
       void recordAutomationFailure({
         player: authenticatedPlayer,

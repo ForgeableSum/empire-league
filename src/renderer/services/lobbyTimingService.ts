@@ -140,7 +140,20 @@ export function estimateCustomLobbySetupMs(room: CustomLobbyRoom): number {
   total += defaultClickDurationMs() + mapPicker.searchSettleMs;
   total += defaultClickDurationMs() + mapPicker.selectionSettleMs;
   if (room.map?.kind !== "scenario") total += customLobbySelectSettingsDuration(room);
+  const aiSlots = room.map?.kind === "scenario" ? [] : (room.aiSlots ?? []);
+  total += aiSlots.length * (
+    defaultClickDurationMs()
+    + aoe2UiManifest.playerTypeSlotDropdowns.openSettleMs
+    + 15
+    + aoe2UiManifest.playerTypeSlotDropdowns.selectionSettleMs
+  );
   total += actionDuration(actions.copyLobbyUri) + lobbySetupTiming.clipboardReadMs;
+  for (const ai of aiSlots) {
+    total += civilizationSelectionDuration({ mode: "pick", civilization: ai.civilization });
+    if (ai.team >= 1 && ai.team <= 4) {
+      total += (ai.team + 1) * (defaultClickDurationMs() + 150);
+    }
+  }
   total += lobbySetupTiming.lobbyMetadataMs
     + (lobbySetupEstimateTiming.guestJoinMs * sequentialGuestCount);
 

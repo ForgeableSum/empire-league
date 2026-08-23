@@ -61,21 +61,28 @@ lobby message loop can be throttled while AoE2 is in the background.
    list's scroll-down control before clicking the last visible row. The final
    option uses the reliable End shortcut. Scenario rooms retain their
    scenario-defined values.
-11. Optionally select a civilization:
+11. For every reserved custom-room AI slot, open that row's player-type
+    dropdown and click the normal DE `AI` row directly. Do not use the final
+    entry because that selects the legacy HD AI. Copy the private lobby URI
+    before changing player types, but do not return or publish it until every
+    AI row has been configured. The host then applies each AI civilization and team using the
+    host-layout row controls. Guests cannot join until this finishes, so their
+    AoE2 row numbers match the human slots assigned around the AI reservations.
+12. Optionally select a civilization:
    1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
    2. For a named civilization, enter its exact name in the picker search field.
    3. Click the fixed first civilization result after the four generic selector options.
    4. Dispatch Enter once to confirm the selected result and close the picker.
    5. Verify that AoE2 returned to the lobby room.
-12. `copyLobbyUri` (`click`)
-13. Verify the clipboard matches `aoe2de://0/<digits>`.
-14. Publish that URI to the guest. This URI is the normal automated invitation path.
-15. If an explicit in-game invite is needed, use `hostInvite`.
-16. Wait for the guest-joined report.
-17. `hostReady` (`click`) to finalize custom lobby files and release any required transfer.
-18. If the guest reports accepting unverified content, verify `hostReady` again because AoE2 may automatically clear the host's Ready state.
-19. Wait for the guest-ready report.
-20. `startGame` (`click`)
+13. `copyLobbyUri` (`click`)
+14. Verify the clipboard matches `aoe2de://0/<digits>`.
+15. Publish that URI to the guest. This URI is the normal automated invitation path.
+16. If an explicit in-game invite is needed, use `hostInvite`.
+17. Wait for the guest-joined report.
+18. `hostReady` (`click`) to finalize custom lobby files and release any required transfer.
+19. If the guest reports accepting unverified content, verify `hostReady` again because AoE2 may automatically clear the host's Ready state.
+20. Wait for the guest-ready report.
+21. `startGame` (`click`)
 
 The first three transitions are verified from stable points on AoE2's rendered
 window surface. If the expected next screen is not present, that step is
@@ -88,7 +95,7 @@ wrong screen.
 2. Pass the URI directly to AoE2's bundled `Tools_Builds/AOEURLHelper.exe`; do not depend on Windows having the optional `aoe2de://` protocol association. The helper performs the Steam handoff required by an already-running game.
 3. Wait 13 seconds for AoE2 to process the asynchronous handoff. Join-time pixel polling is intentionally avoided because transient and resolution-dependent lobby colors can reject successful joins.
 4. For tournament matches, focus the password prompt, enter the password published by the host without logging its value, click Connect, and allow the lobby to settle. Ranked and custom joins skip this step. Spectator links use their separate handoff and never receive the password.
-5. In games with multiple guests, report that each guest joined as soon as its lobby has settled. This releases only the next guest so AoE2 assigns deterministic slots; the joined guest can continue its remaining setup in parallel with later guests. The 1v1 flow retains its original ordering and reports the sole guest after civilization selection.
+5. In games with multiple guests, report that each guest joined as soon as its lobby has settled. This releases only the next guest so AoE2 assigns deterministic slots around any AI rows reserved by the host; the joined guest can continue its remaining setup in parallel with later guests. The 1v1 flow retains its original ordering and reports the sole guest after civilization selection.
 6. Optionally select a civilization using the client's assigned lobby-slot civilization button, a cleared search field, and the filtered result coordinate. A persistent white outline proves selection; a gray outline proves the requested tile acquired hover/focus and permits Enter activation. Unverified input falls back immediately instead of repeating the same click. Random fallback clears the filter, makes one selection attempt, and verifies the picker closed. Team selection follows on the same client while other joined guests perform their own setup. The displayed setup estimate includes the join allowance once for every sequential guest.
 7. After the host-ready report, poll `guestReady`.
 8. Only when the selected map is listed in `customMapNames`, an unavailable Ready control triggers an attempt at AoE2's unverified user-generated-content warning. After a successful confirmation click, report content acceptance once so the host can verify and, if AoE2 cleared it, reapply Ready. The guest continues polling during this handshake.
@@ -148,6 +155,12 @@ The first four cells are selector modes (Random, Full Random, Mirror, and Custom
 Lobby civilization buttons are stored separately as eight row centers because
 the correct button depends on the player's slot. The matchmaking flow currently
 uses slot 1 for its host and slot 2 for its guest.
+
+Custom-room AI reservations use those same row centers. Player-type selection
+uses the host lobby's `NameDropDown`; AI civilization and team selections also
+use host-layout coordinates even for slots 2-8. Human guest settings continue
+to use the guest-layout team hitbox. AI roster changes, human slot changes, and
+all game settings are rejected after lobby automation begins.
 
 ## Updating after an AoE2 patch
 

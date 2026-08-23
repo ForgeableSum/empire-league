@@ -45,6 +45,11 @@ export interface PendingAppUpdate {
   percent?: number;
 }
 
+export interface ReplayEndCandidate {
+  reason: "FileGrowth" | "QuietFallback";
+  retry: boolean;
+}
+
 export interface ObsIntegrationStatus {
   state: "unavailable" | "auth_required" | "connected" | "configured" | "error";
   message: string;
@@ -97,14 +102,14 @@ export interface ElectronGameApi {
   onLobbyGuardPointer(listener: (point: { x: number; y: number; sequence: number }) => void): () => void;
   acknowledgeLobbyGuardPointer(sequence: number): void;
   onLobbyGuardShortcutBlocked(listener: () => void): () => void;
-  startReplayEndDetection(replayFolder?: string): Promise<{ started: boolean; message?: string }>;
+  startReplayEndDetection(replayFolder?: string, context?: "ranked" | "custom"): Promise<{ started: boolean; message?: string }>;
   stopReplayEndDetection(): Promise<void>;
   confirmReplayEnded(): Promise<void>;
   testReturnToMenuRecovery(): Promise<{ started: boolean; message?: string }>;
   startLoadingScreenWatch(): Promise<{ started: boolean; message?: string }>;
   onLoadingScreen(listener: () => void): () => void;
   onReplayStarted(listener: (filePath: string) => void): () => void;
-  onReplayEnded(listener: (filePath: string) => void): () => void;
+  onReplayEnded(listener: (filePath: string, candidate: ReplayEndCandidate) => void): () => void;
   onAoe2ProcessExited(listener: () => void): () => void;
   onReplayDetectionFailed(listener: (message: string) => void): () => void;
   readReplayFile(filePath: string): Promise<Uint8Array>;
@@ -113,10 +118,10 @@ export interface ElectronGameApi {
   startAoe2TabTest(): Promise<GameInputTestResult>;
   stopAoe2TabTest(): Promise<void>;
   sendAoe2Key(key: GameInputKey): Promise<GameInputResult>;
-  runAoe2CreateLobbySequence(mapName: string, playerCount?: number, contentKind?: "map" | "scenario", context?: "ranked" | "tournament" | "custom" | { context: "tournament"; password: string } | { context: "custom"; gameSettings: import("./customLobby.js").CustomLobbyGameSettings }, gameSettings?: import("./customLobby.js").CustomLobbyGameSettings): Promise<GameInputResult>;
+  runAoe2CreateLobbySequence(mapName: string, playerCount?: number, contentKind?: "map" | "scenario", context?: "ranked" | "tournament" | "custom" | { context: "tournament"; password: string } | { context: "custom"; gameSettings: import("./customLobby.js").CustomLobbyGameSettings; aiSlots?: import("./customLobby.js").CustomLobbyAiSlot[] }, gameSettings?: import("./customLobby.js").CustomLobbyGameSettings): Promise<GameInputResult>;
   runAoe2LobbyCursorAction(target: "content-confirm" | "guest-ready" | "host-ready" | "start", context?: "ranked" | "custom"): Promise<GameInputResult>;
-  selectAoe2Civilization(selection: Aoe2CivilizationSelection, slot: number, context?: "ranked" | "custom"): Promise<GameInputResult>;
-  selectAoe2Team(team: 1 | 2, slot: number, context?: "ranked" | "custom"): Promise<GameInputResult>;
+  selectAoe2Civilization(selection: Aoe2CivilizationSelection, slot: number, context?: "ranked" | "custom", useHostLayout?: boolean): Promise<GameInputResult>;
+  selectAoe2Team(team: 1 | 2 | 3 | 4, slot: number, context?: "ranked" | "custom", useHostLayout?: boolean): Promise<GameInputResult>;
   testAoe2HostGameMouseClick(): Promise<GameInputResult>;
   calibrateAoe2HostGameMouseClick(): Promise<GameInputResult>;
   testAoe2FakeActivationMouseClick(): Promise<GameInputResult>;

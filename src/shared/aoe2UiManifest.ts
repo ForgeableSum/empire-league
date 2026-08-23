@@ -135,6 +135,19 @@ export const aoe2UiManifest = {
     activation: "click",
     settleMs: 1_500
   },
+  playerTypeSlotDropdowns: {
+    // NameDropDown in screenmultiplayerlobbyhost.json. The value box occupies
+    // the left portion of each player row and opens reliably from its center.
+    x: 1120,
+    rowCenters: [555, 645, 735, 825, 915, 1005, 1095, 1185],
+    // Live selection established consecutive Open and Closed row centers at
+    // +77 and +118 from the slot center. Normal DE AI is the following row.
+    // Target that row directly; legacy CD/HD and custom AIs follow it.
+    optionX: 1120,
+    normalAiOptionOffsetY: 159,
+    openSettleMs: 500,
+    selectionSettleMs: 700
+  },
   teamSlotButtons: {
     hostX: 2093,
     guestX: 2042,
@@ -337,14 +350,19 @@ export function civilizationSlotDesignPoint(slot: number): readonly [number, num
   return [aoe2UiManifest.civilizationSlotButtons.x, y];
 }
 
-export function teamSlotDesignPoint(slot: number): readonly [number, number] {
+export function playerTypeSlotDesignPoint(slot: number): readonly [number, number] {
+  const y = aoe2UiManifest.playerTypeSlotDropdowns.rowCenters[slot - 1];
+  if (y === undefined) throw new Error(`AoE2 lobby slot ${slot} is outside the supported 1-8 range.`);
+  return [aoe2UiManifest.playerTypeSlotDropdowns.x, y];
+}
+
+export function teamSlotDesignPoint(slot: number, useHostLayout = slot === 1): readonly [number, number] {
   const y = aoe2UiManifest.teamSlotButtons.rowCenters[slot - 1];
   if (y === undefined) throw new Error(`AoE2 lobby slot ${slot} is outside the supported 1-8 range.`);
-  // AoE2 renders an additional control beside the host's team selector. Its
-  // working increment hitbox is farther right than the selector used by guest
-  // rows, so a shared X coordinate either misses guests or opens the wrong
-  // host control.
-  const x = slot === 1
+  // AoE2's host lobby uses a working increment hitbox farther right than the
+  // selector on a guest's client layout. AI rows are configured by the host,
+  // so their slot number alone cannot determine which X coordinate to use.
+  const x = useHostLayout
     ? aoe2UiManifest.teamSlotButtons.hostX
     : aoe2UiManifest.teamSlotButtons.guestX;
   return [x, y];

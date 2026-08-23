@@ -1,4 +1,4 @@
-import { Check, Crown, LogIn, MessageSquare, Plus, RefreshCw, Send, Shield, Users, X } from "lucide-react";
+import { Bot, Check, Crown, LogIn, MessageSquare, Plus, RefreshCw, Send, Shield, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { civilizations } from "../../shared/civilizations";
 import type { Aoe2CivilizationSelection } from "../../shared/aoe2UiManifest";
@@ -19,13 +19,14 @@ import {
   type LocalCustomContent,
   type LocalCustomContentCatalog
 } from "../../shared/contracts/customLobby";
+import type { ReplayEndCandidate } from "../../shared/contracts/electronApi";
 import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runtimeConfig";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { customLobbyService } from "../services/customLobbyService";
 import { buildDiagnosticLogSnapshot } from "../services/diagnosticLog";
 import { estimateCustomLobbySetupMs } from "../services/lobbyTimingService";
-import { replayHasEnded } from "../services/replayMetadataService";
+import { replayHasEnded, shouldUseAiReplayCompletionFallback } from "../services/replayMetadataService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import { useAppStore } from "../state/appStore";
 
@@ -194,9 +195,9 @@ export function CustomPage() {
             <article className="custom-room-row" key={room.id}>
               <div><strong data-ui-translation="off">{room.name}</strong><small>{room.demo ? "Demo room · " : ""}Hosted by <span data-ui-translation="off">{room.players.find((player) => player.host)?.displayName ?? "Unknown"}</span></small></div>
               <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
-              <div className="room-player-count"><Users size={16} /> {room.players.length}/{room.maxPlayers}</div>
+              <div className="room-player-count"><Users size={16} /> {customLobbyOccupiedCount(room)}/{room.maxPlayers}</div>
               <span className={`custom-room-status ${room.status}`}>{customRoomStatusLabel(room.status)}</span>
-              <button className="secondary" type="button" disabled={room.status !== "open" || room.players.length >= room.maxPlayers || pending || state.gameStatus === "loading" || !canEnterCustomLobby} onClick={() => void joinRoom(room.id)}><LogIn size={16} /> {state.gameStatus === "loading" ? "Launching…" : "Join"}</button>
+              <button className="secondary" type="button" disabled={room.status !== "open" || customLobbyOccupiedCount(room) >= room.maxPlayers || pending || state.gameStatus === "loading" || !canEnterCustomLobby} onClick={() => void joinRoom(room.id)}><LogIn size={16} /> {state.gameStatus === "loading" ? "Launching…" : "Join"}</button>
             </article>
           ))}
           {!loadingRooms && !customRooms.length && <div className="panel empty-state">No custom rooms are open. Create the first one.</div>}
@@ -234,7 +235,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const [draft, setDraft] = useState("");
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const replayResultInFlight = useRef(false);
-  const pendingReplayResultPath = useRef<string | null>(null);
+  const pendingReplayResult = useRef<{ filePath: string; candidate: ReplayEndCandidate } | null>(null);
   const gameStartRevealRef = useRef<Promise<void> | null>(null);
   const guestPostJoinSetupRef = useRef<Promise<boolean> | null>(null);
   const activeAutomationAttemptRef = useRef(room.automationAttemptId);
@@ -243,12 +244,20 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const me = room.players.find((player) => player.id === currentPlayerId)!;
   const isHost = room.hostId === currentPlayerId;
   activeAutomationAttemptRef.current = room.automationAttemptId;
-  const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => room.players.find((player) => player.slot === index + 1)), [room]);
+  const aiSlots = room.aiSlots ?? [];
+  const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => ({
+    player: room.players.find((player) => player.slot === index + 1),
+    ai: aiSlots.find((candidate) => candidate.slot === index + 1)
+  })), [room, aiSlots]);
   const latestMessageId = room.messages.at(-1)?.id;
   const replayCompletionMode = (() => {
-    if (room.players.length <= 2) return "standard" as const;
-    const sides = room.players.map((player) => player.team === 0 ? `player:${player.id}` : `team:${player.team}`);
-    return new Set(sides).size === room.players.length ? "ffa" as const : "team" as const;
+    const participantCount = room.players.length + aiSlots.length;
+    if (participantCount <= 2) return "standard" as const;
+    const sides = [
+      ...room.players.map((player) => player.team === 0 ? `player:${player.id}` : `team:${player.team}`),
+      ...aiSlots.map((ai) => ai.team === 0 ? `ai:${ai.slot}` : `team:${ai.team}`)
+    ];
+    return new Set(sides).size === participantCount ? "ffa" as const : "team" as const;
   })();
 
   const act = (promise: Promise<unknown>) => void promise.catch((error) => notify("Lobby update failed.", "danger", { detail: messageFor(error) }));
@@ -335,10 +344,13 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           // preload has not hot-reloaded cannot silently discard them.
           const result = await window.electronApi!.runAoe2CreateLobbySequence(content.gameName, room.maxPlayers, content.kind === "scenario" ? "scenario" : "map", {
             context: "custom",
-            gameSettings: room.gameSettings
+            gameSettings: room.gameSettings,
+            aiSlots
           });
           if (activeAutomationAttemptRef.current !== automationAttemptId) return;
           if (!result.sent || !result.lobbyUri) throw new Error(result.message || "AoE2 lobby creation failed.");
+          await applyAiPlayerSettings();
+          if (activeAutomationAttemptRef.current !== automationAttemptId) return;
           await customLobbyService.publish(room.id, result.lobbyUri, automationAttemptId);
         } catch (error) {
           await reportAutomationFailure(error, automationAttemptId);
@@ -479,20 +491,26 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
 
   useEffect(() => {
     if (room.status !== "started" || !window.electronApi) return;
-    return window.electronApi.onReplayEnded((filePath) => {
-      pendingReplayResultPath.current = filePath;
+    return window.electronApi.onReplayEnded((filePath, candidate) => {
+      pendingReplayResult.current = { filePath, candidate };
       if (replayResultInFlight.current) return;
       replayResultInFlight.current = true;
       void (async () => {
         try {
-          while (pendingReplayResultPath.current) {
-            const replayPath = pendingReplayResultPath.current;
-            pendingReplayResultPath.current = null;
-            const ended = await replayHasEnded(
-              replayPath,
-              replayCompletionMode,
-              replayCompletionMode === "standard" ? undefined : room.maxPlayers
-            );
+          while (pendingReplayResult.current) {
+            const replayResult = pendingReplayResult.current;
+            pendingReplayResult.current = null;
+            const ended = shouldUseAiReplayCompletionFallback(aiSlots.length, replayResult.candidate)
+              || await replayHasEnded(
+                replayResult.filePath,
+                replayCompletionMode,
+                replayCompletionMode === "standard"
+                  ? undefined
+                  : (room.gamePlayerCount ?? room.players.length + aiSlots.length),
+                room.players.length === 1 && aiSlots.length > 0
+                  ? [room.players[0].slot]
+                  : []
+              );
             if (!ended) continue;
             await window.electronApi!.confirmReplayEnded();
             await customLobbyService.finish(room.id);
@@ -505,7 +523,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
         }
       })();
     });
-  }, [room.id, room.maxPlayers, room.status, replayCompletionMode, notify]);
+  }, [room.id, room.players.length, room.status, aiSlots.length, replayCompletionMode, notify]);
 
   async function ensureAoe2Running() {
     const process = await window.electronApi!.detectAoe2Process();
@@ -551,7 +569,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
       void api.startLoadingScreenWatch().then((watch) => {
         if (!watch.started) notify("Loading-screen detection could not be started.", "warning", { detail: watch.message });
       }).catch((error) => notify("Loading-screen detection could not be started.", "warning", { detail: messageFor(error) }));
-      void api.startReplayEndDetection().then((detection) => {
+      void api.startReplayEndDetection(undefined, "custom").then((detection) => {
         if (!detection.started) {
           notify("Post-game return detection could not be started.", "danger", {
             detail: detection.message || "Replay detection could not be started."
@@ -574,6 +592,19 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
       if (!team.sent) throw new Error(team.message);
     }
   }
+
+  async function applyAiPlayerSettings() {
+    for (const ai of [...aiSlots].sort((left, right) => left.slot - right.slot)) {
+      // Selecting even the default Random value verifies that the preceding
+      // player-type change produced a live AI row before guests are released.
+      const civilization = await window.electronApi!.selectAoe2Civilization(ai.civilization as Aoe2CivilizationSelection, ai.slot, "custom", true);
+      if (!civilization.sent) throw new Error(civilization.message);
+      if (ai.team >= 1 && ai.team <= 4) {
+        const team = await window.electronApi!.selectAoe2Team(ai.team as 1 | 2 | 3 | 4, ai.slot, "custom", true);
+        if (!team.sent) throw new Error(team.message);
+      }
+    }
+  }
   function submitChat(event: FormEvent) {
     event.preventDefault();
     if (!draft.trim()) return;
@@ -585,28 +616,44 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     return <>{weeklyView}</>;
   }
 
+  const aiEditable = isHost && room.status === "open" && !room.locked && room.map?.kind !== "scenario";
+
   return (
     <section className="custom-lobby">
       <div className="custom-lobby-heading">
-        <div><span className="eyebrow">Live custom lobby</span><h2 data-ui-translation="off">{room.name}</h2><p>{room.players.length}/{room.maxPlayers} players · {room.map?.name ?? "Standard map"} · {room.dataMod?.name ?? "No data mod"}</p></div>
+        <div><span className="eyebrow">Live custom lobby</span><h2 data-ui-translation="off">{room.name}</h2><p>{customLobbyOccupiedCount(room)}/{room.maxPlayers} players · {room.map?.name ?? "Standard map"} · {room.dataMod?.name ?? "No data mod"}</p></div>
         <button className="secondary" type="button" onClick={() => act(customLobbyService.leave(room.id))}><X size={16} /> Leave lobby</button>
       </div>
       <div className="custom-lobby-layout">
         <article className="panel lobby-roster">
           {room.map?.kind === "scenario" && <p className="scenario-settings-note">This scenario defines its own player slots, civilizations, teams, and map.</p>}
           <div className="lobby-roster-header"><strong>Players</strong><span>Team</span><span>Civilization</span><span>Status</span></div>
-          {slots.map((player, index) => (
-            <div className={player ? "lobby-player-row occupied" : "lobby-player-row"} key={index}>
-              <div className="lobby-player-name"><span className="lobby-slot-number">{index + 1}</span>{player ? <><Shield size={17} /><strong data-ui-translation="off">{player.displayName}</strong>{player.host && <Crown size={15} />} {isHost && !player.host && !room.locked && <button className="lobby-kick" aria-label={`Remove ${player.displayName}`} onClick={() => act(customLobbyService.kick(room.id, player.id))}><X size={13} /></button>}</> : <span>Open slot</span>}</div>
-              {player && room.map?.kind === "scenario" ? <><span>Scenario</span><span>Scenario-defined</span>{player.id === currentPlayerId
+          {slots.map(({ player, ai }, index) => {
+            const slot = index + 1;
+            if (ai) return <div className="lobby-player-row occupied ai" key={slot}>
+              <div className="lobby-player-name"><span className="lobby-slot-number">{slot}</span><Bot size={17} /><strong>AI</strong>{aiEditable && <button className="lobby-kick" aria-label={`Remove AI from slot ${slot}`} onClick={() => act(customLobbyService.removeAi(room.id, slot))}><X size={13} /></button>}</div>
+              {aiEditable ? <>
+                <ThemedSelect className="lobby-inline-select" label="Team" value={String(ai.team)} onChange={(team) => act(customLobbyService.updateAi(room.id, slot, { team: Number(team) }))} options={[{ value: "0", label: "No team" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />
+                <ThemedSelect className="lobby-inline-select" label="Civilization" value={ai.civilization} onChange={(civilization) => act(customLobbyService.updateAi(room.id, slot, { civilization }))} options={["Random", ...civilizations].map((civilization) => ({ value: civilization, label: localizeAoe2Name(civilization) }))} />
+              </> : <><span>{ai.team ? `Team ${ai.team}` : "No team"}</span><span>{localizeAoe2Name(ai.civilization)}</span></>}
+              <span>Computer</span>
+            </div>;
+            if (!player) return <div className="lobby-player-row" key={slot}>
+              <div className="lobby-player-name"><span className="lobby-slot-number">{slot}</span><span>Open slot</span>{aiEditable && slot > 1 && <button className="lobby-add-ai" onClick={() => act(customLobbyService.addAi(room.id, slot))}><Plus size={13} /> Add AI</button>}</div>
+              <span /><span /><span />
+            </div>;
+            const playerEditable = player.id === currentPlayerId && room.status === "open";
+            return <div className="lobby-player-row occupied" key={slot}>
+              <div className="lobby-player-name"><span className="lobby-slot-number">{slot}</span><Shield size={17} /><strong data-ui-translation="off">{player.displayName}</strong>{player.host && <Crown size={15} />}{isHost && room.status === "open" && !player.host && !room.locked && <button className="lobby-kick" aria-label={`Remove ${player.displayName}`} onClick={() => act(customLobbyService.kick(room.id, player.id))}><X size={13} /></button>}</div>
+              {room.map?.kind === "scenario" ? <><span>Scenario</span><span>Scenario-defined</span>{playerEditable
                 ? <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
-                : <span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span>}</> : player && (player.id === currentPlayerId ? <>
+                : <span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span>}</> : playerEditable ? <>
                 <ThemedSelect className="lobby-inline-select" label="Team" value={String(player.team)} onChange={(team) => act(customLobbyService.updatePlayer(room.id, { team: Number(team) }))} options={[{ value: "0", label: "No team" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />
                 <ThemedSelect className="lobby-inline-select" label="Civilization" value={player.civilization} onChange={(civilization) => act(customLobbyService.updatePlayer(room.id, { civilization }))} options={["Random", ...civilizations].map((civilization) => ({ value: civilization, label: localizeAoe2Name(civilization) }))} />
                 <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
-              </> : <><span>{player.team ? `Team ${player.team}` : "No team"}</span><span>{localizeAoe2Name(player.civilization)}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>)}
-            </div>
-          ))}
+              </> : <><span>{player.team ? `Team ${player.team}` : "No team"}</span><span>{localizeAoe2Name(player.civilization)}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>}
+            </div>;
+          })}
         </article>
         <aside className="panel lobby-chat">
           <div className="lobby-chat-title"><MessageSquare size={18} /><strong>Lobby chat</strong></div>
@@ -637,6 +684,10 @@ function requiresCustomContentTransfer(room: CustomLobbyRoom): boolean {
   // A map absent from the built-in/catalogued pool came from the local custom
   // content scan and should follow the same guarded UGC flow as ranked custom maps.
   return catalogMap ? Boolean(catalogMap.isCustomMap) : true;
+}
+
+function customLobbyOccupiedCount(room: CustomLobbyRoom): number {
+  return room.players.length + (room.aiSlots?.length ?? 0);
 }
 
 type CustomLobbyBooleanSettingKey = {

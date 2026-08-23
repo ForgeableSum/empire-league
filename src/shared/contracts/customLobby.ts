@@ -42,6 +42,12 @@ export interface CustomLobbyPlayer {
   aoeReady?: boolean;
 }
 
+export interface CustomLobbyAiSlot {
+  slot: number;
+  team: number;
+  civilization: string;
+}
+
 export interface CustomLobbyMessage {
   id: string;
   playerId?: string;
@@ -147,6 +153,7 @@ export interface CustomLobbyRoom {
   map?: Pick<LocalCustomContent, "id" | "name" | "gameName" | "kind">;
   dataMod?: Pick<LocalCustomContent, "id" | "name" | "kind">;
   players: CustomLobbyPlayer[];
+  aiSlots: CustomLobbyAiSlot[];
   messages: CustomLobbyMessage[];
   gameSettings: CustomLobbyGameSettings;
   maxPlayers: number;
@@ -154,6 +161,7 @@ export interface CustomLobbyRoom {
   automationAttemptId?: string;
   automationStartedAt?: string;
   gameStartedAt?: string;
+  gamePlayerCount?: number;
   platformLobbyId?: string;
   automationError?: string;
   createdAt: string;

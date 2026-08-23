@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { ElectronGameApi } from "../shared/contracts/electronApi.js";
+import type { ElectronGameApi, ReplayEndCandidate } from "../shared/contracts/electronApi.js";
 
 const electronApi: ElectronGameApi = {
   getAoe2Localization: (currentSessionOnly) => ipcRenderer.invoke("game:get-localization", currentSessionOnly),
@@ -33,7 +33,7 @@ const electronApi: ElectronGameApi = {
     ipcRenderer.on("game:lobby-guard-shortcut-blocked", handler);
     return () => ipcRenderer.removeListener("game:lobby-guard-shortcut-blocked", handler);
   },
-  startReplayEndDetection: (replayFolder) => ipcRenderer.invoke("game:start-replay-end-detection", replayFolder),
+  startReplayEndDetection: (replayFolder, context) => ipcRenderer.invoke("game:start-replay-end-detection", replayFolder, context),
   stopReplayEndDetection: () => ipcRenderer.invoke("game:stop-replay-end-detection"),
   confirmReplayEnded: () => ipcRenderer.invoke("game:confirm-replay-ended"),
   testReturnToMenuRecovery: () => ipcRenderer.invoke("game:test-return-to-menu-recovery"),
@@ -49,7 +49,7 @@ const electronApi: ElectronGameApi = {
     return () => ipcRenderer.removeListener("game:replay-started", handler);
   },
   onReplayEnded: (listener) => {
-    const handler = (_event: Electron.IpcRendererEvent, filePath: string) => listener(filePath);
+    const handler = (_event: Electron.IpcRendererEvent, filePath: string, candidate: ReplayEndCandidate) => listener(filePath, candidate);
     ipcRenderer.on("game:replay-ended", handler);
     return () => ipcRenderer.removeListener("game:replay-ended", handler);
   },
@@ -72,8 +72,8 @@ const electronApi: ElectronGameApi = {
   runAoe2CreateLobbySequence: (mapName, playerCount, contentKind, context, gameSettings) =>
     ipcRenderer.invoke("game:run-create-lobby-sequence", mapName, playerCount, contentKind, context, gameSettings),
   runAoe2LobbyCursorAction: (target, context) => ipcRenderer.invoke("game:run-lobby-cursor-action", target, context),
-  selectAoe2Civilization: (civilization, slot, context) => ipcRenderer.invoke("game:select-civilization", civilization, slot, context),
-  selectAoe2Team: (team, slot, context) => ipcRenderer.invoke("game:select-team", team, slot, context),
+  selectAoe2Civilization: (civilization, slot, context, useHostLayout) => ipcRenderer.invoke("game:select-civilization", civilization, slot, context, useHostLayout),
+  selectAoe2Team: (team, slot, context, useHostLayout) => ipcRenderer.invoke("game:select-team", team, slot, context, useHostLayout),
   testAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:test-host-game-mouse-click"),
   calibrateAoe2HostGameMouseClick: () => ipcRenderer.invoke("game:calibrate-host-game-mouse-click"),
   testAoe2FakeActivationMouseClick: () => ipcRenderer.invoke("game:test-fake-activation-mouse-click"),

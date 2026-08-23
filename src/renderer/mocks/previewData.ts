@@ -71,6 +71,7 @@ function room(id: string, name: string, mapName: string, maxPlayers: number, nam
       ready: index < 2,
       host: index === 0
     })),
+    aiSlots: [],
     messages: [],
     gameSettings: { ...defaultCustomLobbyGameSettings },
     maxPlayers,

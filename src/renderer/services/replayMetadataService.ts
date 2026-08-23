@@ -1,4 +1,5 @@
 import type { ReplayMatchMetadata, ReplayPlayerMetadata } from "../../shared/contracts/matches";
+import type { ReplayEndCandidate } from "../../shared/contracts/electronApi";
 
 export class ReplayNotFinishedError extends Error {
   constructor(teamGame = false, message?: string) {
@@ -9,10 +10,68 @@ export class ReplayNotFinishedError extends Error {
   }
 }
 
+interface ReplayCompletionPlayer {
+  player_number: number;
+}
+
+interface ReplayCompletionTeam {
+  winner: boolean;
+  players: ReplayCompletionPlayer[];
+}
+
+export function replaySummaryHasEnded(
+  teams: ReplayCompletionTeam[],
+  mode: "ffa" | "team",
+  expectedPlayerCount?: number
+): boolean {
+  const isParticipant = (player: ReplayCompletionPlayer): boolean =>
+    player.player_number > 0
+    && (expectedPlayerCount === undefined || player.player_number <= expectedPlayerCount);
+  const players = teams.flatMap((team) => team.players).filter(isParticipant);
+  const winners = teams.filter((team) => team.winner).flatMap((team) => team.players).filter(isParticipant);
+  const losers = teams.filter((team) => !team.winner).flatMap((team) => team.players).filter(isParticipant);
+  const requiredPlayers = expectedPlayerCount ?? players.length;
+  return players.length === requiredPlayers
+    && winners.length >= 1
+    && (mode !== "ffa" || winners.length === 1)
+    && winners.length + losers.length === requiredPlayers;
+}
+
+export function shouldUseAiReplayCompletionFallback(
+  aiPlayerCount: number,
+  candidate: ReplayEndCandidate
+): boolean {
+  // aoe2rec-js cannot parse some AI scripting operations. Waiting for the
+  // retry proves that the same replay snapshot remained quiet across two
+  // stability windows instead of accepting an ordinary in-progress write.
+  return aiPlayerCount > 0
+    && candidate.reason === "QuietFallback"
+    && candidate.retry;
+}
+
+export function replayContainsTerminalHumanResign(
+  operations: Array<Record<string, unknown>> | undefined,
+  terminalHumanPlayerNumbers: readonly number[]
+): boolean {
+  if (terminalHumanPlayerNumbers.length === 0) return false;
+  const terminalPlayers = new Set(terminalHumanPlayerNumbers);
+  return operations?.some((operation) => {
+    const action = operation.Action;
+    if (typeof action !== "object" || action === null) return false;
+    const actionData = (action as Record<string, unknown>).action_data;
+    if (typeof actionData !== "object" || actionData === null) return false;
+    const resign = (actionData as Record<string, unknown>).Resign;
+    if (typeof resign !== "object" || resign === null) return false;
+    const playerId = (resign as Record<string, unknown>).player_id;
+    return typeof playerId === "number" && terminalPlayers.has(playerId);
+  }) ?? false;
+}
+
 export async function replayHasEnded(
   filePath: string,
   mode: "standard" | "ffa" | "team" = "standard",
-  expectedPlayerCount?: number
+  expectedPlayerCount?: number,
+  terminalHumanPlayerNumbers: readonly number[] = []
 ): Promise<boolean> {
   if (!window.electronApi) return false;
   const { parse_rec, parse_rec_summary } = await import("aoe2rec-js");
@@ -24,6 +83,7 @@ export async function replayHasEnded(
   } catch {
     return false;
   }
+  if (replayContainsTerminalHumanResign(replay.operations, terminalHumanPlayerNumbers)) return true;
   if (mode !== "standard") {
     // Multiplayer replays contain a Resign operation whenever any participant
     // is eliminated. Only the final PostGame summary can prove that the last
@@ -32,22 +92,9 @@ export async function replayHasEnded(
     if (!hasPostGame) return false;
     try {
       const summary = parse_rec_summary(buffer);
-      const players = summary.teams
-        .flatMap((team) => team.players)
-        .filter((player) => player.profile_id > 0);
-      const winners = summary.teams
-        .filter((team) => team.winner)
-        .flatMap((team) => team.players)
-        .filter((player) => player.profile_id > 0);
-      const losers = summary.teams
-        .filter((team) => !team.winner)
-        .flatMap((team) => team.players)
-        .filter((player) => player.profile_id > 0);
-      const requiredPlayers = expectedPlayerCount ?? players.length;
-      return players.length === requiredPlayers
-        && winners.length >= 1
-        && (mode !== "ffa" || winners.length === 1)
-        && winners.length + losers.length === requiredPlayers;
+      // AI players use non-positive profile IDs in recorded games, so profile
+      // identity cannot be used to decide which lobby slots participated.
+      return replaySummaryHasEnded(summary.teams, mode, expectedPlayerCount);
     } catch {
       // PostGame can be written before the final summary has settled. The
       // replay watcher will notify us again after the next write/stable edge.

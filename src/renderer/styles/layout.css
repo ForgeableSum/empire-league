@@ -5538,6 +5538,22 @@
   background: transparent;
 }
 
+.lobby-player-row.ai .lobby-player-name svg {
+  color: var(--warning);
+}
+
+.lobby-add-ai {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 4px 8px;
+  color: var(--accent-2);
+  background: transparent;
+  font-size: 11px;
+}
+
 .lobby-slot-number {
   width: 22px;
   color: var(--faint);

@@ -20,7 +20,10 @@ export const customLobbyService = {
       const room = previewCustomRooms.find((candidate) => candidate.id === roomId);
       if (!room || !previewPlayer) throw new Error("The preview lobby is unavailable.");
       if (room.players.some((player) => player.id === previewPlayer.id)) return room;
-      const occupiedSlots = new Set(room.players.map((player) => player.slot));
+      const occupiedSlots = new Set([
+        ...room.players.map((player) => player.slot),
+        ...(room.aiSlots ?? []).map((ai) => ai.slot)
+      ]);
       const slot = Array.from({ length: room.maxPlayers }, (_, index) => index + 1).find((candidate) => !occupiedSlots.has(candidate));
       if (!slot) throw new Error("The preview lobby is full.");
       return {
@@ -44,6 +47,26 @@ export const customLobbyService = {
   async updatePlayer(roomId: string, patch: { team?: number; civilization?: string; ready?: boolean }): Promise<void> {
     if (isPreviewMode) return;
     await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/player`, { method: "PATCH", body: patch });
+  },
+  async addAi(roomId: string, slot: number): Promise<void> {
+    if (isPreviewMode) return;
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/ai`, {
+      method: "POST",
+      body: { slot }
+    });
+  },
+  async updateAi(roomId: string, slot: number, patch: { team?: number; civilization?: string }): Promise<void> {
+    if (isPreviewMode) return;
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/ai/${slot}`, {
+      method: "PATCH",
+      body: patch
+    });
+  },
+  async removeAi(roomId: string, slot: number): Promise<void> {
+    if (isPreviewMode) return;
+    await matchmakerTransport.request(`/custom-lobbies/${encodeURIComponent(roomId)}/ai/${slot}`, {
+      method: "DELETE"
+    });
   },
   async updateSettings(roomId: string, patch: Partial<CustomLobbyGameSettings>): Promise<void> {
     if (isPreviewMode) return;
