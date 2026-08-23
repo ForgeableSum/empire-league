@@ -5,7 +5,7 @@ import { ThemedSelect } from "../components/common/ThemedSelect";
 import { HistoryCivilizations, HistoryPlayers, historyTeamsFor } from "../components/match/HistoryMatchup";
 import { useAppStore } from "../state/appStore";
 
-type ModeFilter = "all" | "solo" | "team";
+type ModeFilter = "solo" | "team";
 
 function isTeamMatch(match: MatchSummary): boolean {
   return (match.teamSize ?? 1) > 1 || (match.participants?.length ?? 0) > 2 || match.queueType === "team-games";
@@ -15,7 +15,7 @@ export function MatchHistoryPage() {
   const { state, openPlayerProfile, localizeAoe2Name } = useAppStore();
   const [query, setQuery] = useState("");
   const [resultFilter, setResultFilter] = useState("all");
-  const [modeFilter, setModeFilter] = useState<ModeFilter>("all");
+  const [modeFilter, setModeFilter] = useState<ModeFilter>("solo");
   const matches = useMemo(
     () => state.recentMatches.filter((match) => {
       const participantSearch = (match.participants ?? [])
@@ -26,7 +26,7 @@ export function MatchHistoryPage() {
         .includes(query.toLowerCase());
       const matchesResult = resultFilter === "all" || match.outcome === resultFilter;
       const teamMatch = isTeamMatch(match);
-      const matchesMode = modeFilter === "all" || (modeFilter === "team" ? teamMatch : !teamMatch);
+      const matchesMode = modeFilter === "team" ? teamMatch : !teamMatch;
       return matchesQuery && matchesResult && matchesMode;
     }),
     [localizeAoe2Name, modeFilter, query, resultFilter, state.recentMatches]
@@ -37,20 +37,26 @@ export function MatchHistoryPage() {
   return (
     <section className="stack">
       <div className="toolbar history-toolbar">
+        <div className="leaderboard-mode" role="group" aria-label="Match history mode">
+          <button
+            type="button"
+            aria-pressed={modeFilter === "solo"}
+            onClick={() => setModeFilter("solo")}
+          >
+            1v1
+          </button>
+          <button
+            type="button"
+            aria-pressed={modeFilter === "team"}
+            onClick={() => setModeFilter("team")}
+          >
+            Teams
+          </button>
+        </div>
         <label>
           Search
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Player, map, civilization" />
         </label>
-        <ThemedSelect
-          label="Game type"
-          options={[
-            { value: "all", label: "All games" },
-            { value: "solo", label: "1v1" },
-            { value: "team", label: "Team games" }
-          ]}
-          value={modeFilter}
-          onChange={(value) => setModeFilter(value as ModeFilter)}
-        />
         <ThemedSelect
           label="Result"
           options={[
@@ -65,7 +71,6 @@ export function MatchHistoryPage() {
 
       {soloMatches.length > 0 && (
         <div className="panel history-section">
-          {modeFilter === "all" && <div className="history-section-title"><strong>1v1 Matches</strong><span>{soloMatches.length}</span></div>}
           <div className="table history-table">
             <div className="table-row table-header">
               <strong>Result</strong>
@@ -97,7 +102,6 @@ export function MatchHistoryPage() {
 
       {teamMatches.length > 0 && (
         <div className="history-section">
-          {modeFilter === "all" && <div className="history-section-title"><strong>Team Games</strong><span>{teamMatches.length}</span></div>}
           <div className="team-history-list">
             {teamMatches.map((match) => (
               <TeamHistoryCard

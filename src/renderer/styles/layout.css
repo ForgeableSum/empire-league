@@ -1520,31 +1520,6 @@
   gap: 12px;
 }
 
-.history-section-title {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 24px;
-}
-
-.history-section-title strong {
-  color: var(--text);
-  font-family: Georgia, serif;
-  font-size: 17px;
-}
-
-.history-section-title > span {
-  display: inline-grid;
-  place-items: center;
-  min-width: 24px;
-  height: 20px;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--faint);
-  font-size: 10px;
-}
-
 .team-history-list {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
