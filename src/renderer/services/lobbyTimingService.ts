@@ -1,7 +1,7 @@
 import { aoe2UiManifest, type Aoe2UiAction } from "../../shared/aoe2UiManifest";
 import type { CivilizationPreference, MatchSession } from "../../shared/contracts/matchmaking";
 import type { CustomLobbyRoom } from "../../shared/contracts/customLobby";
-import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
+import { enabledMapCatalogEntries, isCustomMapForQueue } from "../../shared/mapCatalog";
 import {
   adaptiveLobbyTimingEnabled,
   contentConfirmationKeyDelayMs,
@@ -159,8 +159,7 @@ function defaultClickDurationMs(): number {
 }
 
 function flowKind(match: MatchSession): FlowKind {
-  return (aoe2UiManifest.mapPicker.customMapNames as readonly string[])
-    .includes(match.selectedMap?.name ?? "")
+  return match.selectedMap && isCustomMapForQueue(match.selectedMap.id, match.queue.id)
     ? "custom"
     : "standard";
 }

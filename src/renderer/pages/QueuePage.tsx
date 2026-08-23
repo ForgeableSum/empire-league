@@ -1,5 +1,5 @@
 import { CircleHelp, Clock, Copy, Search, Settings, Shuffle, Swords, Users, XCircle } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { CivilizationMode, MapGroupId } from "../../shared/contracts/matchmaking";
 import { classicCivilizations, civilizations } from "../../shared/civilizations";
 import { mapCatalog } from "../../shared/mapCatalog";
@@ -54,6 +54,16 @@ export function QueuePage() {
   });
   const configuredQueue = queues.find((queue) => queue.id === selectedQueueId) ?? queues[0];
   const selectedQueue = state.selectedQueue?.tournamentId ? state.selectedQueue : configuredQueue;
+  const selectedQueueMapGroups = useMemo(() => {
+    const queueMapsById = new Map(selectedQueue?.mapPool.map((map) => [map.id, map]) ?? []);
+    if (queueMapsById.size === 0) return mapGroups;
+    return mapGroups.map((group) => ({
+      ...group,
+      maps: group.maps
+        .filter((map) => queueMapsById.has(map.id))
+        .map((map) => ({ ...map, ...queueMapsById.get(map.id)! }))
+    })).filter((group) => group.maps.length > 0);
+  }, [selectedQueue]);
   const canStartQueue = ["idle", "cancelled", "completed"].includes(state.queueStatus)
     && (!state.activeMatch || state.queueStatus === "completed")
     && state.gameStatus !== "loading";
@@ -613,7 +623,7 @@ export function QueuePage() {
                   </span>
                 </div>
                 <GroupedMapPool
-                  groups={mapGroups}
+                  groups={selectedQueueMapGroups}
                   enabledGroupIds={enabledGroups[selectedQueue.id] ?? []}
                   selectedMapIds={selectedMaps[selectedQueue.id] ?? []}
                   favoriteMapIds={favoriteMaps[selectedQueue.id] ?? {}}

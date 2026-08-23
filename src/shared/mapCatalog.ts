@@ -8,6 +8,9 @@ export interface MapCatalogEntry extends Omit<MapDefinition, "thumbnailUrl"> {
   gameMapName: string;
   lobbyPickerResultIndex: number;
   isCustomMap?: boolean;
+  /** Built-in AoE2 map used by the team queue instead of this entry's default map. */
+  teamGameMapName?: string;
+  teamGameLobbyPickerResultIndex?: number;
   groupId: MapGroupId;
   imageAsset: string;
   wikiUrl: string;
@@ -25,6 +28,20 @@ export const enabledMapCatalogEntries = mapCatalog.maps.filter((map) => map.enab
 
 export function getCatalogMap(mapId: string): MapCatalogEntry | undefined {
   return mapCatalogById.get(mapId);
+}
+
+export function gameMapNameForQueue(mapId: string, queueId?: string): string | undefined {
+  const map = getCatalogMap(mapId);
+  if (!map) return undefined;
+  return queueId === "team-games" && map.teamGameMapName
+    ? map.teamGameMapName
+    : map.gameMapName;
+}
+
+export function isCustomMapForQueue(mapId: string, queueId?: string): boolean {
+  const map = getCatalogMap(mapId);
+  if (!map) return false;
+  return Boolean(map.isCustomMap) && !(queueId === "team-games" && map.teamGameMapName);
 }
 
 export function selectMapFromQueues(

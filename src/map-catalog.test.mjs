@@ -21,7 +21,23 @@ test("canonicalizes client map metadata against the catalog", () => {
     style: "open",
     thumbnailUrl: ""
   });
-  assert.equal(normalized.mapCatalogVersion, 5);
+  assert.equal(normalized.mapCatalogVersion, 6);
+});
+
+test("uses built-in Arabia and Land Nomad for team games only", () => {
+  const teamQueue = (mapIds) => normalizeQueueMapPreferences({
+    ...queue(mapIds),
+    id: "team-games",
+    format: "team"
+  });
+  assert.deepEqual(teamQueue(["arabia", "land-nomad"]).mapPool.map((map) => map.name), [
+    "Arabia",
+    "Land Nomad"
+  ]);
+  assert.deepEqual(queue(["arabia", "land-nomad"]).mapPool.map((map) => map.name), [
+    "KotD6 Arabia EL",
+    "Land Nomad EL"
+  ]);
 });
 
 test("every UI map defines its AoE2 lobby-picker metadata", () => {

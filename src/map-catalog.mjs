@@ -11,10 +11,10 @@ export const publicMapCatalog = Object.freeze({
   maps: enabledMaps
 });
 
-function canonicalMap(map) {
+function canonicalMap(map, queueId) {
   return {
     id: map.id,
-    name: map.name,
+    name: queueId === "team-games" && map.teamGameMapName ? map.teamGameMapName : map.name,
     style: map.style,
     thumbnailUrl: ""
   };
@@ -80,7 +80,7 @@ export function normalizeQueueMapPreferences(queue) {
 
   return {
     ...queue,
-    mapPool: selectedMaps.map(canonicalMap),
+    mapPool: selectedMaps.map((map) => canonicalMap(map, queue.id)),
     mapCatalogVersion: catalog.version,
     mapPreferences: {
       enabledGroupIds,

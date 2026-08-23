@@ -9,7 +9,7 @@ import type { LobbySession, MapDefinition, MatchSession, QueueDefinition } from 
 import { getDivisionForRating } from "../../shared/contracts/matchmaking";
 import type { PlayerProfile } from "../../shared/contracts/players";
 import type { Aoe2Localization } from "../../shared/contracts/localization";
-import { getCatalogMap, mapCatalog } from "../../shared/mapCatalog";
+import { gameMapNameForQueue, isCustomMapForQueue, mapCatalog } from "../../shared/mapCatalog";
 import { maps, currentUser } from "../mocks/mockPlayers";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
 import { MockGameIntegrationService } from "../services/gameIntegrationService";
@@ -151,7 +151,10 @@ export const queueDefinitions: QueueDefinition[] = [
     format: "team",
     teamSizes: [2, 4],
     ruleset: "Random Map",
-    mapPool: maps,
+    mapPool: maps.map((map) => ({
+      ...map,
+      name: gameMapNameForQueue(map.id, "team-games") ?? map.name
+    })),
     mapPreferences: {
       enabledGroupIds: mapCatalog.groups.map((group) => group.id),
       favoriteMapIds: {}
@@ -1221,7 +1224,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 setState((previous) => ({ ...previous, roomSetupMilestone: "Setting up lobby room" }));
                 log("Starting AoE2 lobby automation");
                 return window.electronApi!.runAoe2CreateLobbySequence(
-                  getLobbyMapName(acceptedSession.selectedMap),
+                  getLobbyMapName(acceptedSession.selectedMap, acceptedSession.queue.id),
                   acceptedSession.queue.format === "team"
                     ? ((acceptedSession.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
                     : 2,
@@ -1263,7 +1266,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }));
           log(`Host published lobby: ${event.lobby.platformLobbyId ?? "pending"}`);
           if (event.lobby.platformLobbyId?.startsWith("aoe2de://0/") && window.electronApi) {
-            const allowCustomContentPrompt = isCustomLobbyMap(matchedSessionRef.current?.selectedMap);
+            const allowCustomContentPrompt = isCustomLobbyMap(
+              matchedSessionRef.current?.selectedMap,
+              matchedSessionRef.current?.queue.id
+            );
             void window.electronApi.openAoe2Lobby(
               event.lobby.platformLobbyId,
               allowCustomContentPrompt,
@@ -1350,7 +1356,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // budget instead of inheriting time spent waiting for other guests.
           startRoomSetupWatchdog(roomReadyPhaseTimeoutMs);
           auditLobbyPhase("host-ready");
-          const customContentFlow = isCustomLobbyMap(matchedSessionRef.current?.selectedMap);
+          const customContentFlow = isCustomLobbyMap(
+            matchedSessionRef.current?.selectedMap,
+            matchedSessionRef.current?.queue.id
+          );
           setState((previous) => ({
             ...previous,
             roomSetupMilestone: customContentFlow ? "Receiving lobby files" : "Waiting for Ready"
@@ -1409,7 +1418,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (
           event.type === "guest_content_accepted"
           && window.electronApi
-          && isCustomLobbyMap(matchedSessionRef.current?.selectedMap)
+          && isCustomLobbyMap(
+            matchedSessionRef.current?.selectedMap,
+            matchedSessionRef.current?.queue.id
+          )
         ) {
           auditLobbyPhase("guest-content-accepted");
           setState((previous) => ({
@@ -1746,7 +1758,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const automation = await (
           lobbyAutomationRef.current
           ?? window.electronApi.runAoe2CreateLobbySequence(
-            getLobbyMapName(match.selectedMap),
+            getLobbyMapName(match.selectedMap, match.queue.id),
             match.queue.format === "team" ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8 : 2,
             "map",
             match.matchType === "tournament"
@@ -2330,13 +2342,12 @@ function delayForLobbyInput(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
-function getLobbyMapName(map?: MapDefinition): string {
-  return (map && (getCatalogMap(map.id)?.gameMapName ?? map.name)) ?? mapCatalog.maps[0].gameMapName;
+function getLobbyMapName(map?: MapDefinition, queueId?: string): string {
+  return (map && (gameMapNameForQueue(map.id, queueId) ?? map.name)) ?? mapCatalog.maps[0].gameMapName;
 }
 
-function isCustomLobbyMap(map?: MapDefinition): boolean {
-  return map !== undefined
-    && (aoe2UiManifest.mapPicker.customMapNames as readonly string[]).includes(getLobbyMapName(map));
+function isCustomLobbyMap(map?: MapDefinition, queueId?: string): boolean {
+  return map !== undefined && isCustomMapForQueue(map.id, queueId);
 }
 
 function aoe2SelectionForPreference(

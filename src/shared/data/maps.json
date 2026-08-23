@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "groups": [
     {
       "id": "land-open",
@@ -26,6 +26,8 @@
       "name": "KotD6 Arabia EL",
       "description": "A competitive Arabia variant with strategic elevations, sparse vegetation, and carefully controlled starting woodlines.",
       "gameMapName": "KotD6 Arabia EL",
+      "teamGameMapName": "Arabia",
+      "teamGameLobbyPickerResultIndex": 0,
       "lobbyPickerResultIndex": 0,
       "isCustomMap": true,
       "style": "open",
@@ -99,6 +101,8 @@
       "name": "Land Nomad EL",
       "description": "Lone villagers settle across open land with no water in sight. Smaller, more numerous woodlines leave additional room to expand and fight.",
       "gameMapName": "Land Nomad EL",
+      "teamGameMapName": "Land Nomad",
+      "teamGameLobbyPickerResultIndex": 0,
       "lobbyPickerResultIndex": 0,
       "isCustomMap": true,
       "style": "nomad",

@@ -12,7 +12,12 @@ export interface Aoe2UiAction {
 }
 
 const mapPickerEntries: Record<string, number> = Object.fromEntries(
-  enabledMapCatalogEntries.map((map) => [map.gameMapName, map.lobbyPickerResultIndex])
+  enabledMapCatalogEntries.flatMap((map) => [
+    [map.gameMapName, map.lobbyPickerResultIndex],
+    ...(map.teamGameMapName
+      ? [[map.teamGameMapName, map.teamGameLobbyPickerResultIndex ?? map.lobbyPickerResultIndex] as const]
+      : [])
+  ])
 );
 
 const customMapNames = enabledMapCatalogEntries
