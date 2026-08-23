@@ -1,4 +1,4 @@
-import { aoe2UiManifest, type Aoe2UiAction } from "../../shared/aoe2UiManifest";
+import { aoe2UiManifest, teamGameMapSizeSelection, type Aoe2UiAction } from "../../shared/aoe2UiManifest";
 import type { CivilizationPreference, MatchSession } from "../../shared/contracts/matchmaking";
 import type { CustomLobbyRoom } from "../../shared/contracts/customLobby";
 import { enabledMapCatalogEntries, isCustomMapForQueue } from "../../shared/mapCatalog";
@@ -62,9 +62,15 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
   total += defaultClickDurationMs() + mapPicker.styleSelectionSettleMs;
   total += defaultClickDurationMs() + mapPicker.searchSettleMs;
   total += defaultClickDurationMs() + mapPicker.selectionSettleMs;
-  const sequentialGuestCount = match.queue.format === "team"
-    ? ((match.queue.teamSizes?.[0] ?? 2) * 2) - 1
-    : 1;
+  const teamPlayerCount = match.queue.format === "team"
+    ? (match.queue.teamSizes?.[0] ?? 2) * 2
+    : 2;
+  const sequentialGuestCount = teamPlayerCount > 2 ? teamPlayerCount - 1 : 1;
+  if (teamGameMapSizeSelection(teamPlayerCount)) {
+    total += (defaultClickDurationMs() * 2)
+      + aoe2UiManifest.lobbySelectSettings.openSettleMs
+      + aoe2UiManifest.lobbySelectSettings.selectionSettleMs;
+  }
   total += actionDuration(actions.copyLobbyUri) + lobbySetupTiming.clipboardReadMs;
   total += civilizationSelectionDuration(match.queue.civilizationPreference);
   total += lobbySetupTiming.lobbyMetadataMs;

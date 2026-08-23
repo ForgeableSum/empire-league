@@ -48,21 +48,26 @@ lobby message loop can be throttled while AoE2 is in the background.
    3. Focus the picker search field and send the selected map name with window-local `WM_CHAR` messages.
    4. Resolve the exact map's filtered-result index from the manifest and click that tile. This matters for substring collisions such as Aquarena/Arena and Land Nomad/Nomad.
    5. Verify that the lobby screen is present again before continuing.
-9. Optionally select a civilization:
+9. For Team Games, explicitly select the map size after map selection so AoE2's
+   remembered/default value cannot leak into the match: `Medium (4 player)
+   [168]` for 2v2 and `Large (8 player) [220]` for 4v4. Open the Map Size
+   dropdown and click its measured row directly because the control ignores
+   directional key messages.
+10. Optionally select a civilization:
    1. Resolve the host's lobby slot (slot 1 in the automated 1v1 host flow) through `civilizationSlotDesignPoint` and click its civilization button.
    2. For a named civilization, enter its exact name in the picker search field.
    3. Click the fixed first civilization result after the four generic selector options.
    4. Dispatch Enter once to confirm the selected result and close the picker.
    5. Verify that AoE2 returned to the lobby room.
-10. `copyLobbyUri` (`click`)
-11. Verify the clipboard matches `aoe2de://0/<digits>`.
-12. Publish that URI to the guest. This URI is the normal automated invitation path.
-13. If an explicit in-game invite is needed, use `hostInvite`.
-14. Wait for the guest-joined report.
-15. `hostReady` (`click`) to finalize custom lobby files and release any required transfer.
-16. If the guest reports accepting unverified content, verify `hostReady` again because AoE2 may automatically clear the host's Ready state.
-17. Wait for the guest-ready report.
-18. `startGame` (`click`)
+11. `copyLobbyUri` (`click`)
+12. Verify the clipboard matches `aoe2de://0/<digits>`.
+13. Publish that URI to the guest. This URI is the normal automated invitation path.
+14. If an explicit in-game invite is needed, use `hostInvite`.
+15. Wait for the guest-joined report.
+16. `hostReady` (`click`) to finalize custom lobby files and release any required transfer.
+17. If the guest reports accepting unverified content, verify `hostReady` again because AoE2 may automatically clear the host's Ready state.
+18. Wait for the guest-ready report.
+19. `startGame` (`click`)
 
 The first three transitions are verified from stable points on AoE2's rendered
 window surface. If the expected next screen is not present, that step is

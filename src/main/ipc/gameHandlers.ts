@@ -26,6 +26,7 @@ import {
   civilizationDesignPoint,
   civilizationSlotDesignPoint,
   mapDesignPoint,
+  teamGameMapSizeSelection,
   teamSlotDesignPoint,
   type Aoe2ActionName,
   type Aoe2CivilizationSelection,
@@ -3764,6 +3765,27 @@ export function registerGameHandlers(): void {
       emitLog(`STEP_VERIFY|Content Selection|Expected=lobby-room|${contentLobbyState.detail}`);
       if (contentLobbyState.state !== "lobby-room") {
         throw new Error(`${normalizedMapName} selection did not return to the lobby room.`);
+      }
+
+      const teamMapSize = automationContext === "ranked"
+        ? teamGameMapSizeSelection(playerCount)
+        : undefined;
+      if (teamMapSize) {
+        const selectManifest = aoe2UiManifest.lobbySelectSettings;
+        const point = selectManifest.points.mapSize;
+        await clickStep("Open Team Map Size", point[0], point[1], { synchronous: true });
+        await delay(selectManifest.openSettleMs);
+        await clickStep(
+          `Select Team Map Size ${teamMapSize.label}`,
+          selectManifest.optionX,
+          point[1] + selectManifest.firstOptionOffsetY + teamMapSize.optionIndex * selectManifest.optionRowStepY,
+          { synchronous: true }
+        );
+        await delay(selectManifest.selectionSettleMs);
+        emitLog(
+          `TEAM_MAP_SIZE|Players=${playerCount}|Value=${teamMapSize.label}`
+          + `|Index=${teamMapSize.optionIndex}|Complete=True`
+        );
       }
 
       if (isCustomAutomation) {

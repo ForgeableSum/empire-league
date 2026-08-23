@@ -24,6 +24,15 @@ const customMapNames = enabledMapCatalogEntries
   .filter((map) => map.isCustomMap)
   .map((map) => map.gameMapName);
 
+const teamGameMapSizes = {
+  4: { label: "Medium (4 player) [168]", optionIndex: 2 },
+  8: { label: "Large (8 player) [220]", optionIndex: 4 }
+} as const;
+
+export function teamGameMapSizeSelection(playerCount: number) {
+  return teamGameMapSizes[playerCount as keyof typeof teamGameMapSizes];
+}
+
 export const aoe2UiManifest = {
   schemaVersion: 1,
   sourceGameVersion: "101.103.48987.0",
@@ -195,6 +204,19 @@ export const aoe2UiManifest = {
       recordGame: [2916, 1914]
     },
     settleMs: 120
+  },
+  lobbySelectSettings: {
+    points: {
+      mapSize: [3049, 788]
+    },
+    // Measured from the live lobby and corroborated by the Map Size
+    // DropDownListBox. Directional key messages are ignored, so select the
+    // required visible row directly.
+    optionX: 2875,
+    firstOptionOffsetY: 58,
+    optionRowStepY: 42,
+    openSettleMs: 500,
+    selectionSettleMs: 700
   },
   civilizationGrid: {
     columns: 9,
