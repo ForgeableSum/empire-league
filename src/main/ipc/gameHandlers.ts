@@ -19,7 +19,20 @@ import {
   ensureEmpireLeagueMapsEnabled
 } from "../aoe2MapInstaller.js";
 import type { SteamFamilyProbeResult } from "../../shared/contracts/electronApi.js";
-import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings } from "../../shared/contracts/customLobby.js";
+import {
+  customLobbyAiDifficulties,
+  customLobbyEndingAges,
+  customLobbyGameSpeeds,
+  customLobbyMapSizes,
+  customLobbyPopulationLimits,
+  customLobbyRevealMapOptions,
+  customLobbyStartingAges,
+  customLobbyStartingResources,
+  customLobbyTreatyLengths,
+  customLobbyVictoryConditions,
+  defaultCustomLobbyGameSettings,
+  type CustomLobbyGameSettings
+} from "../../shared/contracts/customLobby.js";
 import { builtInMapNameFromFile, isSelectableBuiltInMapFile } from "../../shared/builtInMaps.js";
 import {
   aoe2UiManifest,
@@ -80,6 +93,7 @@ import {
   readAoe2ReadyState,
   sendAoe2End,
   sendAoe2Digit,
+  sendAoe2Down,
   sendAoe2Enter,
   sendAoe2Escape,
   sendAoe2Home,
@@ -3791,8 +3805,58 @@ export function registerGameHandlers(): void {
       if (isCustomAutomation) {
         const settings = { ...defaultCustomLobbyGameSettings, ...(requestedGameSettings ?? {}), recordGame: true };
         const defaults = defaultCustomLobbyGameSettings;
+        if (contentKind !== "scenario") {
+          const selectDefinitions = [
+            ["mapSize", customLobbyMapSizes],
+            ["aiDifficulty", customLobbyAiDifficulties],
+            ["startingResources", customLobbyStartingResources],
+            ["populationLimit", customLobbyPopulationLimits],
+            ["gameSpeed", customLobbyGameSpeeds],
+            ["revealMap", customLobbyRevealMapOptions],
+            ["startingAge", customLobbyStartingAges],
+            ["endingAge", customLobbyEndingAges],
+            ["treatyLength", customLobbyTreatyLengths],
+            ["victoryCondition", customLobbyVictoryConditions]
+          ] as const;
+          const selectManifest = aoe2UiManifest.lobbySelectSettings;
+          for (const [key, options] of selectDefinitions) {
+            if (settings[key] === defaults[key]) continue;
+            const selectedIndex = (options as readonly CustomLobbyGameSettings[typeof key][]).indexOf(settings[key]);
+            const defaultIndex = (options as readonly CustomLobbyGameSettings[typeof key][]).indexOf(defaults[key]);
+            if (selectedIndex < 0) throw new Error(`The requested ${key} option is not supported.`);
+            if (defaultIndex < 0) throw new Error(`The default ${key} option is not supported.`);
+            const point = selectManifest.points[key];
+            await clickStep(`Open ${key}`, point[0], point[1], { synchronous: true });
+            await delay(selectManifest.openSettleMs);
+            if (selectedIndex === options.length - 1) {
+              const lastOption = await sendAoe2End(process.pid);
+              emitLog(`GAME_SELECT|${key}|Step=End|${lastOption.detail}`);
+              if (!lastOption.sent) throw new Error(`${key} could not select its final option.`);
+            } else {
+              const scrollSteps = Math.max(0, selectedIndex - (selectManifest.visibleRows - 1));
+              for (let step = 0; step < scrollSteps; step += 1) {
+                await clickStep(
+                  `Scroll ${key}`,
+                  selectManifest.scrollDownX,
+                  point[1] + selectManifest.scrollDownOffsetY,
+                  { synchronous: true }
+                );
+                await delay(selectManifest.scrollSettleMs);
+              }
+              const visibleIndex = selectedIndex - scrollSteps;
+              await clickStep(
+                `Select ${key} ${String(settings[key])}`,
+                selectManifest.optionX,
+                point[1] + selectManifest.firstOptionOffsetY + visibleIndex * selectManifest.optionRowStepY,
+                { synchronous: true }
+              );
+            }
+            await delay(selectManifest.selectionSettleMs);
+            emitLog(`GAME_SELECT|${key}=${String(settings[key])}|Complete=True|Index=${selectedIndex}`);
+          }
+        }
         const points = aoe2UiManifest.advancedSettings.points;
-        for (const key of Object.keys(points) as Array<keyof CustomLobbyGameSettings>) {
+        for (const key of Object.keys(points) as Array<keyof typeof points>) {
           if (settings[key] === defaults[key]) continue;
           const point = points[key];
           await clickStep(`${settings[key] ? "Enable" : "Disable"} ${key}`, point[0], point[1], { synchronous: true });

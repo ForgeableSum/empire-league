@@ -2,7 +2,23 @@ import { Check, Crown, LogIn, MessageSquare, Plus, RefreshCw, Send, Shield, User
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { civilizations } from "../../shared/civilizations";
 import type { Aoe2CivilizationSelection } from "../../shared/aoe2UiManifest";
-import { defaultCustomLobbyGameSettings, type CustomLobbyGameSettings, type CustomLobbyRoom, type LocalCustomContent, type LocalCustomContentCatalog } from "../../shared/contracts/customLobby";
+import {
+  customLobbyAiDifficulties,
+  customLobbyEndingAges,
+  customLobbyGameSpeeds,
+  customLobbyMapSizes,
+  customLobbyPopulationLimits,
+  customLobbyRevealMapOptions,
+  customLobbyStartingAges,
+  customLobbyStartingResources,
+  customLobbyTreatyLengths,
+  customLobbyVictoryConditions,
+  defaultCustomLobbyGameSettings,
+  type CustomLobbyGameSettings,
+  type CustomLobbyRoom,
+  type LocalCustomContent,
+  type LocalCustomContentCatalog
+} from "../../shared/contracts/customLobby";
 import { enabledMapCatalogEntries } from "../../shared/mapCatalog";
 import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runtimeConfig";
 import { ThemedSelect } from "../components/common/ThemedSelect";
@@ -603,9 +619,10 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
         </aside>
       </div>
       <LobbyGameSettings
-        settings={room.gameSettings ?? defaultCustomLobbyGameSettings}
+        settings={{ ...defaultCustomLobbyGameSettings, ...(room.gameSettings ?? {}) }}
         editable={isHost && room.status === "open" && !room.locked}
-        onChange={(key, checked) => act(customLobbyService.updateSettings(room.id, { [key]: checked }))}
+        selectSettingsEditable={room.map?.kind !== "scenario"}
+        onChange={(patch) => act(customLobbyService.updateSettings(room.id, patch))}
       />
       <div className={`custom-lobby-actions${room.status !== "open" ? " launching" : ""}`}>
         <span>{room.status === "started" || room.status === "launching" ? <GameStartCountdown room={room} /> : room.automationError ? room.automationError : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>
@@ -626,7 +643,11 @@ function requiresCustomContentTransfer(room: CustomLobbyRoom): boolean {
   return catalogMap ? Boolean(catalogMap.isCustomMap) : true;
 }
 
-const customLobbySettingLabels: Array<[keyof CustomLobbyGameSettings, string]> = [
+type CustomLobbyBooleanSettingKey = {
+  [Key in keyof CustomLobbyGameSettings]: CustomLobbyGameSettings[Key] extends boolean ? Key : never
+}[keyof CustomLobbyGameSettings];
+
+const customLobbySettingLabels: Array<[CustomLobbyBooleanSettingKey, string]> = [
   ["lockTeams", "Lock Teams"],
   ["teamTogether", "Team Together"],
   ["teamPositions", "Team Positions"],
@@ -642,15 +663,30 @@ const customLobbySettingLabels: Array<[keyof CustomLobbyGameSettings, string]> =
   ["antiquityMode", "Antiquity Mode"]
 ];
 
-function LobbyGameSettings({ settings, editable, onChange }: {
+function LobbyGameSettings({ settings, editable, selectSettingsEditable, onChange }: {
   settings: CustomLobbyGameSettings;
   editable: boolean;
-  onChange: (key: keyof CustomLobbyGameSettings, checked: boolean) => void;
+  selectSettingsEditable: boolean;
+  onChange: (patch: Partial<CustomLobbyGameSettings>) => void;
 }) {
+  const selectsEnabled = editable && selectSettingsEditable;
   return <article className="panel custom-game-settings">
-    <div className="custom-game-settings-heading"><div><span className="eyebrow">Team & advanced settings</span><h3>Game options</h3></div><small>{editable ? "Host controls" : "Set by host"}</small></div>
+    <div className="custom-game-settings-heading"><div><span className="eyebrow">Map, team & advanced settings</span><h3>Game options</h3></div><small>{editable ? "Host controls" : "Set by host"}</small></div>
+    <div className="custom-game-selects">
+      <GameSettingSelect label="Map Size" value={settings.mapSize} options={customLobbyMapSizes} disabled={!selectsEnabled} onChange={(mapSize) => onChange({ mapSize })} />
+      <GameSettingSelect label="AI Difficulty" value={settings.aiDifficulty} options={customLobbyAiDifficulties} disabled={!selectsEnabled} onChange={(aiDifficulty) => onChange({ aiDifficulty })} />
+      <GameSettingSelect label="Resources" value={settings.startingResources} options={customLobbyStartingResources} disabled={!selectsEnabled} onChange={(startingResources) => onChange({ startingResources })} />
+      <GameSettingSelect label="Population" value={String(settings.populationLimit)} options={customLobbyPopulationLimits.map(String)} disabled={!selectsEnabled} onChange={(populationLimit) => onChange({ populationLimit: Number(populationLimit) as CustomLobbyGameSettings["populationLimit"] })} />
+      <GameSettingSelect label="Game Speed" value={settings.gameSpeed} options={customLobbyGameSpeeds} disabled={!selectsEnabled} onChange={(gameSpeed) => onChange({ gameSpeed })} />
+      <GameSettingSelect label="Reveal Map" value={settings.revealMap} options={customLobbyRevealMapOptions} disabled={!selectsEnabled} onChange={(revealMap) => onChange({ revealMap })} />
+      <GameSettingSelect label="Starting Age" value={settings.startingAge} options={customLobbyStartingAges} disabled={!selectsEnabled} onChange={(startingAge) => onChange({ startingAge })} />
+      <GameSettingSelect label="Ending Age" value={settings.endingAge} options={customLobbyEndingAges} disabled={!selectsEnabled} onChange={(endingAge) => onChange({ endingAge })} />
+      <GameSettingSelect label="Treaty Length" value={settings.treatyLength} options={customLobbyTreatyLengths} disabled={!selectsEnabled} onChange={(treatyLength) => onChange({ treatyLength })} />
+      <GameSettingSelect label="Victory" value={settings.victoryCondition} options={customLobbyVictoryConditions} disabled={!selectsEnabled} onChange={(victoryCondition) => onChange({ victoryCondition })} />
+    </div>
+    {!selectSettingsEditable && <small className="scenario-settings-note">The selected scenario supplies these game settings inside AoE2.</small>}
     <div className="custom-game-settings-grid">{customLobbySettingLabels.map(([key, label]) => <label key={key} className={settings[key] ? "selected" : ""}>
-      <input type="checkbox" checked={settings[key]} disabled={!editable} onChange={(event) => onChange(key, event.target.checked)} />
+      <input type="checkbox" checked={settings[key]} disabled={!editable} onChange={(event) => onChange({ [key]: event.target.checked })} />
       <span>{label}</span>
     </label>)}
       <label className="selected required-setting" title="Empire League requires recorded games to verify results.">
@@ -659,6 +695,22 @@ function LobbyGameSettings({ settings, editable, onChange }: {
       </label>
     </div>
   </article>;
+}
+
+function GameSettingSelect<T extends string>({ label, value, options, disabled, onChange }: {
+  label: string;
+  value: string;
+  options: readonly T[];
+  disabled: boolean;
+  onChange: (value: T) => void;
+}) {
+  return <ThemedSelect
+    label={label}
+    value={value}
+    options={options.map((option) => ({ value: option, label: option }))}
+    disabled={disabled}
+    onChange={(next) => onChange(next as T)}
+  />;
 }
 
 function messageFor(error: unknown) {

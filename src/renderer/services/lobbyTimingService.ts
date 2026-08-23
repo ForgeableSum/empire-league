@@ -1,6 +1,19 @@
 import { aoe2UiManifest, teamGameMapSizeSelection, type Aoe2UiAction } from "../../shared/aoe2UiManifest";
 import type { CivilizationPreference, MatchSession } from "../../shared/contracts/matchmaking";
-import type { CustomLobbyRoom } from "../../shared/contracts/customLobby";
+import {
+  customLobbyAiDifficulties,
+  customLobbyEndingAges,
+  customLobbyGameSpeeds,
+  customLobbyMapSizes,
+  customLobbyPopulationLimits,
+  customLobbyRevealMapOptions,
+  customLobbyStartingAges,
+  customLobbyStartingResources,
+  customLobbyTreatyLengths,
+  customLobbyVictoryConditions,
+  defaultCustomLobbyGameSettings,
+  type CustomLobbyRoom
+} from "../../shared/contracts/customLobby";
 import { enabledMapCatalogEntries, isCustomMapForQueue } from "../../shared/mapCatalog";
 import {
   adaptiveLobbyTimingEnabled,
@@ -126,6 +139,7 @@ export function estimateCustomLobbySetupMs(room: CustomLobbyRoom): number {
   total += defaultClickDurationMs() + mapPicker.styleSelectionSettleMs;
   total += defaultClickDurationMs() + mapPicker.searchSettleMs;
   total += defaultClickDurationMs() + mapPicker.selectionSettleMs;
+  if (room.map?.kind !== "scenario") total += customLobbySelectSettingsDuration(room);
   total += actionDuration(actions.copyLobbyUri) + lobbySetupTiming.clipboardReadMs;
   total += lobbySetupTiming.lobbyMetadataMs
     + (lobbySetupEstimateTiming.guestJoinMs * sequentialGuestCount);
@@ -148,6 +162,35 @@ export function estimateCustomLobbySetupMs(room: CustomLobbyRoom): number {
   total += lobbySetupTiming.hostReadyToStartMs + lobbySetupTiming.startGameSettleMs;
   total += actionDuration(actions.startGame) + lobbySetupEstimateTiming.gameRevealMs;
   return total;
+}
+
+function customLobbySelectSettingsDuration(room: CustomLobbyRoom): number {
+  const settings = { ...defaultCustomLobbyGameSettings, ...room.gameSettings };
+  const definitions = [
+    ["mapSize", customLobbyMapSizes],
+    ["aiDifficulty", customLobbyAiDifficulties],
+    ["startingResources", customLobbyStartingResources],
+    ["populationLimit", customLobbyPopulationLimits],
+    ["gameSpeed", customLobbyGameSpeeds],
+    ["revealMap", customLobbyRevealMapOptions],
+    ["startingAge", customLobbyStartingAges],
+    ["endingAge", customLobbyEndingAges],
+    ["treatyLength", customLobbyTreatyLengths],
+    ["victoryCondition", customLobbyVictoryConditions]
+  ] as const;
+  const timing = aoe2UiManifest.lobbySelectSettings;
+  return definitions.reduce((total, [key, options]) => {
+    if (settings[key] === defaultCustomLobbyGameSettings[key]) return total;
+    const typedOptions = options as readonly (typeof settings)[typeof key][];
+    const index = typedOptions.indexOf(settings[key]);
+    const scrollSteps = index === typedOptions.length - 1
+      ? 0
+      : Math.max(0, index - (timing.visibleRows - 1));
+    return total + defaultClickDurationMs() + timing.openSettleMs
+      + scrollSteps * (defaultClickDurationMs() + timing.scrollSettleMs)
+      + (index === typedOptions.length - 1 ? 15 : defaultClickDurationMs())
+      + timing.selectionSettleMs;
+  }, 0);
 }
 
 function civilizationSelectionDuration(preference?: CivilizationPreference): number {

@@ -5793,6 +5793,18 @@
 .custom-game-settings-heading h3 { margin-top: 4px; }
 .custom-game-settings-heading small { color: var(--muted); }
 
+.custom-game-selects {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.custom-game-selects .themed-select-options {
+  z-index: 30;
+}
+
 .custom-game-settings-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -5830,6 +5842,10 @@
 }
 
 @media (max-width: 1399px) {
+  .custom-game-selects {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .social-layout {
     grid-template-columns: minmax(0, 1fr);
   }

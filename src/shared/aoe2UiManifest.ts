@@ -207,15 +207,29 @@ export const aoe2UiManifest = {
   },
   lobbySelectSettings: {
     points: {
-      mapSize: [3049, 788]
+      mapSize: [3049, 788],
+      aiDifficulty: [3049, 853],
+      startingResources: [3049, 918],
+      populationLimit: [3049, 983],
+      gameSpeed: [3049, 1048],
+      revealMap: [3049, 1113],
+      startingAge: [3049, 1178],
+      endingAge: [3049, 1243],
+      treatyLength: [3049, 1308],
+      victoryCondition: [3049, 1373]
     },
-    // Measured from the live lobby and corroborated by the Map Size
-    // DropDownListBox. Directional key messages are ignored, so select the
-    // required visible row directly.
+    // Measured from the live lobby and corroborated by each DropDownListBox in
+    // screenmultiplayerlobbyhost.json (40-unit rows). Directional key messages
+    // are ignored by these controls, so select rows directly. Long lists show
+    // eight rows and advance one row per scroll-down button click.
     optionX: 2875,
     firstOptionOffsetY: 58,
     optionRowStepY: 42,
+    visibleRows: 8,
+    scrollDownX: 3253,
+    scrollDownOffsetY: 369,
     openSettleMs: 500,
+    scrollSettleMs: 350,
     selectionSettleMs: 700
   },
   civilizationGrid: {

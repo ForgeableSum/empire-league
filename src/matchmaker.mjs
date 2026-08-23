@@ -77,6 +77,30 @@ const leaderboardCacheTtlMs = 3 * 60 * 1000;
 const leaderboardDivisions = new Set([
   "copper", "bronze", "silver", "gold", "platinum", "diamond", "master", "grandmaster"
 ]);
+const customLobbySelectOptions = {
+  mapSize: ["Tiny (2 player) [120]", "Small (3 player) [144]", "Medium (4 player) [168]", "Normal (6 player) [200]", "Large (8 player) [220]", "Huge [240]", "Ludicrous [480]"],
+  aiDifficulty: ["Easiest", "Standard", "Moderate", "Hard", "Hardest", "Extreme"],
+  startingResources: ["Standard", "Low", "Medium", "High", "Ultra High", "Infinite", "Random"],
+  populationLimit: [25, 50, 75, 100, 125, 150, 175, 200, 225, 250, 300, 400, 500],
+  gameSpeed: ["Slow", "Casual", "Normal", "Fast"],
+  revealMap: ["Normal", "Explored", "All Visible"],
+  startingAge: ["Standard", "Dark Age", "Feudal Age", "Castle Age", "Imperial Age", "Post-Imperial Age"],
+  endingAge: ["Standard", "Dark Age", "Feudal Age", "Castle Age", "Imperial Age"],
+  treatyLength: ["None", "5 Minutes", "10 Minutes", "15 Minutes", "20 Minutes", "25 Minutes", "30 Minutes", "35 Minutes", "40 Minutes", "45 Minutes", "50 Minutes", "55 Minutes", "60 Minutes", "90 Minutes"],
+  victoryCondition: ["Standard", "Conquest", "Time Limit", "Score", "Last Man Standing"]
+};
+const defaultCustomLobbySelectSettings = {
+  mapSize: "Tiny (2 player) [120]",
+  aiDifficulty: "Standard",
+  startingResources: "Standard",
+  populationLimit: 200,
+  gameSpeed: "Normal",
+  revealMap: "Normal",
+  startingAge: "Standard",
+  endingAge: "Standard",
+  treatyLength: "None",
+  victoryCondition: "Standard"
+};
 const minimumQueueTimeMs = 15_000;
 const declinedPairCooldownMs = 30 * 1000;
 const matchSetupTimeoutMs = Number(process.env.MATCH_SETUP_TIMEOUT_MS ?? 120_000);
@@ -224,6 +248,7 @@ function assembleWeeklyRooms() {
       players,
       messages: [],
       gameSettings: {
+        ...defaultCustomLobbySelectSettings,
         lockTeams: false, teamTogether: false, teamPositions: false, sharedExploration: false,
         lockSpeed: true, allowHandicap: false, allowCheats: false, turboMode: false,
         fullTechTree: false, empireWarsMode: false, suddenDeathMode: false,
@@ -1795,6 +1820,7 @@ async function handleRequest(request, response) {
         }],
         messages: [],
         gameSettings: {
+          ...defaultCustomLobbySelectSettings,
           lockTeams: true, teamTogether: true, teamPositions: false, sharedExploration: false,
           lockSpeed: true, allowHandicap: false, allowCheats: false, turboMode: false,
           fullTechTree: false, empireWarsMode: false, suddenDeathMode: false,
@@ -1872,6 +1898,9 @@ async function handleRequest(request, response) {
       if (room.locked) return send(response, 403, { error: "Weekly game settings are locked." });
       if (room.status !== "open") return send(response, 409, { error: "The lobby has already started." });
       const body = await readJson(request);
+      for (const [key, options] of Object.entries(customLobbySelectOptions)) {
+        if (Object.hasOwn(body, key) && options.includes(body[key])) room.gameSettings[key] = body[key];
+      }
       for (const key of Object.keys(room.gameSettings)) {
         if (key !== "recordGame" && typeof body[key] === "boolean") room.gameSettings[key] = body[key];
       }
