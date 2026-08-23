@@ -2,11 +2,14 @@ import type { ReplayMatchMetadata, ReplayPlayerMetadata } from "../../shared/con
 import type { ReplayEndCandidate } from "../../shared/contracts/electronApi";
 
 export class ReplayNotFinishedError extends Error {
-  constructor(teamGame = false, message?: string) {
+  readonly localPlayerEnded: boolean;
+
+  constructor(teamGame = false, message?: string, localPlayerEnded = false) {
     super(message ?? (teamGame
       ? "The team replay does not contain final PostGame results yet."
       : "The replay does not contain a PostGame or Resign operation yet."));
     this.name = "ReplayNotFinishedError";
+    this.localPlayerEnded = localPlayerEnded;
   }
 }
 
@@ -67,13 +70,31 @@ export function replayContainsTerminalHumanResign(
   }) ?? false;
 }
 
-export async function replayHasEnded(
+export function replayContainsLocalPlayerEnd(
+  operations: Array<Record<string, unknown>> | undefined,
+  localPlayerNumbers: readonly number[]
+): boolean {
+  // PostGame is written from this client's replay perspective when gameplay
+  // has ended for it, including defeat. A Resign action can arrive earlier;
+  // only accept it when it belongs to this local replay slot so another
+  // participant surrendering cannot pull Electron over an active game.
+  return operations?.some((operation) => "PostGame" in operation) === true
+    || replayContainsTerminalHumanResign(operations, localPlayerNumbers);
+}
+
+export interface ReplayEndInspection {
+  matchEnded: boolean;
+  localPlayerEnded: boolean;
+}
+
+export async function inspectReplayEnd(
   filePath: string,
   mode: "standard" | "ffa" | "team" = "standard",
   expectedPlayerCount?: number,
-  terminalHumanPlayerNumbers: readonly number[] = []
-): Promise<boolean> {
-  if (!window.electronApi) return false;
+  terminalHumanPlayerNumbers: readonly number[] = [],
+  localPlayerNumbers: readonly number[] = []
+): Promise<ReplayEndInspection> {
+  if (!window.electronApi) return { matchEnded: false, localPlayerEnded: false };
   const { parse_rec, parse_rec_summary } = await import("aoe2rec-js");
   const bytes = await window.electronApi.readReplayFile(filePath);
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
@@ -81,27 +102,33 @@ export async function replayHasEnded(
   try {
     replay = parse_rec(buffer) as { operations?: Array<Record<string, unknown>> };
   } catch {
-    return false;
+    return { matchEnded: false, localPlayerEnded: false };
   }
-  if (replayContainsTerminalHumanResign(replay.operations, terminalHumanPlayerNumbers)) return true;
+  const localPlayerEnded = replayContainsLocalPlayerEnd(replay.operations, localPlayerNumbers);
+  if (replayContainsTerminalHumanResign(replay.operations, terminalHumanPlayerNumbers)) {
+    return { matchEnded: true, localPlayerEnded };
+  }
   if (mode !== "standard") {
     // Multiplayer replays contain a Resign operation whenever any participant
     // is eliminated. Only the final PostGame summary can prove that the last
     // two players (or teams) have finished their contest.
     const hasPostGame = replay.operations?.some((operation) => "PostGame" in operation) ?? false;
-    if (!hasPostGame) return false;
+    if (!hasPostGame) return { matchEnded: false, localPlayerEnded };
     try {
       const summary = parse_rec_summary(buffer);
       // AI players use non-positive profile IDs in recorded games, so profile
       // identity cannot be used to decide which lobby slots participated.
-      return replaySummaryHasEnded(summary.teams, mode, expectedPlayerCount);
+      return {
+        matchEnded: replaySummaryHasEnded(summary.teams, mode, expectedPlayerCount),
+        localPlayerEnded
+      };
     } catch {
       // PostGame can be written before the final summary has settled. The
       // replay watcher will notify us again after the next write/stable edge.
-      return false;
+      return { matchEnded: false, localPlayerEnded };
     }
   }
-  return replay.operations?.some((operation) => {
+  const matchEnded = replay.operations?.some((operation) => {
     if ("PostGame" in operation) return true;
     const action = operation.Action;
     if (typeof action !== "object" || action === null) return false;
@@ -110,11 +137,27 @@ export async function replayHasEnded(
       && actionData !== null
       && "Resign" in actionData;
   }) ?? false;
+  return { matchEnded, localPlayerEnded };
+}
+
+export async function replayHasEnded(
+  filePath: string,
+  mode: "standard" | "ffa" | "team" = "standard",
+  expectedPlayerCount?: number,
+  terminalHumanPlayerNumbers: readonly number[] = []
+): Promise<boolean> {
+  return (await inspectReplayEnd(
+    filePath,
+    mode,
+    expectedPlayerCount,
+    terminalHumanPlayerNumbers
+  )).matchEnded;
 }
 
 export async function parseReplayMetadata(
   filePath: string,
-  teamGame = false
+  teamGame = false,
+  localPlayerNumber?: number
 ): Promise<ReplayMatchMetadata> {
   if (!window.electronApi) throw new Error("Replay files are only available in the desktop app.");
   const { parse_rec, parse_rec_summary } = await import("aoe2rec-js");
@@ -138,12 +181,29 @@ export async function parseReplayMetadata(
     .filter((resign): resign is Record<string, unknown> => typeof resign === "object" && resign !== null)
     .map((resign) => resign.player_id)
     .find((playerId): playerId is number => typeof playerId === "number");
+  const localPlayerEnded = replayContainsLocalPlayerEnd(
+    replay.operations,
+    localPlayerNumber === undefined ? [] : [localPlayerNumber]
+  );
   if (!teamGame && !hasPostGame && resignPlayerNumber === undefined) {
     // Preserve the original 1v1 behavior: do not attempt to summarize an
     // actively written replay until it has a terminal operation.
     throw new ReplayNotFinishedError();
   }
-  const summary = parse_rec_summary(buffer);
+  if (teamGame && !hasPostGame) throw new ReplayNotFinishedError(true, undefined, localPlayerEnded);
+  let summary: ReturnType<typeof parse_rec_summary>;
+  try {
+    summary = parse_rec_summary(buffer);
+  } catch {
+    if (localPlayerEnded) {
+      throw new ReplayNotFinishedError(
+        teamGame,
+        "The local game has ended, but the replay summary is still settling.",
+        true
+      );
+    }
+    throw new Error("The replay summary could not be parsed.");
+  }
   const gameSettings = summary.header.game_settings;
   const replaySettings = summary.header.replay;
   const players: ReplayPlayerMetadata[] = summary.teams.flatMap((team) =>
@@ -157,9 +217,7 @@ export async function parseReplayMetadata(
       }))
   );
   const isTeamGame = teamGame || players.length > 2;
-  if (isTeamGame && !hasPostGame) {
-    throw new ReplayNotFinishedError(true);
-  }
+  if (isTeamGame && !hasPostGame) throw new ReplayNotFinishedError(true, undefined, localPlayerEnded);
   const winningPlayers = summary.teams.filter((team) => team.winner).flatMap((team) => team.players);
   const losingPlayers = summary.teams.filter((team) => !team.winner).flatMap((team) => team.players);
   const allPlayers = summary.teams.flatMap((team) => team.players).filter((player) => player.profile_id > 0);
@@ -179,7 +237,8 @@ export async function parseReplayMetadata(
     // can parse it again instead of permanently rejecting a valid result.
     throw new ReplayNotFinishedError(
       isTeamGame,
-      "The replay summary does not contain complete player and team results yet."
+      "The replay summary does not contain complete player and team results yet.",
+      localPlayerEnded
     );
   }
   return {

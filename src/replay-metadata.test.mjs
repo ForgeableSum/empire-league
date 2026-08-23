@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   replayContainsTerminalHumanResign,
+  replayContainsLocalPlayerEnd,
   replaySummaryHasEnded,
   shouldUseAiReplayCompletionFallback
 } from "./renderer/services/replayMetadataService.ts";
@@ -53,4 +54,18 @@ test("only the sole human surrender is terminal in an AI custom game", () => {
   assert.equal(replayContainsTerminalHumanResign(operations.slice(0, 1), [1]), false);
   assert.equal(replayContainsTerminalHumanResign(operations, [1]), true);
   assert.equal(replayContainsTerminalHumanResign(operations, []), false);
+});
+
+test("local replay recovery ignores another player surrendering", () => {
+  const operations = [
+    { Action: { action_data: { Resign: { player_id: 2 } } } }
+  ];
+
+  assert.equal(replayContainsLocalPlayerEnd(operations, [1]), false);
+  assert.equal(replayContainsLocalPlayerEnd(operations, [2]), true);
+});
+
+test("PostGame marks the local replay perspective as ended after defeat", () => {
+  const operations = [{ PostGame: {} }];
+  assert.equal(replayContainsLocalPlayerEnd(operations, [1]), true);
 });

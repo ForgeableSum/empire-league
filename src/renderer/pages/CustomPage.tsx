@@ -26,7 +26,7 @@ import { ThemedSelect } from "../components/common/ThemedSelect";
 import { customLobbyService } from "../services/customLobbyService";
 import { buildDiagnosticLogSnapshot } from "../services/diagnosticLog";
 import { estimateCustomLobbySetupMs } from "../services/lobbyTimingService";
-import { replayHasEnded, shouldUseAiReplayCompletionFallback } from "../services/replayMetadataService";
+import { inspectReplayEnd, shouldUseAiReplayCompletionFallback } from "../services/replayMetadataService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import { useAppStore } from "../state/appStore";
 
@@ -236,6 +236,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const replayResultInFlight = useRef(false);
   const pendingReplayResult = useRef<{ filePath: string; candidate: ReplayEndCandidate } | null>(null);
+  const localReturnToMenuRecoveryStarted = useRef(false);
   const gameStartRevealRef = useRef<Promise<void> | null>(null);
   const guestPostJoinSetupRef = useRef<Promise<boolean> | null>(null);
   const activeAutomationAttemptRef = useRef(room.automationAttemptId);
@@ -501,17 +502,30 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
           while (pendingReplayResult.current) {
             const replayResult = pendingReplayResult.current;
             pendingReplayResult.current = null;
+            const inspection = await inspectReplayEnd(
+              replayResult.filePath,
+              replayCompletionMode,
+              replayCompletionMode === "standard"
+                ? undefined
+                : (room.gamePlayerCount ?? room.players.length + aiSlots.length),
+              room.players.length === 1 && aiSlots.length > 0
+                ? [room.players[0].slot]
+                : [],
+              [me.slot]
+            );
             const ended = shouldUseAiReplayCompletionFallback(aiSlots.length, replayResult.candidate)
-              || await replayHasEnded(
-                replayResult.filePath,
-                replayCompletionMode,
-                replayCompletionMode === "standard"
-                  ? undefined
-                  : (room.gamePlayerCount ?? room.players.length + aiSlots.length),
-                room.players.length === 1 && aiSlots.length > 0
-                  ? [room.players[0].slot]
-                  : []
-              );
+              || inspection.matchEnded;
+            if (inspection.localPlayerEnded && !ended && !localReturnToMenuRecoveryStarted.current) {
+              localReturnToMenuRecoveryStarted.current = true;
+              try {
+                await window.electronApi!.beginReplayReturnToMenuRecovery();
+              } catch (error) {
+                localReturnToMenuRecoveryStarted.current = false;
+                appendDiagnosticLog(
+                  `WARN | custom local-end recovery | ${error instanceof Error ? error.message : String(error)}`
+                );
+              }
+            }
             if (!ended) continue;
             await window.electronApi!.confirmReplayEnded();
             await customLobbyService.finish(room.id);
@@ -524,7 +538,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
         }
       })();
     });
-  }, [room.id, room.players.length, room.status, aiSlots.length, replayCompletionMode, notify]);
+  }, [room.id, room.players.length, room.status, aiSlots.length, me.slot, replayCompletionMode, notify]);
 
   async function ensureAoe2Running() {
     const process = await window.electronApi!.detectAoe2Process();

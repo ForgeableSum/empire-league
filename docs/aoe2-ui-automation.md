@@ -122,6 +122,13 @@ seconds of file inactivity prompts a fallback recheck; afterward, three
 seconds does. A temporarily unparseable recording without a terminal operation
 remains under observation.
 
+Team-game client recovery is intentionally separate from final result
+verification. A `Resign` action for the local replay slot, or a local
+perspective `PostGame` marker after defeat, immediately arms the return-to-main-
+menu overlay without stopping replay monitoring. Resignations from other slots
+do not trigger that overlay. The custom room is finished, and a ranked result
+is submitted, only after the replay contains complete match-wide results.
+
 ## Localization
 
 Empire League reads the final `SetCurrentLanguage(<index>)` entry from the newest

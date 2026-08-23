@@ -644,7 +644,7 @@ function stopReturnToMenuWatch(): void {
   hideReturnToMenuOverlay();
 }
 
-function startReturnToMenuWatch(window: BrowserWindow): void {
+function startReturnToMenuWatch(window: BrowserWindow, preserveReplayDetection = false): void {
   stopReturnToMenuWatch();
   const generation = returnToMenuWatchGeneration;
   showReturnToMenuOverlay();
@@ -701,6 +701,7 @@ function startReturnToMenuWatch(window: BrowserWindow): void {
         ? consecutiveMainMenuReads + 1
         : 0;
       if (consecutiveMainMenuReads >= 2) {
+        if (preserveReplayDetection) replayAlreadyRecoveredAtMainMenu = true;
         stopReturnToMenuWatch();
         focusMainWindowAfterReplay(window, true);
         return;
@@ -3237,6 +3238,23 @@ export function registerGameHandlers(): void {
 
   ipcMain.handle("game:stop-replay-end-detection", async () => {
     stopReplayEndDetection();
+  });
+
+  ipcMain.handle("game:begin-replay-return-to-menu-recovery", async (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const alreadyRecovered = replayAlreadyRecoveredAtMainMenu;
+    console.info(
+      `[AoE2 replay] LOCAL_END|RendererDestroyed=${event.sender.isDestroyed()}`
+      + `|WindowFound=${Boolean(window)}|AlreadyAtMainMenu=${alreadyRecovered}`
+      + `|ReturnWatchStarted=${Boolean(window) && !alreadyRecovered}|ReplayWatchPreserved=True`
+    );
+    if (!window) return;
+    if (alreadyRecovered) {
+      stopReturnToMenuWatch();
+      focusMainWindowAfterReplay(window, true);
+      return;
+    }
+    startReturnToMenuWatch(window, true);
   });
 
   ipcMain.handle("game:confirm-replay-ended", async (event) => {

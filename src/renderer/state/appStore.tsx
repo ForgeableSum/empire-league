@@ -322,6 +322,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const roomSetupWatchdogDurationRef = useRef(roomSetupTimeoutMs);
   const replayResultInFlightRef = useRef(false);
+  const localReturnToMenuRecoveryMatchIdRef = useRef<string | null>(null);
   const gameRevealInFlightRef = useRef<Promise<void> | null>(null);
   const gameRevealedMatchIdRef = useRef<string | null>(null);
   const gameStartSignalInFlightRef = useRef<Promise<boolean> | null>(null);
@@ -454,9 +455,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       void (async () => {
         let replay: Awaited<ReturnType<typeof parseReplayMetadata>>;
         try {
-          replay = await parseReplayMetadata(filePath, match.queue.format === "team");
+          const teamGame = match.queue.format === "team";
+          const localPlayerNumber = teamGame
+            ? (match.lobbySlot ?? (match.role === "host" ? 1 : 2))
+            : undefined;
+          replay = await parseReplayMetadata(filePath, teamGame, localPlayerNumber);
         } catch (error) {
           if (error instanceof ReplayNotFinishedError) {
+            if (error.localPlayerEnded && localReturnToMenuRecoveryMatchIdRef.current !== match.id) {
+              localReturnToMenuRecoveryMatchIdRef.current = match.id;
+              try {
+                await window.electronApi?.beginReplayReturnToMenuRecovery();
+                log(`REPLAY_RESULT|Event=LocalPlayerEnded|Match=${match.id}|ReturnWatchStarted=True`);
+              } catch (recoveryError) {
+                localReturnToMenuRecoveryMatchIdRef.current = null;
+                log(
+                  `REPLAY_RESULT|Event=LocalPlayerEnded|Match=${match.id}|ReturnWatchStarted=False`
+                  + `|Reason=${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`
+                );
+              }
+            }
             replayResultInFlightRef.current = false;
             return;
           }

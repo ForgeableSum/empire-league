@@ -104,6 +104,7 @@ export interface ElectronGameApi {
   onLobbyGuardShortcutBlocked(listener: () => void): () => void;
   startReplayEndDetection(replayFolder?: string, context?: "ranked" | "custom"): Promise<{ started: boolean; message?: string }>;
   stopReplayEndDetection(): Promise<void>;
+  beginReplayReturnToMenuRecovery(): Promise<void>;
   confirmReplayEnded(): Promise<void>;
   testReturnToMenuRecovery(): Promise<{ started: boolean; message?: string }>;
   startLoadingScreenWatch(): Promise<{ started: boolean; message?: string }>;
