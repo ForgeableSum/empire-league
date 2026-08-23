@@ -164,6 +164,7 @@ export interface CustomLobbyRoom {
   gamePlayerCount?: number;
   platformLobbyId?: string;
   automationError?: string;
+  readyPromptedAt?: string;
   createdAt: string;
   demo?: boolean;
   source?: "custom" | "weekly";

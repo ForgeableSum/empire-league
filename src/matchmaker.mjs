@@ -2007,7 +2007,13 @@ async function handleRequest(request, response) {
     if (request.method === "POST" && startCustomLobby) {
       const room = customLobbies.get(decodeURIComponent(startCustomLobby[1]));
       if (!room || room.hostId !== authenticatedPlayer.id) return send(response, 403, { error: "Only the host can start the lobby." });
-      if (!room.players.length || room.players.some((player) => !player.ready)) return send(response, 409, { error: "Every player must be ready." });
+      if (!room.players.length) return send(response, 409, { error: "The lobby has no players." });
+      if (room.players.some((player) => !player.ready)) {
+        room.readyPromptedAt = new Date().toISOString();
+        broadcastCustomRooms();
+        return send(response, 409, { error: "Every player must be ready. Unready players have been notified." });
+      }
+      room.readyPromptedAt = undefined;
       room.status = "launching";
       room.automationAttemptId = randomUUID();
       room.automationStartedAt = new Date().toISOString();

@@ -245,6 +245,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const isHost = room.hostId === currentPlayerId;
   activeAutomationAttemptRef.current = room.automationAttemptId;
   const aiSlots = room.aiSlots ?? [];
+  const readyPromptActive = room.status === "open" && Boolean(room.readyPromptedAt);
   const slots = useMemo(() => Array.from({ length: room.maxPlayers }, (_, index) => ({
     player: room.players.find((player) => player.slot === index + 1),
     ai: aiSlots.find((candidate) => candidate.slot === index + 1)
@@ -643,14 +644,15 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
               <span /><span /><span />
             </div>;
             const playerEditable = player.id === currentPlayerId && room.status === "open";
+            const readyNeedsAttention = playerEditable && !player.ready && readyPromptActive;
             return <div className="lobby-player-row occupied" key={slot}>
               <div className="lobby-player-name"><span className="lobby-slot-number">{slot}</span><Shield size={17} /><strong data-ui-translation="off">{player.displayName}</strong>{player.host && <Crown size={15} />}{isHost && room.status === "open" && !player.host && !room.locked && <button className="lobby-kick" aria-label={`Remove ${player.displayName}`} onClick={() => act(customLobbyService.kick(room.id, player.id))}><X size={13} /></button>}</div>
               {room.map?.kind === "scenario" ? <><span>Scenario</span><span>Scenario-defined</span>{playerEditable
-                ? <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
+                ? <button className={player.ready ? "lobby-ready ready" : readyNeedsAttention ? "lobby-ready needs-attention" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : readyNeedsAttention ? "Ready up" : "Not ready"}</button>
                 : <span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span>}</> : playerEditable ? <>
                 <ThemedSelect className="lobby-inline-select" label="Team" value={String(player.team)} onChange={(team) => act(customLobbyService.updatePlayer(room.id, { team: Number(team) }))} options={[{ value: "0", label: "No team" }, ...[1, 2, 3, 4].map((team) => ({ value: String(team), label: `Team ${team}` }))]} />
                 <ThemedSelect className="lobby-inline-select" label="Civilization" value={player.civilization} onChange={(civilization) => act(customLobbyService.updatePlayer(room.id, { civilization }))} options={["Random", ...civilizations].map((civilization) => ({ value: civilization, label: localizeAoe2Name(civilization) }))} />
-                <button className={player.ready ? "lobby-ready ready" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : "Not ready"}</button>
+                <button className={player.ready ? "lobby-ready ready" : readyNeedsAttention ? "lobby-ready needs-attention" : "lobby-ready"} onClick={() => act(customLobbyService.updatePlayer(room.id, { ready: !player.ready }))}>{player.ready && <Check size={16} />}{player.ready ? "Ready" : readyNeedsAttention ? "Ready up" : "Not ready"}</button>
               </> : <><span>{player.team ? `Team ${player.team}` : "No team"}</span><span>{localizeAoe2Name(player.civilization)}</span><span className={player.ready ? "success" : ""}>{player.ready ? "Ready" : "Not ready"}</span></>}
             </div>;
           })}
@@ -667,9 +669,9 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
         selectSettingsEditable={room.map?.kind !== "scenario"}
         onChange={(patch) => act(customLobbyService.updateSettings(room.id, patch))}
       />
-      <div className={`custom-lobby-actions${room.status !== "open" ? " launching" : ""}`}>
-        <span>{room.status === "started" || room.status === "launching" ? <GameStartCountdown room={room} /> : room.automationError ? room.automationError : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>
-        {isHost && <button className="primary large" disabled={startRequestPending || room.status !== "open" || !room.map || !room.players.every((player) => player.ready)} onClick={() => act(startCustomGame())}>{startRequestPending || room.status !== "open" ? <>Starting<AnimatedEllipsis /></> : "Start Game"}</button>}
+      <div className={`custom-lobby-actions${room.status !== "open" ? " launching" : readyPromptActive && !me.ready ? " ready-requested" : ""}`} role="status" aria-live="polite">
+        <span>{room.status === "started" || room.status === "launching" ? <GameStartCountdown room={room} /> : room.automationError ? room.automationError : readyPromptActive && !me.ready ? "The host is waiting for you — ready up to start." : room.players.every((player) => player.ready) ? "All players are ready." : "Waiting for players to ready up."}</span>
+        {isHost && <button className="primary large" disabled={startRequestPending || room.status !== "open" || !room.map} onClick={() => act(startCustomGame())}>{startRequestPending || room.status !== "open" ? <>Starting<AnimatedEllipsis /></> : "Start Game"}</button>}
       </div>
     </section>
   );
