@@ -186,6 +186,7 @@ export interface MatchSession {
   opponentCivilizationPreference?: CivilizationPreference;
   player: PlayerProfile;
   opponent: PlayerProfile;
+  participants?: MatchSessionParticipant[];
   role?: "host" | "guest";
   lobbySlot?: number;
   team?: 1 | 2;
@@ -201,6 +202,14 @@ export interface MatchSession {
   ratingEligible?: boolean;
   tournamentId?: string;
   tournamentMatchId?: string;
+}
+
+export interface MatchSessionParticipant {
+  player: PlayerProfile;
+  civilizationPreference?: CivilizationPreference;
+  lobbySlot: number;
+  team: 1 | 2;
+  isCurrentPlayer: boolean;
 }
 
 export interface JoinQueueRequest {

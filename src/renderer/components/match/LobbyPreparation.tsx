@@ -1,7 +1,12 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import civBonuses from "../../../shared/civBonuses.json";
-import type { CivilizationPreference } from "../../../shared/contracts/matchmaking";
+import type {
+  CivilizationPreference,
+  MatchSession,
+  MatchSessionParticipant
+} from "../../../shared/contracts/matchmaking";
 import { getCatalogMap } from "../../../shared/mapCatalog";
 import { maps } from "../../mocks/mockPlayers";
 import { useAppStore } from "../../state/appStore";
@@ -20,14 +25,8 @@ export function LobbyPreparation() {
   const mapDescription = selectedMap && canonicalMapDescription
     ? localizeAoe2MapDescription(selectedMap.name, canonicalMapDescription)
     : canonicalMapDescription;
-  const playerCivilization = resolveCivilization(
-    match?.queue.civilizationPreference,
-    match?.opponentCivilizationPreference
-  );
-  const opponentCivilization = resolveCivilization(
-    match?.opponentCivilizationPreference,
-    match?.queue.civilizationPreference
-  );
+  const teams = getCivilizationTeams(match);
+  const civilizationRows = Math.max(teams.player.length, teams.opponent.length, 1);
 
   useEffect(() => {
     const update = () => setRemaining(getRemaining(state.roomSetupStartedAt, countdownMs));
@@ -55,7 +54,7 @@ export function LobbyPreparation() {
         )}
       </div>
       <MatchmakingBrand />
-      <div className="civilization-matchup">
+      <div className="civilization-matchup" style={{ "--civilization-rows": civilizationRows } as CSSProperties}>
         <article className="upcoming-map-card">
           <span className="eyebrow">Map</span>
           <h3>{selectedMap ? localizeAoe2Name(selectedMap.name) : "Map pending"}</h3>
@@ -66,8 +65,24 @@ export function LobbyPreparation() {
           )}
           {mapDescription && <p className="upcoming-map-description">{mapDescription}</p>}
         </article>
-        <CivilizationBonuses civilization={playerCivilization} side="player" />
-        <CivilizationBonuses civilization={opponentCivilization} side="opponent" />
+        {teams.player.map((participant, index) => (
+          <CivilizationBonuses
+            key={`${participant.player.id}-${participant.lobbySlot}`}
+            civilization={resolveParticipantCivilization(participant, teams.opponent)}
+            label={participant.isCurrentPlayer ? "Your civilization" : participant.player.displayName}
+            row={index + 1}
+            side="player"
+          />
+        ))}
+        {teams.opponent.map((participant, index) => (
+          <CivilizationBonuses
+            key={`${participant.player.id}-${participant.lobbySlot}`}
+            civilization={resolveParticipantCivilization(participant, teams.player)}
+            label={participant.player.displayName || "Opponent civilization"}
+            row={index + 1}
+            side="opponent"
+          />
+        ))}
       </div>
     </section>
   );
@@ -81,11 +96,67 @@ function resolveCivilization(
   return selected && selected in civBonuses ? selected as CivilizationName : null;
 }
 
+function resolveParticipantCivilization(
+  participant: MatchSessionParticipant,
+  otherTeam: MatchSessionParticipant[]
+): CivilizationName | null {
+  const opposingPreference = otherTeam.find((other) => other.civilizationPreference?.civilization)
+    ?.civilizationPreference;
+  return resolveCivilization(participant.civilizationPreference, opposingPreference);
+}
+
+function getCivilizationTeams(match: MatchSession | null): {
+  player: MatchSessionParticipant[];
+  opponent: MatchSessionParticipant[];
+} {
+  if (match?.participants?.length) {
+    const current = match.participants.find((participant) => participant.isCurrentPlayer);
+    const playerTeam = current?.team ?? match.team ?? 1;
+    const bySlot = (left: MatchSessionParticipant, right: MatchSessionParticipant) => {
+      if (left.isCurrentPlayer !== right.isCurrentPlayer) return left.isCurrentPlayer ? -1 : 1;
+      return left.lobbySlot - right.lobbySlot;
+    };
+    return {
+      player: match.participants.filter((participant) => participant.team === playerTeam).sort(bySlot),
+      opponent: match.participants.filter((participant) => participant.team !== playerTeam).sort(bySlot)
+    };
+  }
+
+  if (!match) return { player: [], opponent: [] };
+  const playerTeam = match.team ?? 1;
+  return {
+    player: [{
+      player: match.player,
+      civilizationPreference: {
+        mode: "pick",
+        civilization: resolveCivilization(match.queue.civilizationPreference, match.opponentCivilizationPreference) ?? undefined
+      },
+      lobbySlot: match.lobbySlot ?? 1,
+      team: playerTeam,
+      isCurrentPlayer: true
+    }],
+    opponent: [{
+      player: match.opponent,
+      civilizationPreference: {
+        mode: "pick",
+        civilization: resolveCivilization(match.opponentCivilizationPreference, match.queue.civilizationPreference) ?? undefined
+      },
+      lobbySlot: playerTeam === 1 ? 2 : 1,
+      team: playerTeam === 1 ? 2 : 1,
+      isCurrentPlayer: false
+    }]
+  };
+}
+
 function CivilizationBonuses({
   civilization,
+  label,
+  row,
   side
 }: {
   civilization: CivilizationName | null;
+  label: string;
+  row: number;
   side: "player" | "opponent";
 }) {
   const { localizeAoe2Name, getLocalizedAoe2CivilizationBonuses } = useAppStore();
@@ -93,8 +164,8 @@ function CivilizationBonuses({
     ? getLocalizedAoe2CivilizationBonuses(civilization) ?? civBonuses[civilization]
     : null;
   return (
-    <article className={`civ-bonus-card ${side}`}>
-      <span className="eyebrow">{side === "player" ? "Your civilization" : "Opponent civilization"}</span>
+    <article className={`civ-bonus-card ${side}${row > 1 ? " additional" : ""}`} style={{ gridColumn: side === "player" ? 2 : 3, gridRow: row }}>
+      <span className="eyebrow">{label}</span>
       <h3>{civilization ? localizeAoe2Name(civilization) : "Random civilization"}</h3>
       {details ? (
         <>

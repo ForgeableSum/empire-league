@@ -1169,6 +1169,18 @@ function sessionFor(match, ticket) {
     opponentCivilizationPreference,
     player: ticket.player,
     opponent: opponent.player,
+    participants: matchTickets(match)
+      .map((participant) => {
+        const participantAssignment = match.assignments.get(participant.id);
+        return {
+          player: participant.player,
+          civilizationPreference: match.civilizationPreferences.get(participant.id),
+          lobbySlot: participantAssignment.slot,
+          team: participantAssignment.team,
+          isCurrentPlayer: participant.id === ticket.id
+        };
+      })
+      .sort((left, right) => left.lobbySlot - right.lobbySlot),
     role: match.host.id === ticket.id ? "host" : "guest",
     lobbySlot: assignment.slot,
     team: assignment.team,

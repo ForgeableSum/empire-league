@@ -3668,6 +3668,7 @@
   grid-column: 1;
   grid-row: 2;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(var(--civilization-rows, 1), minmax(0, auto));
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -3679,6 +3680,8 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
+  grid-column: 1;
+  grid-row: 1 / span var(--civilization-rows, 1);
   padding: 28px 24px;
   overflow: hidden;
   border-right: 1px solid var(--line);
@@ -3736,6 +3739,14 @@
     linear-gradient(150deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 44%),
     var(--panel);
   text-align: left;
+}
+
+.civ-bonus-card.player {
+  border-right: 1px solid var(--line);
+}
+
+.civ-bonus-card.additional {
+  border-top: 1px solid var(--line);
 }
 
 .civ-bonus-card.opponent {
