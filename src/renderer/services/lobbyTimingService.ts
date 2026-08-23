@@ -62,10 +62,14 @@ export function calculateLobbySetupBaselineMs(match: MatchSession): number {
   total += defaultClickDurationMs() + mapPicker.styleSelectionSettleMs;
   total += defaultClickDurationMs() + mapPicker.searchSettleMs;
   total += defaultClickDurationMs() + mapPicker.selectionSettleMs;
+  const sequentialGuestCount = match.queue.format === "team"
+    ? ((match.queue.teamSizes?.[0] ?? 2) * 2) - 1
+    : 1;
   total += actionDuration(actions.copyLobbyUri) + lobbySetupTiming.clipboardReadMs;
   total += civilizationSelectionDuration(match.queue.civilizationPreference);
   total += lobbySetupTiming.lobbyMetadataMs;
-  total += lobbySetupEstimateTiming.guestJoinMs + lobbySetupTiming.guestReadySettleMs;
+  total += (lobbySetupEstimateTiming.guestJoinMs + lobbySetupTiming.guestReadySettleMs)
+    * sequentialGuestCount;
   if (match.matchType === "tournament") {
     total += (defaultClickDurationMs() * 2)
       + aoe2UiManifest.passwordPrompt.inputSettleMs
@@ -101,6 +105,8 @@ export function estimateCustomLobbySetupMs(room: CustomLobbyRoom): number {
   const usesCustomContent = Boolean(room.dataMod || room.map?.kind === "scenario")
     || (room.map ? (catalogMap ? Boolean(catalogMap.isCustomMap) : true) : false);
   const selectsPlayerSettings = room.map?.kind !== "scenario" || room.source === "weekly";
+  const guestCount = room.players.filter((player) => !player.host).length;
+  const sequentialGuestCount = guestCount > 1 ? guestCount : 1;
 
   let total = lobbySetupTiming.hostLobbyAutomationOverheadMs
     + lobbySetupEstimateTiming.hostSetupSafetyMarginMs;
@@ -115,7 +121,8 @@ export function estimateCustomLobbySetupMs(room: CustomLobbyRoom): number {
   total += defaultClickDurationMs() + mapPicker.searchSettleMs;
   total += defaultClickDurationMs() + mapPicker.selectionSettleMs;
   total += actionDuration(actions.copyLobbyUri) + lobbySetupTiming.clipboardReadMs;
-  total += lobbySetupTiming.lobbyMetadataMs + lobbySetupEstimateTiming.guestJoinMs;
+  total += lobbySetupTiming.lobbyMetadataMs
+    + (lobbySetupEstimateTiming.guestJoinMs * sequentialGuestCount);
 
   if (selectsPlayerSettings) {
     // Each machine configures its own slot concurrently, so budget for one

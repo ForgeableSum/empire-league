@@ -315,6 +315,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const queueJoinInFlightRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const lobbyAutomationRef = useRef<Promise<GameInputResult> | null>(null);
+  const guestPostJoinSetupRef = useRef<Promise<boolean> | null>(null);
   const customLobbyAutomationStepsRef = useRef(new Set<string>());
   const lobbyRecoveryInFlightRef = useRef(false);
   const matchedSessionRef = useRef<MatchSession | null>(null);
@@ -984,6 +985,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     queueJoinInFlightRef.current = false;
     matchedSessionRef.current = null;
     lobbyAutomationRef.current = null;
+    guestPostJoinSetupRef.current = null;
     unsubscribeRef.current?.();
     unsubscribeRef.current = null;
     const ticketId = ticketRef.current;
@@ -1270,7 +1272,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               matchedSessionRef.current?.selectedMap,
               matchedSessionRef.current?.queue.id
             );
-            void window.electronApi.openAoe2Lobby(
+            const postJoinSetup = window.electronApi.openAoe2Lobby(
               event.lobby.platformLobbyId,
               allowCustomContentPrompt,
               matchedSessionRef.current?.matchType === "tournament" ? event.lobby.password : undefined
@@ -1279,6 +1281,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               if (result.opened) {
                 log("Guest lobby opened; waiting for the Ready button state to settle");
                 await delayForLobbyInput(lobbySetupTiming.guestReadySettleMs);
+                const hasMultipleGuests = matchedSessionRef.current?.queue.format === "team";
+                if (hasMultipleGuests) {
+                  // Releasing the next guest here preserves deterministic AoE2
+                  // slot assignment without making that guest wait for this
+                  // client's civilization and team automation to finish.
+                  log("Guest joined; releasing the next lobby slot");
+                  await services.matchmaking.reportGuestLobbyJoined(event.matchId);
+                }
                 const preference = matchedSessionRef.current?.queue.civilizationPreference;
                 const selection = aoe2SelectionForPreference(preference);
                 if (selection) {
@@ -1304,13 +1314,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   const selectedTeam = await window.electronApi!.selectAoe2Team(team, lobbySlot);
                   if (!selectedTeam.sent) throw new Error(selectedTeam.message);
                 }
-                log("Guest lobby opened; reporting join to the host");
-                await services.matchmaking.reportGuestLobbyJoined(event.matchId);
-                log("Guest joined; waiting for the host to finalize custom map transfer");
+                if (!hasMultipleGuests) {
+                  // Preserve the established 1v1 flow: civilization setup is
+                  // complete before the sole guest reports joining.
+                  log("Guest lobby opened; reporting join to the host");
+                  await services.matchmaking.reportGuestLobbyJoined(event.matchId);
+                }
+                log("Guest setup complete; waiting for the host to finalize custom map transfer");
                 setState((previous) => ({
                   ...previous,
                   roomSetupMilestone: "Waiting for host to finalize lobby files"
                 }));
+                return true;
               } else throw new Error("The host lobby URI was rejected.");
             }).catch((error: unknown) => {
               const message = error instanceof Error ? error.message : "The host lobby could not be opened.";
@@ -1318,7 +1333,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               void handleLobbySetupFailure(queue, message, {
                 criticalFailure: { code: "LOBBY_OPEN_FAILED", phase: "lobby_join" }
               });
+              return false;
             });
+            guestPostJoinSetupRef.current = postJoinSetup;
           }
         }
         if (event.type === "guest_lobby_joined" && window.electronApi) {
@@ -1366,6 +1383,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }));
           void (async () => {
             try {
+              // The server releases all guests independently once they have
+              // joined. Keep this client's UI actions ordered even if the host
+              // becomes ready while its civilization/team setup is ongoing.
+              if (await guestPostJoinSetupRef.current === false) return;
               const deadline = Date.now() + lobbySetupTiming.customMapTransferTimeoutMs;
               let contentAcceptanceReported = false;
               let ready: { sent: boolean; message: string };
@@ -1998,6 +2019,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ticketRef.current = null;
     matchedSessionRef.current = null;
     lobbyAutomationRef.current = null;
+    guestPostJoinSetupRef.current = null;
     lobbyTimingAuditRef.current = null;
     replayResultInFlightRef.current = false;
     clearRoomSetupWatchdog();

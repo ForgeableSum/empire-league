@@ -224,6 +224,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
   const replayResultInFlight = useRef(false);
   const pendingReplayResultPath = useRef<string | null>(null);
   const gameStartRevealRef = useRef<Promise<void> | null>(null);
+  const guestPostJoinSetupRef = useRef<Promise<boolean> | null>(null);
   const activeAutomationAttemptRef = useRef(room.automationAttemptId);
   const startRequestInFlight = useRef(false);
   const [startRequestPending, setStartRequestPending] = useState(false);
@@ -336,18 +337,32 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     }
 
     const guestJoinKey = `${room.id}:guest-join:${room.platformLobbyId ?? "pending"}`;
-    if (!isHost && room.platformLobbyId && !me.aoeJoined && claimCustomLobbyAutomationStep(guestJoinKey)) {
-      void (async () => {
+    const guests = room.players.filter((player) => !player.host);
+    const hasMultipleGuests = guests.length > 1;
+    const earlierGuestsJoined = guests
+      .filter((player) => player.slot < me.slot)
+      .every((player) => player.aoeJoined);
+    if (!isHost && room.platformLobbyId && !me.aoeJoined && earlierGuestsJoined && claimCustomLobbyAutomationStep(guestJoinKey)) {
+      const postJoinSetup = (async () => {
         try {
           const opened = await window.electronApi!.openAoe2Lobby(room.platformLobbyId!, customContentFlow);
           if (!opened.opened) throw new Error("AoE2 did not open the custom lobby.");
+          if (hasMultipleGuests) {
+            // Report the completed join before applying player settings. The
+            // next guest can now occupy its deterministic slot while this client
+            // continues its own setup independently.
+            await customLobbyService.reportJoined(room.id);
+          }
           if (content?.kind !== "scenario" || room.source === "weekly") await applyMapPlayerSettings(me);
-          await customLobbyService.reportJoined(room.id);
+          if (!hasMultipleGuests) await customLobbyService.reportJoined(room.id);
+          return true;
         } catch (error) {
           notify("Could not join the AoE2 lobby.", "danger", { detail: messageFor(error), durationMs: null });
           releaseCustomLobbyAutomationStep(guestJoinKey);
+          return false;
         }
       })();
+      guestPostJoinSetupRef.current = postJoinSetup;
       return;
     }
 
@@ -356,6 +371,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     if (!isHost && me.aoeJoined && hostPlayer?.aoeReady && !me.aoeReady && claimCustomLobbyAutomationStep(guestReadyKey)) {
       void (async () => {
         try {
+          if (await guestPostJoinSetupRef.current === false) return;
           const deadline = Date.now() + lobbySetupTiming.customMapTransferTimeoutMs;
           let contentAcceptanceReported = false;
           let ready: Awaited<ReturnType<typeof window.electronApi.runAoe2LobbyCursorAction>>;
