@@ -42,7 +42,6 @@ export function CustomPage() {
   const [contentKind, setContentKind] = useState<"map" | "scenario">("map");
   const [mapId, setMapId] = useState("");
   const [scenarioId, setScenarioId] = useState("");
-  const [dataModId, setDataModId] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [pending, setPending] = useState(false);
 
@@ -78,7 +77,6 @@ export function CustomPage() {
       setCatalog(nextCatalog);
       setMapId((current) => nextCatalog.maps.some((item) => item.id === current) ? current : "");
       setScenarioId((current) => nextCatalog.maps.some((item) => item.id === current) ? current : "");
-      setDataModId((current) => nextCatalog.dataMods.some((item) => item.id === current) ? current : "");
     } catch (error) {
       notify("Local content could not be scanned.", "danger", { detail: messageFor(error) });
     } finally {
@@ -112,8 +110,7 @@ export function CustomPage() {
       await customLobbyService.create({
         name: lobbyName.trim(),
         maxPlayers,
-        map: catalog.maps.find((item) => item.id === contentId),
-        dataMod: catalog.dataMods.find((item) => item.id === dataModId)
+        map: catalog.maps.find((item) => item.id === contentId)
       });
       setCreating(false);
     } catch (error) {
@@ -177,7 +174,6 @@ export function CustomPage() {
           {contentKind === "map"
             ? <ContentSelect label="Map" items={catalog.maps.filter((item) => item.kind === "map")} value={mapId} onChange={setMapId} displayName={(item) => item.builtIn ? localizeAoe2Name(item.gameName) : item.name} />
             : <ContentSelect label="Scenario" items={catalog.maps.filter((item) => item.kind === "scenario")} value={scenarioId} onChange={setScenarioId} />}
-          <ContentSelect label="Data mod (optional)" items={catalog.dataMods} value={dataModId} onChange={setDataModId} />
           {[...catalog.maps, ...catalog.dataMods].some((item) => !item.enabled) && <small className="custom-disabled-mod-hint">Disabled mods must be enabled at the mods interface inside the game.</small>}
           <div className="custom-scan-meta"><span>{catalog.maps.length} maps/scenarios</span><span>{catalog.dataMods.length} data mods</span><span>{catalog.scannedRoots.length} folders scanned</span></div>
           <div className="custom-create-actions">
