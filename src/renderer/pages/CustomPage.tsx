@@ -588,8 +588,8 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
     if (room.source === "weekly" && player.civilization === "Random") return;
     const civilization = await window.electronApi!.selectAoe2Civilization(player.civilization as Aoe2CivilizationSelection, player.slot, "custom");
     if (!civilization.sent) throw new Error(civilization.message);
-    if (player.team === 1 || player.team === 2) {
-      const team = await window.electronApi!.selectAoe2Team(player.team, player.slot, "custom");
+    if (player.team >= 1 && player.team <= 4) {
+      const team = await window.electronApi!.selectAoe2Team(player.team as 1 | 2 | 3 | 4, player.slot, "custom");
       if (!team.sent) throw new Error(team.message);
     }
   }
