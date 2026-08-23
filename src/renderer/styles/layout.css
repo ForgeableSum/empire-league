@@ -981,7 +981,11 @@
 .tournament-bracket-match > div.pending > strong { color: var(--faint); font-weight: 400; }
 .tournament-bracket-match > div.mine { background: rgba(197, 141, 69, .16); box-shadow: inset 3px 0 #d7a956; }
 .tournament-bracket-match > div.mine > strong { color: #f2d798; }
-.tournament-bracket-match > div > em { padding: 2px 5px; color: #17110a; border-radius: 999px; background: var(--accent-2); font-size: 8px; font-style: normal; font-weight: 900; text-transform: uppercase; }
+.tournament-bracket-match > div.winner { background: rgba(113, 194, 140, .1); box-shadow: inset 3px 0 var(--success); }
+.tournament-bracket-match > div.winner > strong { color: #d2f0dc; }
+.tournament-bracket-player-markers { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.tournament-bracket-player-markers > em { display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px; color: #17110a; border-radius: 999px; background: var(--accent-2); font-size: 8px; font-style: normal; font-weight: 900; line-height: 1; text-transform: uppercase; }
+.tournament-bracket-player-markers > em.winner { color: #102116; background: var(--success); }
 
 .tournament-bracket-match.live {
   border-color: rgba(201, 74, 61, .55);

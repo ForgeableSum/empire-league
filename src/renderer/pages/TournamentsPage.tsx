@@ -499,15 +499,22 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
                             const activity = typeof player === "object"
                               ? bracketPlayerActivity(match, playerIndex, now)
                               : null;
+                            const isWinner = typeof player === "object"
+                              && match.tournamentMatch?.winnerPlayerId === player.playerId;
                             return (
-                              <div className={bracketPlayerClass(player, currentPlayerId)} key={playerIndex}>
+                              <div className={bracketPlayerClass(player, currentPlayerId, isWinner)} key={playerIndex}>
                                 <span>{typeof player === "object" ? player.bracketSlot : "—"}</span>
                                 <strong>
                                   {typeof player === "object"
                                     ? `${player.displayName}${activity ? ` - ${activity}` : ""}`
                                     : player === "open" ? "Open spot" : "TBD"}
                                 </strong>
-                                {typeof player === "object" && player.playerId === currentPlayerId && <em>You</em>}
+                                {typeof player === "object" && (
+                                  <span className="tournament-bracket-player-markers">
+                                    {player.playerId === currentPlayerId && <em>You</em>}
+                                    {isWinner && <em className="winner"><Trophy size={9} /> Victory</em>}
+                                  </span>
+                                )}
                               </div>
                             );
                           })}
@@ -746,10 +753,12 @@ function bracketRoundName(playersInRound: number): string {
   return `Round of ${playersInRound}`;
 }
 
-function bracketPlayerClass(player: BracketPlayer, currentPlayerId: string): string {
+function bracketPlayerClass(player: BracketPlayer, currentPlayerId: string, isWinner = false): string {
   if (player === "open") return "open";
   if (player === "tbd") return "pending";
-  return player.playerId === currentPlayerId ? "mine" : "";
+  return [player.playerId === currentPlayerId ? "mine" : "", isWinner ? "winner" : ""]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function formatCountdown(milliseconds: number): string {
