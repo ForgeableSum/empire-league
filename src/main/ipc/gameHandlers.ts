@@ -4649,6 +4649,32 @@ export function registerGameHandlers(): void {
     if (!helperExecutable) {
       return { opened: false, captureAgeLaunched: false, message: "The AoE2 URL helper could not be found." };
     }
+
+    // Spectating must not reuse an Empire League-managed AoE2 instance. That
+    // process may still have automation-specific visibility, audio, or input
+    // state. End it first, clear ownership, and let AOEURLHelper start a wholly
+    // external game process that a later Empire League activity will recognize
+    // as unowned and replace through the normal process-preparation flow.
+    restoreAoe2Window();
+    releaseAllInputSuppression("TournamentSpectatorLaunch");
+    const existingGame = await detectAoe2Process();
+    if (existingGame.running && existingGame.pid) {
+      await forceCloseAoe2Process(existingGame.pid);
+      const closed = await waitForAoe2Exit(5_000);
+      if (!closed) {
+        return {
+          opened: false,
+          captureAgeLaunched: false,
+          message: "The existing AoE2 process could not be terminated before opening spectator mode."
+        };
+      }
+    }
+    endAoe2MatchAudioSuppression();
+    launchRequested = false;
+    launchRequestedAt = 0;
+    ownedAoe2Pid = undefined;
+    ownedAoe2WindowReady = false;
+
     const handoff = spawn(helperExecutable, [spectatorUri], {
       detached: true,
       stdio: "ignore",
