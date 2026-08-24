@@ -3,6 +3,7 @@ import { CalendarDays, Clock3, File, MapPinned, Users } from "lucide-react";
 import type { MatchSummary } from "../../shared/contracts/matches";
 import { ThemedSelect } from "../components/common/ThemedSelect";
 import { HistoryCivilizations, HistoryPlayers, historyTeamsFor } from "../components/match/HistoryMatchup";
+import { previewSection } from "../previewMode";
 import { useAppStore } from "../state/appStore";
 
 type ModeFilter = "solo" | "team";
@@ -15,7 +16,7 @@ export function MatchHistoryPage() {
   const { state, openPlayerProfile, localizeAoe2Name } = useAppStore();
   const [query, setQuery] = useState("");
   const [resultFilter, setResultFilter] = useState("all");
-  const [modeFilter, setModeFilter] = useState<ModeFilter>("solo");
+  const [modeFilter, setModeFilter] = useState<ModeFilter>(previewSection === "teams" ? "team" : "solo");
   const matches = useMemo(
     () => state.recentMatches.filter((match) => {
       const participantSearch = (match.participants ?? [])
