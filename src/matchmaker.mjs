@@ -255,6 +255,7 @@ function assembleWeeklyRooms() {
       messages: [],
       gameSettings: {
         ...defaultCustomLobbySelectSettings,
+        mapSize: "Large (8 player) [220]",
         lockTeams: false, teamTogether: false, teamPositions: false, sharedExploration: false,
         lockSpeed: true, allowHandicap: false, allowCheats: false, turboMode: false,
         fullTechTree: false, empireWarsMode: false, suddenDeathMode: false,
