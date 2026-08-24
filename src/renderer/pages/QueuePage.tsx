@@ -496,7 +496,7 @@ export function QueuePage() {
                             type="button"
                             key={size}
                             aria-pressed={selected}
-                            disabled={isSearching || preferencesLocked}
+                            disabled={preferencesLocked}
                             onClick={() => setSelectedTeamSizes((current) => {
                               if (current.includes(size)) {
                                 return current.length === 1 ? current : current.filter((item) => item !== size);

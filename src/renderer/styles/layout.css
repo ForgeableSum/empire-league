@@ -2878,6 +2878,7 @@
   background: #1a1816;
   color: var(--muted);
   text-align: left;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
 }
 
 .civilization-option-card {
@@ -2904,11 +2905,30 @@
   text-align: left;
 }
 
-.civilization-mode:hover,
+.civilization-mode:hover:not(.active):not(:disabled) {
+  border-color: #766957;
+  color: var(--text);
+  background: #24211d;
+}
+
+.civilization-mode:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .civilization-mode.active {
   border-color: var(--accent);
   color: var(--accent-2);
-  background: rgba(197, 141, 69, 0.12);
+  background: rgba(197, 141, 69, 0.2);
+}
+
+.civilization-mode.active:hover:not(:disabled) {
+  background: rgba(197, 141, 69, 0.26);
+}
+
+.civilization-mode.active strong,
+.civilization-mode.active svg {
+  color: #f0c982;
 }
 
 .civilization-option-card:hover {
