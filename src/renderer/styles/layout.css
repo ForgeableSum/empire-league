@@ -984,7 +984,9 @@
 .tournament-bracket-match > div.winner { background: rgba(113, 194, 140, .1); box-shadow: inset 3px 0 var(--success); }
 .tournament-bracket-match > div.winner > strong { color: #d2f0dc; }
 .tournament-bracket-player-markers { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
-.tournament-bracket-player-markers > em { display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px; color: #17110a; border-radius: 999px; background: var(--accent-2); font-size: 8px; font-style: normal; font-weight: 900; line-height: 1; text-transform: uppercase; }
+.tournament-bracket-player-markers > em { min-height: 16px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; color: #17110a; border-radius: 999px; background: var(--accent-2); font-size: 8px; font-style: normal; font-weight: 900; line-height: 1; text-transform: uppercase; }
+.tournament-bracket-player-markers > em > svg { flex: 0 0 auto; }
+.tournament-bracket-player-markers > em > span { position: relative; top: 1px; }
 .tournament-bracket-player-markers > em.winner { color: #102116; background: var(--success); }
 
 .tournament-bracket-match.live {

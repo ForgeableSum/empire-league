@@ -512,7 +512,7 @@ function TournamentDetail({ tournament, now, currentPlayerId, currentPlayerRatin
                                 {typeof player === "object" && (
                                   <span className="tournament-bracket-player-markers">
                                     {player.playerId === currentPlayerId && <em>You</em>}
-                                    {isWinner && <em className="winner"><Trophy size={9} /> Victory</em>}
+                                    {isWinner && <em className="winner"><Trophy size={9} /><span>Winner</span></em>}
                                   </span>
                                 )}
                               </div>
