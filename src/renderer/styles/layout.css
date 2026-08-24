@@ -5454,6 +5454,7 @@
   display: grid;
   grid-template-columns: minmax(640px, 2fr) minmax(280px, 0.85fr);
   gap: 16px;
+  overflow: visible;
 }
 
 .lobby-roster,
@@ -5474,6 +5475,10 @@
   overflow: visible;
 }
 
+.lobby-roster:has(.themed-select[open]) {
+  z-index: 30;
+}
+
 .lobby-roster-header,
 .lobby-player-row {
   display: grid;
@@ -5483,6 +5488,15 @@
   min-height: 62px;
   padding: 9px 14px;
   border-bottom: 1px solid var(--line-soft);
+}
+
+.lobby-player-row {
+  position: relative;
+  overflow: visible;
+}
+
+.lobby-player-row:has(.themed-select[open]) {
+  z-index: 3;
 }
 
 .scenario-settings-note {
