@@ -127,6 +127,18 @@ export function CustomPage() {
   }
 
   async function joinRoom(roomId: string) {
+    const room = customRooms.find((candidate) => candidate.id === roomId);
+    const unavailableReason = room && room.status !== "open"
+      ? "That custom game is already running."
+      : room && customLobbyOccupiedCount(room) >= room.maxPlayers
+        ? "That lobby is full."
+        : null;
+    if (unavailableReason) {
+      // Danger notifications are deduplicated by message in the app store, so
+      // repeated attempts reuse the existing toast instead of adding copies.
+      notify(unavailableReason, "danger");
+      return;
+    }
     if (!(await guardCustomLobbyEntry())) return;
     if (!(await ensureAoe2Ready("custom"))) return;
     setPending(true);
@@ -137,7 +149,8 @@ export function CustomPage() {
       });
       setRooms((current) => current.map((room) => room.id === joinedRoom.id ? joinedRoom : room));
     } catch (error) {
-      notify("Could not join the lobby.", "danger", { detail: messageFor(error) });
+      const reason = messageFor(error);
+      notify(reason === "An unexpected error occurred." ? "Could not join the lobby." : reason, "danger");
     } finally {
       setPending(false);
     }
@@ -197,7 +210,7 @@ export function CustomPage() {
               <div><strong>{room.map?.name ?? "Standard map"}</strong><small>{room.dataMod?.name ?? "No data mod"}</small></div>
               <div className="room-player-count"><Users size={16} /> {customLobbyOccupiedCount(room)}/{room.maxPlayers}</div>
               <span className={`custom-room-status ${room.status}`}>{customRoomStatusLabel(room.status)}</span>
-              <button className="secondary" type="button" disabled={room.status !== "open" || customLobbyOccupiedCount(room) >= room.maxPlayers || pending || state.gameStatus === "loading" || !canEnterCustomLobby} onClick={() => void joinRoom(room.id)}><LogIn size={16} /> {state.gameStatus === "loading" ? "Launching…" : "Join"}</button>
+              <button className="secondary" type="button" disabled={pending || state.gameStatus === "loading" || !canEnterCustomLobby} onClick={() => void joinRoom(room.id)}><LogIn size={16} /> {state.gameStatus === "loading" ? "Launching…" : "Join"}</button>
             </article>
           ))}
           {!loadingRooms && !customRooms.length && <div className="panel empty-state">No custom rooms are open. Create the first one.</div>}

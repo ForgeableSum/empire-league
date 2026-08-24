@@ -1851,7 +1851,8 @@ async function handleRequest(request, response) {
     const joinCustomLobby = url.pathname.match(/^\/custom-lobbies\/([^/]+)\/join$/);
     if (request.method === "POST" && joinCustomLobby) {
       const room = customLobbies.get(decodeURIComponent(joinCustomLobby[1]));
-      if (!room || room.status !== "open") return send(response, 404, { error: "That lobby is no longer available." });
+      if (!room) return send(response, 404, { error: "That lobby is no longer available." });
+      if (room.status !== "open") return send(response, 409, { error: "That custom game is already running." });
       const current = playerCustomLobby(authenticatedPlayer.id);
       if (current && current.id !== room.id) return send(response, 409, { error: "Leave your current custom lobby first." });
       if (weeklyQueue.has(authenticatedPlayer.id)) return send(response, 409, { error: "Leave the weekly queue before joining a custom lobby." });
