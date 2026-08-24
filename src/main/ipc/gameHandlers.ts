@@ -3459,6 +3459,10 @@ export function registerGameHandlers(): void {
 
     const sequenceStartedAt = performance.now();
     let previousLogAt = sequenceStartedAt;
+    let sequenceCompleted = false;
+    let sequenceExpired = false;
+    let sequenceSafetyTimer: NodeJS.Timeout | undefined;
+    let refreshSequenceSafetyTimer: () => void = () => undefined;
     const emitLog = (message: string) => {
       const loggedAt = performance.now();
       const elapsedMs = Math.round(loggedAt - sequenceStartedAt);
@@ -3467,6 +3471,7 @@ export function registerGameHandlers(): void {
       const sequencedMessage = `SEQUENCE|Id=${sequenceId}|Context=${automationContext}|ElapsedMs=${elapsedMs}|SincePreviousMs=${sincePreviousMs}|${message}`;
       console.info(`[AoE2 automation] ${sequencedMessage}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", sequencedMessage);
+      refreshSequenceSafetyTimer();
     };
     emitLog("Started=True");
     emitLog(`PLAYER_COUNT_REQUEST|Value=${playerCount}`);
@@ -3489,9 +3494,16 @@ export function registerGameHandlers(): void {
     }
     const gamePid: number = gameProcess.pid;
     setMainWindowGameCoverClickThrough(false);
-    let sequenceCompleted = false;
-    let sequenceExpired = false;
-    let sequenceSafetyTimer: NodeJS.Timeout | undefined;
+    refreshSequenceSafetyTimer = () => {
+      if (!isCustomAutomation || sequenceCompleted || sequenceExpired) return;
+      if (sequenceSafetyTimer) clearTimeout(sequenceSafetyTimer);
+      sequenceSafetyTimer = setTimeout(() => {
+        sequenceExpired = true;
+        setWindowsInputBlocked(false);
+        stopInputGuard();
+        emitLog("SAFETY_TIMEOUT|Source=CreateLobby|InputReleased=True|InactivityLimitMs=60000");
+      }, 60_000);
+    };
     try {
       const gameWindow = getAoe2NativeWindowHandle(gamePid);
       if (!gameWindow) throw new Error("The AoE2 game window could not be resolved for window capture.");
@@ -3501,14 +3513,7 @@ export function registerGameHandlers(): void {
       // The swallowing low-level guard protects AoE2 while approved physical
       // keyboard events remain available to Electron chat.
       const inputBlocked = false;
-      if (isCustomAutomation) {
-        sequenceSafetyTimer = setTimeout(() => {
-          sequenceExpired = true;
-          setWindowsInputBlocked(false);
-          stopInputGuard();
-          emitLog("SAFETY_TIMEOUT|Source=CreateLobby|InputReleased=True");
-        }, 60_000);
-      }
+      refreshSequenceSafetyTimer();
       const inputGuardStarted = await startInputGuard(appWindow);
       if (sequenceExpired) throw new Error("Create Lobby exceeded its 60-second safety limit.");
       if (inputGuardStarted && !guardedSenders.has(event.sender)) {
