@@ -14,8 +14,9 @@ renderer changes with:
 npm run build:landing-preview
 ```
 
-Before publishing, replace the `href="#"` value on both elements marked `data-download`
-in `index.html` with the final installer URL.
+The elements marked `data-download` in `index.html` open a lightbox explaining the
+Windows SmartScreen prompt. The lightbox then links to the stable production installer
+at `https://empireleague.gg/updates/windows/Empire-League-Setup.exe`.
 
 ## Deploying the website
 

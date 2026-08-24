@@ -32,12 +32,17 @@ if (plannedFeaturesToggle) {
   });
 }
 
-const toast = document.querySelector('.toast');
-document.querySelectorAll('[data-download]').forEach((button) => {
-  button.addEventListener('click', (event) => {
+const downloadModal = document.querySelector('.download-modal');
+const downloadModalClose = document.querySelector('.download-modal-close');
+
+document.querySelectorAll('[data-download]').forEach((link) => {
+  link.addEventListener('click', (event) => {
     event.preventDefault();
-    toast.classList.add('show');
-    window.clearTimeout(window.downloadToastTimer);
-    window.downloadToastTimer = window.setTimeout(() => toast.classList.remove('show'), 3600);
+    downloadModal.showModal();
   });
+});
+
+downloadModalClose.addEventListener('click', () => downloadModal.close());
+downloadModal.addEventListener('click', (event) => {
+  if (event.target === downloadModal) downloadModal.close();
 });
