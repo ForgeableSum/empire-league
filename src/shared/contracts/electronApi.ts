@@ -48,6 +48,8 @@ export interface PendingAppUpdate {
 export interface ReplayEndCandidate {
   reason: "FileGrowth" | "QuietFallback";
   retry: boolean;
+  matchId?: string;
+  generation?: number;
 }
 
 export interface ObsIntegrationStatus {
@@ -102,8 +104,9 @@ export interface ElectronGameApi {
   onLobbyGuardPointer(listener: (point: { x: number; y: number; sequence: number }) => void): () => void;
   acknowledgeLobbyGuardPointer(sequence: number): void;
   onLobbyGuardShortcutBlocked(listener: () => void): () => void;
-  startReplayEndDetection(replayFolder?: string, context?: "ranked" | "custom"): Promise<{ started: boolean; message?: string }>;
+  startReplayEndDetection(replayFolder?: string, context?: "ranked" | "custom", matchId?: string): Promise<{ started: boolean; message?: string }>;
   stopReplayEndDetection(): Promise<void>;
+  logReplayLifecycle(event: string, data?: Record<string, unknown>): Promise<void>;
   beginReplayReturnToMenuRecovery(): Promise<void>;
   confirmReplayEnded(): Promise<void>;
   testReturnToMenuRecovery(): Promise<{ started: boolean; message?: string }>;

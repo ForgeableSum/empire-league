@@ -6,6 +6,7 @@ import { basename, dirname, extname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { CreateLobbyRequest, GameInputKey } from "../../shared/contracts/gameIntegration.js";
+import { shouldMonitorReplayMainMenu } from "../../shared/replayLifecycle.js";
 import {
   describeAoe2WindowCapture,
   hasFreshAoe2WindowCapture,
@@ -138,6 +139,7 @@ let returnToMenuPoller: NodeJS.Timeout | undefined;
 let returnToMenuWatchGeneration = 0;
 let replayDetectionGeneration = 0;
 let replayAlreadyRecoveredAtMainMenu = false;
+let activeReplayDetectionIdentity: string | undefined;
 const builtInGameMapNames = new Set<string>();
 let createLobbySequenceCounter = 0;
 let activeCreateLobbySequence: { id: number; context: "ranked" | "tournament" | "custom" } | undefined;
@@ -596,11 +598,28 @@ async function findReplayFiles(configuredFolder?: string): Promise<ReplaySnapsho
   return files;
 }
 
+async function appendReplayLifecycleLog(event: string, data: Record<string, unknown> = {}): Promise<void> {
+  try {
+    const logDirectory = join(app.getPath("userData"), "logs");
+    await mkdir(logDirectory, { recursive: true });
+    await appendFile(
+      join(logDirectory, "replay-lifecycle.jsonl"),
+      `${JSON.stringify({ ...data, at: new Date().toISOString(), event })}\n`,
+      "utf8"
+    );
+  } catch {
+    // Match recovery must never depend on diagnostics being writable.
+  }
+}
+
 function stopReplayEndDetection(): void {
+  const stoppedIdentity = activeReplayDetectionIdentity;
   replayDetectionGeneration += 1;
   if (replayEndPoller) clearTimeout(replayEndPoller);
   replayEndPoller = undefined;
+  activeReplayDetectionIdentity = undefined;
   stopAoe2WindowCapture();
+  if (stoppedIdentity) void appendReplayLifecycleLog("WATCH_STOPPED", { identity: stoppedIdentity });
 }
 
 function clearReplayFocusTimers(): void {
@@ -648,8 +667,13 @@ function startReturnToMenuWatch(window: BrowserWindow, preserveReplayDetection =
   stopReturnToMenuWatch();
   const generation = returnToMenuWatchGeneration;
   showReturnToMenuOverlay();
+  void appendReplayLifecycleLog("RETURN_WATCH_STARTED", {
+    preserveReplayDetection,
+    identity: activeReplayDetectionIdentity
+  });
   let consecutiveMainMenuReads = 0;
   let captureFailures = 0;
+  let lastObservedState: string | undefined;
 
   const poll = async (): Promise<void> => {
     if (generation !== returnToMenuWatchGeneration || window.isDestroyed()) {
@@ -664,8 +688,15 @@ function startReturnToMenuWatch(window: BrowserWindow, preserveReplayDetection =
     }
     if (game.pid && game.windowReady) {
       const gameWindow = getAoe2NativeWindowHandle(game.pid);
-      if (!gameWindow) {
-        captureFailures += 1;
+        if (!gameWindow) {
+          captureFailures += 1;
+          if (captureFailures === 1 || captureFailures % 5 === 0) {
+            void appendReplayLifecycleLog("RETURN_CAPTURE_FAILED", {
+              identity: activeReplayDetectionIdentity,
+              reason: "WindowNotFound",
+              attempt: captureFailures
+            });
+          }
         if (captureFailures === 1 || captureFailures % 5 === 0) {
           console.warn(`[AoE2 replay] MENU_CAPTURE|Ready=False|Reason=WindowNotFound|Attempt=${captureFailures}`);
         }
@@ -697,11 +728,23 @@ function startReturnToMenuWatch(window: BrowserWindow, preserveReplayDetection =
         captureFailures = 0;
       }
       const state = readAoe2HostSetupState(game.pid);
+      if (state.state !== lastObservedState) {
+        lastObservedState = state.state;
+        void appendReplayLifecycleLog("RETURN_STATE_CHANGED", {
+          identity: activeReplayDetectionIdentity,
+          state: state.state,
+          consecutiveMainMenuReads
+        });
+      }
       consecutiveMainMenuReads = state.state === "main-menu"
         ? consecutiveMainMenuReads + 1
         : 0;
       if (consecutiveMainMenuReads >= 2) {
         if (preserveReplayDetection) replayAlreadyRecoveredAtMainMenu = true;
+        void appendReplayLifecycleLog("RETURN_MAIN_MENU_CONFIRMED", {
+          preserveReplayDetection,
+          consecutiveMainMenuReads
+        });
         stopReturnToMenuWatch();
         focusMainWindowAfterReplay(window, true);
         return;
@@ -719,10 +762,18 @@ function startReturnToMenuWatch(window: BrowserWindow, preserveReplayDetection =
 async function startReplayEndDetection(
   window: BrowserWindow,
   configuredFolder?: string,
-  context: "ranked" | "custom" = "ranked"
+  context: "ranked" | "custom" = "ranked",
+  matchId?: string
 ): Promise<{ started: boolean; message?: string }> {
+  const identity = `${context}|${configuredFolder?.trim() || "auto"}|${matchId || "unscoped"}`;
+  if (activeReplayDetectionIdentity === identity) {
+    void appendReplayLifecycleLog("WATCH_REUSED", { identity, context, matchId });
+    return { started: true };
+  }
+  stopReturnToMenuWatch();
   clearReplayFocusTimers();
   stopReplayEndDetection();
+  activeReplayDetectionIdentity = identity;
   replayAlreadyRecoveredAtMainMenu = false;
   const generation = replayDetectionGeneration;
   const startedAt = Date.now();
@@ -745,9 +796,11 @@ async function startReplayEndDetection(
     try {
       const details = await stat(configuredFolder.trim());
       if (!details.isDirectory()) {
+        activeReplayDetectionIdentity = undefined;
         return { started: false, message: "The configured replay folder is not a directory." };
       }
     } catch {
+      activeReplayDetectionIdentity = undefined;
       return { started: false, message: "The configured replay folder could not be found." };
     }
   }
@@ -756,6 +809,9 @@ async function startReplayEndDetection(
     if (replayStartedEmitted || window.webContents.isDestroyed()) return;
     replayStartedEmitted = true;
     window.webContents.send("game:replay-started", replay.path);
+    void appendReplayLifecycleLog("REPLAY_STARTED", {
+      identity, generation, context, matchId, file: replay.path, size: replay.size, modifiedMs: replay.modifiedMs
+    });
     console.info(`[AoE2 replay] STARTED|File=${replay.path}`);
   };
 
@@ -773,7 +829,11 @@ async function startReplayEndDetection(
       }
       return;
     }
-    window.webContents.send("game:replay-ended", replay.path, { reason, retry });
+    window.webContents.send("game:replay-ended", replay.path, { reason, retry, matchId, generation });
+    void appendReplayLifecycleLog("CANDIDATE_SENT", {
+      identity, generation, context, matchId, reason, retry,
+      file: replay.path, size: replay.size, modifiedMs: replay.modifiedMs
+    });
     if (reason !== "FileGrowth") {
       console.info(
         `[AoE2 replay] NOTIFY|Reason=${reason}|RendererDestroyed=False`
@@ -803,7 +863,7 @@ async function startReplayEndDetection(
       // restore Electron even when the renderer cannot confirm the replay.
       const replayQuietEnoughForVisualFallback = observedGrowth
         && Date.now() - lastGrowthAt >= replayRunningStableForMs;
-      if ((!observedGrowth || (context === "custom" && replayQuietEnoughForVisualFallback)) && game.pid && game.windowReady && !recoveredFromMainMenu) {
+      if (shouldMonitorReplayMainMenu(observedGrowth, replayQuietEnoughForVisualFallback) && game.pid && game.windowReady && !recoveredFromMainMenu) {
         const screen = readAoe2HostSetupState(game.pid);
         if (screen.state === "unknown" || screen.state === "loading-screen") observedInGameScreen = true;
         consecutiveMainMenuReads = observedInGameScreen && screen.state === "main-menu"
@@ -811,8 +871,11 @@ async function startReplayEndDetection(
           : 0;
         if (consecutiveMainMenuReads >= 2) {
           recoveredFromMainMenu = true;
-          replayAlreadyRecoveredAtMainMenu = context === "custom";
+          replayAlreadyRecoveredAtMainMenu = true;
           focusMainWindowAfterReplay(window, true);
+          void appendReplayLifecycleLog("MAIN_MENU_FALLBACK", {
+            identity, generation, context, matchId, observedGrowth, lastGrowthAt
+          });
           console.info("[AoE2 replay] RECOVER|Reason=MainMenuFallback");
         }
       }
@@ -895,6 +958,9 @@ async function startReplayEndDetection(
       // replay discovered after Start Game, or a pre-existing candidate that
       // subsequently grows.
       if (!replayStartedEmitted && replayStartElapsedMs >= replayStartTimeoutMs) {
+        void appendReplayLifecycleLog("START_TIMEOUT", {
+          identity, generation, context, matchId, timeoutMs: replayStartTimeoutMs
+        });
         stopReplayEndDetection();
         focusMainWindowAfterReplay(window);
         if (!window.webContents.isDestroyed()) {
@@ -908,6 +974,10 @@ async function startReplayEndDetection(
       }
     } catch (error) {
       console.error("[AoE2 replay] Poll failed", error);
+      void appendReplayLifecycleLog("POLL_FAILED", {
+        identity, generation, context, matchId,
+        reason: error instanceof Error ? error.message : String(error)
+      });
     }
     if (generation === replayDetectionGeneration) {
       replayEndPoller = setTimeout(
@@ -922,6 +992,12 @@ async function startReplayEndDetection(
     + `|PollMs=${context === "custom" ? customReplayPollIntervalMs : replayPollIntervalMs}`
     + `|StartedAt=${new Date(startedAt).toISOString()}`
   );
+  void appendReplayLifecycleLog("WATCH_STARTED", {
+    identity, generation, context, matchId,
+    folder: configuredFolder?.trim() || "auto",
+    pollMs: context === "custom" ? customReplayPollIntervalMs : replayPollIntervalMs,
+    startedAt: new Date(startedAt).toISOString()
+  });
   void poll();
   return { started: true };
 }
@@ -3228,16 +3304,27 @@ export function registerGameHandlers(): void {
   ipcMain.handle("game:start-replay-end-detection", async (
     event,
     replayFolder?: string,
-    context: "ranked" | "custom" = "ranked"
+    context: "ranked" | "custom" = "ranked",
+    matchId?: string
   ) => {
-    stopReturnToMenuWatch();
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window) return { started: false, message: "The Empire League window was not found." };
-    return startReplayEndDetection(window, replayFolder, context === "custom" ? "custom" : "ranked");
+    return startReplayEndDetection(
+      window,
+      replayFolder,
+      context === "custom" ? "custom" : "ranked",
+      typeof matchId === "string" && matchId.trim() ? matchId.trim() : undefined
+    );
   });
 
   ipcMain.handle("game:stop-replay-end-detection", async () => {
     stopReplayEndDetection();
+  });
+
+  ipcMain.handle("game:log-replay-lifecycle", async (_event, event: string, data?: Record<string, unknown>) => {
+    const safeEvent = typeof event === "string" ? event.slice(0, 80) : "INVALID_RENDERER_EVENT";
+    const safeData = typeof data === "object" && data !== null ? data : {};
+    await appendReplayLifecycleLog(`RENDERER_${safeEvent}`, safeData);
   });
 
   ipcMain.handle("game:begin-replay-return-to-menu-recovery", async (event) => {
@@ -3248,6 +3335,11 @@ export function registerGameHandlers(): void {
       + `|WindowFound=${Boolean(window)}|AlreadyAtMainMenu=${alreadyRecovered}`
       + `|ReturnWatchStarted=${Boolean(window) && !alreadyRecovered}|ReplayWatchPreserved=True`
     );
+    void appendReplayLifecycleLog("LOCAL_END", {
+      identity: activeReplayDetectionIdentity,
+      rendererDestroyed: event.sender.isDestroyed(), windowFound: Boolean(window),
+      alreadyAtMainMenu: alreadyRecovered, returnWatchStarted: Boolean(window) && !alreadyRecovered
+    });
     if (!window) return;
     if (alreadyRecovered) {
       stopReturnToMenuWatch();
@@ -3267,6 +3359,11 @@ export function registerGameHandlers(): void {
       + `|WindowFound=${Boolean(window)}|AlreadyAtMainMenu=${alreadyRecovered}`
       + `|ReturnWatchStarted=${Boolean(window) && !alreadyRecovered}`
     );
+    void appendReplayLifecycleLog("CONFIRM", {
+      identity: activeReplayDetectionIdentity,
+      rendererDestroyed: event.sender.isDestroyed(), windowFound: Boolean(window),
+      alreadyAtMainMenu: alreadyRecovered, returnWatchStarted: Boolean(window) && !alreadyRecovered
+    });
     if (!window) return;
     if (alreadyRecovered) {
       stopReturnToMenuWatch();

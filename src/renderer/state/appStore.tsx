@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2 } from "lucide-react";
 import { aoe2UiManifest } from "../../shared/aoe2UiManifest";
 import { isAoe2LanguageId } from "../../shared/aoe2Languages";
 import type { MatchResult } from "../../shared/contracts/matches";
+import type { ReplayEndCandidate } from "../../shared/contracts/electronApi";
 import { customContentHostRecoveryMs, lobbySetupTiming } from "../../shared/runtimeConfig";
 import type { Aoe2AutomationPreflightResult, GameInputResult } from "../../shared/contracts/gameIntegration";
 import type { LobbySession, MapDefinition, MatchSession, QueueDefinition } from "../../shared/contracts/matchmaking";
@@ -10,6 +11,7 @@ import { getDivisionForRating } from "../../shared/contracts/matchmaking";
 import type { PlayerProfile } from "../../shared/contracts/players";
 import type { Aoe2Localization } from "../../shared/contracts/localization";
 import { gameMapNameForQueue, isCustomMapForQueue, mapCatalog } from "../../shared/mapCatalog";
+import { shouldProcessReplayCandidate } from "../../shared/replayLifecycle";
 import { maps, currentUser } from "../mocks/mockPlayers";
 import { defaultMockServiceConfig } from "../mocks/mockServiceConfig";
 import { MockGameIntegrationService } from "../services/gameIntegrationService";
@@ -322,6 +324,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const roomSetupWatchdogDurationRef = useRef(roomSetupTimeoutMs);
   const replayResultInFlightRef = useRef(false);
+  const pendingRankedReplayResultRef = useRef<{
+    filePath: string;
+    candidate: ReplayEndCandidate;
+  } | null>(null);
   const localReturnToMenuRecoveryMatchIdRef = useRef<string | null>(null);
   const gameRevealInFlightRef = useRef<Promise<void> | null>(null);
   const gameRevealedMatchIdRef = useRef<string | null>(null);
@@ -437,22 +443,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!window.electronApi) return;
-    return window.electronApi.onReplayEnded((filePath) => {
-      const match = stateRef.current.activeMatch;
-      const queueStatus = stateRef.current.queueStatus;
-      const inFlight = replayResultInFlightRef.current;
-      if (!match) {
-        return;
-      }
-      if (queueStatus !== "in_game") {
-        return;
-      }
-      if (inFlight) {
-        return;
-      }
+    const api = window.electronApi;
+    if (!api) return;
+    const lifecycleLog = (event: string, data: Record<string, unknown>): void => {
+      void api.logReplayLifecycle(event, data).catch(() => undefined);
+    };
+    const drainReplayCandidates = (): void => {
+      if (replayResultInFlightRef.current || !pendingRankedReplayResultRef.current) return;
       replayResultInFlightRef.current = true;
       void (async () => {
+        while (pendingRankedReplayResultRef.current) {
+          const pending = pendingRankedReplayResultRef.current;
+          pendingRankedReplayResultRef.current = null;
+          const match = stateRef.current.activeMatch;
+          const queueStatus = stateRef.current.queueStatus;
+          if (!shouldProcessReplayCandidate(match?.id, pending.candidate.matchId, queueStatus)) {
+            lifecycleLog("CANDIDATE_IGNORED", {
+              reason: !match
+                ? "NoActiveMatch"
+                : queueStatus === "completed"
+                  ? "MatchCompleted"
+                  : "MatchMismatch",
+              candidateMatchId: pending.candidate.matchId,
+              activeMatchId: match?.id,
+              queueStatus,
+              file: pending.filePath
+            });
+            continue;
+          }
+          if (!match) continue;
+          const filePath = pending.filePath;
+          lifecycleLog("CANDIDATE_PROCESSING", {
+            matchId: match.id, queueStatus, file: filePath,
+            reason: pending.candidate.reason, retry: pending.candidate.retry,
+            generation: pending.candidate.generation
+          });
         let replay: Awaited<ReturnType<typeof parseReplayMetadata>>;
         try {
           const teamGame = match.queue.format === "team";
@@ -462,23 +487,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           replay = await parseReplayMetadata(filePath, teamGame, localPlayerNumber);
         } catch (error) {
           if (error instanceof ReplayNotFinishedError) {
+            lifecycleLog("CANDIDATE_NOT_FINISHED", {
+              matchId: match.id, queueStatus, file: filePath,
+              localPlayerEnded: error.localPlayerEnded, reason: error.message
+            });
             if (error.localPlayerEnded && localReturnToMenuRecoveryMatchIdRef.current !== match.id) {
               localReturnToMenuRecoveryMatchIdRef.current = match.id;
               try {
                 await window.electronApi?.beginReplayReturnToMenuRecovery();
                 log(`REPLAY_RESULT|Event=LocalPlayerEnded|Match=${match.id}|ReturnWatchStarted=True`);
+                lifecycleLog("LOCAL_END_RECOVERY_STARTED", { matchId: match.id, file: filePath });
               } catch (recoveryError) {
                 localReturnToMenuRecoveryMatchIdRef.current = null;
                 log(
                   `REPLAY_RESULT|Event=LocalPlayerEnded|Match=${match.id}|ReturnWatchStarted=False`
                   + `|Reason=${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`
                 );
+                lifecycleLog("LOCAL_END_RECOVERY_FAILED", {
+                  matchId: match.id, file: filePath,
+                  reason: recoveryError instanceof Error ? recoveryError.message : String(recoveryError)
+                });
               }
             }
-            replayResultInFlightRef.current = false;
-            return;
+            continue;
           }
           const message = error instanceof Error ? error.message : "Replay parsing failed.";
+          lifecycleLog("CANDIDATE_PARSE_FAILED", {
+            matchId: match.id, queueStatus, file: filePath, reason: message
+          });
           log(`REPLAY_RESULT|Event=ParseFailed|Match=${match.id}|Reason=${message}|File=${filePath}`);
           setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
           let contestedStage: "Confirm" | "Report" = "Confirm";
@@ -494,9 +530,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             await services.matchmaking.reportMatchResult({ matchId: match.id, error: message });
             log(`REPLAY_RESULT|Event=ReportSubmitted|Match=${match.id}|Outcome=Contested`);
             log("Replay could not be parsed; result reported as contested");
+            pendingRankedReplayResultRef.current = null;
+            lifecycleLog("RESULT_REPORTED", { matchId: match.id, outcome: "Contested" });
             return;
           } catch (reportError) {
-            replayResultInFlightRef.current = false;
             log(
               `REPLAY_RESULT|Event=${contestedStage}Failed|Match=${match.id}|Outcome=Contested`
               + `|Reason=${reportError instanceof Error ? reportError.message : message}`
@@ -506,6 +543,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               message: "The replay parsing failure could not be reported.",
               technicalDetails: reportError instanceof Error ? reportError.message : message,
               retryable: true
+            });
+            lifecycleLog("RESULT_REPORT_FAILED", {
+              matchId: match.id, outcome: "Contested",
+              reason: reportError instanceof Error ? reportError.message : message
             });
             return;
           }
@@ -526,6 +567,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           throw error;
         }
         log(`REPLAY_RESULT|Event=Confirmed|Match=${match.id}|Outcome=Parsed`);
+        lifecycleLog("CANDIDATE_CONFIRMED", {
+          matchId: match.id, file: filePath, terminalReason: replay.reason,
+          durationMs: replay.durationMs
+        });
         setState((previous) => ({ ...previous, queueStatus: "verifying_result" }));
         log(`Replay ended with terminal operation (${replay.reason}): ${filePath}`);
         matchHistoryService.rememberReplay(match.id, filePath);
@@ -534,8 +579,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           await services.matchmaking.reportMatchResult({ matchId: match.id, replay });
           log(`REPLAY_RESULT|Event=ReportSubmitted|Match=${match.id}|Outcome=Parsed`);
           log("Replay result reported; waiting for opponent report");
+          pendingRankedReplayResultRef.current = null;
+          lifecycleLog("RESULT_REPORTED", { matchId: match.id, outcome: "Parsed" });
+          return;
         } catch (error) {
-          replayResultInFlightRef.current = false;
           log(
             `REPLAY_RESULT|Event=ReportFailed|Match=${match.id}|Outcome=Parsed`
             + `|Reason=${error instanceof Error ? error.message : "Matchmaker reporting failed."}`
@@ -546,14 +593,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             technicalDetails: error instanceof Error ? error.message : "Matchmaker reporting failed.",
             retryable: true
           });
+          lifecycleLog("RESULT_REPORT_FAILED", {
+            matchId: match.id, outcome: "Parsed",
+            reason: error instanceof Error ? error.message : "Matchmaker reporting failed."
+          });
+          return;
+        }
         }
       })().catch((error) => {
-        replayResultInFlightRef.current = false;
+        const matchId = stateRef.current.activeMatch?.id;
         log(
-          `REPLAY_RESULT|Event=UnhandledFailure|Match=${match.id}`
-          + `|Reason=${error instanceof Error ? error.message : String(error)}|File=${filePath}`
+          `REPLAY_RESULT|Event=UnhandledFailure|Match=${matchId ?? "none"}`
+          + `|Reason=${error instanceof Error ? error.message : String(error)}`
         );
+        lifecycleLog("CANDIDATE_UNHANDLED_FAILURE", {
+          matchId, reason: error instanceof Error ? error.message : String(error)
+        });
+      }).finally(() => {
+        replayResultInFlightRef.current = false;
+        if (pendingRankedReplayResultRef.current) drainReplayCandidates();
       });
+    };
+    return api.onReplayEnded((filePath, candidate) => {
+      const activeMatchId = stateRef.current.activeMatch?.id;
+      const replacedPending = Boolean(pendingRankedReplayResultRef.current);
+      pendingRankedReplayResultRef.current = { filePath, candidate };
+      lifecycleLog("CANDIDATE_RECEIVED", {
+        candidateMatchId: candidate.matchId, activeMatchId,
+        queueStatus: stateRef.current.queueStatus,
+        reason: candidate.reason, retry: candidate.retry,
+        generation: candidate.generation, file: filePath,
+        buffered: replayResultInFlightRef.current,
+        replacedPending
+      });
+      drainReplayCandidates();
     });
   }, [services]);
 
@@ -1901,7 +1974,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   async function openAoe2(): Promise<void> {
     if (window.electronApi) {
-      const detection = await window.electronApi.startReplayEndDetection();
+      const detection = await window.electronApi.startReplayEndDetection(
+        undefined,
+        "ranked",
+        stateRef.current.activeMatch?.id
+      );
       if (!detection.started) log(`Replay detection unavailable: ${detection.message ?? "unknown error"}`);
     }
     await stopYouTubeShorts();
@@ -2040,6 +2117,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     guestPostJoinSetupRef.current = null;
     lobbyTimingAuditRef.current = null;
     replayResultInFlightRef.current = false;
+    pendingRankedReplayResultRef.current = null;
     clearRoomSetupWatchdog();
 
     rankedSessionRetirementRef.current = (async () => {
@@ -2100,7 +2178,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const stopReplayStartedListener = window.electronApi!.onReplayStarted(() => finish(true));
       const timeout = window.setTimeout(() => finish(false), timeoutDelayMs + timeoutMs);
       void window.electronApi!.startLoadingScreenWatch().catch(() => undefined);
-      void window.electronApi!.startReplayEndDetection().catch(() => undefined);
+      void window.electronApi!.startReplayEndDetection(
+        undefined,
+        "ranked",
+        stateRef.current.activeMatch?.id
+      ).catch(() => undefined);
     }).finally(() => {
       gameStartSignalInFlightRef.current = null;
     });

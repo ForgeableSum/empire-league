@@ -597,7 +597,7 @@ export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
       void api.startLoadingScreenWatch().then((watch) => {
         if (!watch.started) notify("Loading-screen detection could not be started.", "warning", { detail: watch.message });
       }).catch((error) => notify("Loading-screen detection could not be started.", "warning", { detail: messageFor(error) }));
-      void api.startReplayEndDetection(undefined, "custom").then((detection) => {
+      void api.startReplayEndDetection(undefined, "custom", room.id).then((detection) => {
         if (!detection.started) {
           notify("Post-game return detection could not be started.", "danger", {
             detail: detection.message || "Replay detection could not be started."

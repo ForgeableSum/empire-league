@@ -33,8 +33,9 @@ const electronApi: ElectronGameApi = {
     ipcRenderer.on("game:lobby-guard-shortcut-blocked", handler);
     return () => ipcRenderer.removeListener("game:lobby-guard-shortcut-blocked", handler);
   },
-  startReplayEndDetection: (replayFolder, context) => ipcRenderer.invoke("game:start-replay-end-detection", replayFolder, context),
+  startReplayEndDetection: (replayFolder, context, matchId) => ipcRenderer.invoke("game:start-replay-end-detection", replayFolder, context, matchId),
   stopReplayEndDetection: () => ipcRenderer.invoke("game:stop-replay-end-detection"),
+  logReplayLifecycle: (event, data) => ipcRenderer.invoke("game:log-replay-lifecycle", event, data),
   beginReplayReturnToMenuRecovery: () => ipcRenderer.invoke("game:begin-replay-return-to-menu-recovery"),
   confirmReplayEnded: () => ipcRenderer.invoke("game:confirm-replay-ended"),
   testReturnToMenuRecovery: () => ipcRenderer.invoke("game:test-return-to-menu-recovery"),
