@@ -332,7 +332,7 @@ export function QueuePage() {
   }, [enabledGroups, queues, selectedMaps, selectedQueueId]);
 
   useEffect(() => {
-    if (!isSearching || !selectedQueue || selectedQueue.tournamentId) return;
+    if (!isSearching || !selectedQueue || selectedQueue.tournamentId || party && !party.isLeader) return;
     const timer = window.setTimeout(() => {
       void updateActiveQueue({
         ...selectedQueue,
@@ -354,7 +354,7 @@ export function QueuePage() {
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [civilization, civilizationBans, civilizationMode, classicMode, enabledGroups, favoriteMaps, findAnyone, isSearching, preferRandom, selectedMaps, selectedQueue, selectedTeamSizes]);
+  }, [civilization, civilizationBans, civilizationMode, classicMode, enabledGroups, favoriteMaps, findAnyone, isSearching, party?.isLeader, preferRandom, selectedMaps, selectedQueue, selectedTeamSizes]);
 
   const gameplayHandoffPending = state.queueStatus === "in_game"
     && state.roomSetupMilestone === "Switching to game";

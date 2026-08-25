@@ -30,7 +30,7 @@ export function PartyDock({ snapshot, currentPlayerId, onAccept, onDecline, onLe
         <Shield size={22} />
         <div><strong data-ui-translation="off">{invite.inviterName}</strong><span>invited you to a party</span></div>
         <button className="primary" type="button" onClick={() => onAccept(invite.id)}>Join</button>
-        <button className="icon-button" type="button" aria-label="Decline party invite" onClick={() => onDecline(invite.id)}><X size={16} /></button>
+        <button className="party-invite-decline" type="button" aria-label="Decline party invite" title="Decline" onClick={() => onDecline(invite.id)}><X size={15} /></button>
       </section>
     ))}</div>}
     {party && (minimized

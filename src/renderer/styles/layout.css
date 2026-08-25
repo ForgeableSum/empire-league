@@ -2241,6 +2241,24 @@
 .party-invite-toast > div { min-width: 0; flex: 1; display: grid; }
 .party-invite-toast span { color: var(--muted); font-size: 10px; }
 .party-invite-toast .primary { padding: 7px 12px; }
+.party-invite-decline {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: #9f9180;
+  border: 1px solid rgba(137, 119, 96, .32);
+  border-radius: 50%;
+  background: rgba(15, 13, 11, .34);
+}
+.party-invite-decline:hover {
+  color: #f1aaa2;
+  border-color: rgba(207, 91, 79, .58);
+  background: rgba(126, 39, 32, .24);
+}
+.party-invite-decline:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
 
 body:has(.party-window) .tournament-chat-window,
 body:has(.party-minimized) .tournament-chat-window,
