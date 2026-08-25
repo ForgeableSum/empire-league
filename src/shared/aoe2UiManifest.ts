@@ -26,6 +26,7 @@ const customMapNames = enabledMapCatalogEntries
 
 const teamGameMapSizes = {
   4: { label: "Medium (4 player) [168]", optionIndex: 2 },
+  6: { label: "Normal (6 player) [200]", optionIndex: 3 },
   8: { label: "Large (8 player) [220]", optionIndex: 4 }
 } as const;
 

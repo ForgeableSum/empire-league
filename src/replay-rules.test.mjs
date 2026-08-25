@@ -37,8 +37,9 @@ test("accepts the ranked 1v1 replay rules", () => {
   assert.equal(validateRankedReplaySettings(validSettings()), null);
 });
 
-test("accepts ranked 2v2 and 4v4 player counts when requested", () => {
+test("accepts ranked 2v2, 3v3, and 4v4 player counts when requested", () => {
   assert.equal(validateRankedReplaySettings(validSettings({ playerCount: 4 }), 4), null);
+  assert.equal(validateRankedReplaySettings(validSettings({ playerCount: 6 }), 6), null);
   assert.equal(validateRankedReplaySettings(validSettings({ playerCount: 8 }), 8), null);
 });
 

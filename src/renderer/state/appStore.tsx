@@ -149,9 +149,9 @@ export const queueDefinitions: QueueDefinition[] = [
   {
     id: "team-games",
     name: "Team Games",
-    description: "Find a match as a solo player or a complete 2v2 or 4v4 party.",
+    description: "Ranked team matchmaking for solo players and complete 2v2, 3v3, or 4v4 parties.",
     format: "team",
-    teamSizes: [2, 4],
+    teamSizes: [2, 3, 4],
     ruleset: "Random Map",
     mapPool: maps.map((map) => ({
       ...map,
@@ -1319,7 +1319,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 return window.electronApi!.runAoe2CreateLobbySequence(
                   getLobbyMapName(acceptedSession.selectedMap, acceptedSession.queue.id),
                   acceptedSession.queue.format === "team"
-                    ? ((acceptedSession.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
+                    ? ((acceptedSession.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 6 | 8
                     : 2,
                   "map",
                   acceptedSession.matchType === "tournament"
@@ -1890,7 +1890,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           lobbyAutomationRef.current
           ?? window.electronApi.runAoe2CreateLobbySequence(
             getLobbyMapName(match.selectedMap, match.queue.id),
-            match.queue.format === "team" ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8 : 2,
+            match.queue.format === "team" ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 6 | 8 : 2,
             "map",
             match.matchType === "tournament"
               ? { context: "tournament", password: match.lobbyPassword! }
@@ -1933,7 +1933,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           guestProfileId: match.opponent.aoeProfileId,
           map: match.selectedMap,
           playerCount: match.queue.format === "team"
-            ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
+            ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 6 | 8
             : 2
         });
         const discoveredLobby = { ...lobbyResult.lobby, platformLobbyId: automation.lobbyUri };
@@ -1956,7 +1956,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         guestProfileId: match.opponent.aoeProfileId,
         map: match.selectedMap,
         playerCount: match.queue.format === "team"
-          ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 8
+          ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 6 | 8
           : 2
       });
       log(`Lobby created: ${lobbyResult.lobby.platformLobbyId ?? "pending"}`);

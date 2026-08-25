@@ -85,10 +85,19 @@ export function QueuePage() {
       return {};
     }
   });
-  const [selectedTeamSizes, setSelectedTeamSizes] = useState<Array<2 | 4>>([2, 4]);
+  const [selectedTeamSizes, setSelectedTeamSizes] = useState<Array<2 | 3 | 4>>([2, 3, 4]);
   useEffect(() => {
-    if (party?.members.length === 2 || party?.members.length === 4) setSelectedTeamSizes([party.members.length]);
+    if (party?.members.length === 2 || party?.members.length === 3 || party?.members.length === 4) {
+      setSelectedTeamSizes([party.members.length]);
+    }
   }, [party?.id, party?.members.length]);
+  const partyTeamSize = party && [2, 3, 4].includes(party.members.length)
+    ? party.members.length as 2 | 3 | 4
+    : null;
+  const effectiveTeamSizes = useMemo<Array<2 | 3 | 4>>(
+    () => partyTeamSize ? [partyTeamSize] : selectedTeamSizes,
+    [partyTeamSize, selectedTeamSizes]
+  );
   const [findAnyone, setFindAnyone] = useState(true);
   const [civilizationMode, setCivilizationMode] = useState<CivilizationMode>(() => {
     try {
@@ -230,8 +239,8 @@ export function QueuePage() {
     }
     if (party) {
       const size = party.members.length;
-      if ((size !== 2 && size !== 4) || queue.format !== "team" || !queue.teamSizes?.includes(size as 2 | 4)) {
-        notify(`A party of ${size} can only queue for ${size === 2 || size === 4 ? `${size}v${size}` : "team games with exactly 2 or 4 party members"}.`, "danger");
+      if ((size !== 2 && size !== 3 && size !== 4) || queue.format !== "team" || !queue.teamSizes?.includes(size as 2 | 3 | 4)) {
+        notify(`A party of ${size} can only queue for ${size >= 2 && size <= 4 ? `${size}v${size}` : "team games with exactly 2, 3, or 4 party members"}.`, "danger");
         return;
       }
     }
@@ -316,7 +325,7 @@ export function QueuePage() {
     ? civilization
     : civilizationModes.find((mode) => mode.id === civilizationMode)?.label;
   const selectedQueueHeading = selectedQueue?.format === "team"
-    ? `${selectedQueue.name} - ${selectedTeamSizes.map((size) => `${size}v${size}`).join(" or ")}`
+    ? `${selectedQueue.name} - ${effectiveTeamSizes.map((size) => `${size}v${size}`).join(" or ")}`
     : selectedQueue?.name;
 
   useEffect(() => {
@@ -338,7 +347,7 @@ export function QueuePage() {
         ...selectedQueue,
         classicMode,
         findAnyone,
-        teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
+        teamSizes: selectedQueue.format === "team" ? effectiveTeamSizes : undefined,
         mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
         mapPreferences: {
           enabledGroupIds: enabledGroups[selectedQueue.id] ?? [],
@@ -354,7 +363,7 @@ export function QueuePage() {
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [civilization, civilizationBans, civilizationMode, classicMode, enabledGroups, favoriteMaps, findAnyone, isSearching, party?.isLeader, preferRandom, selectedMaps, selectedQueue, selectedTeamSizes]);
+  }, [civilization, civilizationBans, civilizationMode, classicMode, effectiveTeamSizes, enabledGroups, favoriteMaps, findAnyone, isSearching, party?.isLeader, preferRandom, selectedMaps, selectedQueue]);
 
   const gameplayHandoffPending = state.queueStatus === "in_game"
     && state.roomSetupMilestone === "Switching to game";
@@ -455,7 +464,7 @@ export function QueuePage() {
                     ...selectedQueue,
                     classicMode,
                     findAnyone,
-                    teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
+                    teamSizes: selectedQueue.format === "team" ? effectiveTeamSizes : undefined,
                     mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
                     mapPreferences: {
                       enabledGroupIds: enabledGroups[selectedQueue.id] ?? [],
@@ -510,8 +519,8 @@ export function QueuePage() {
                   <>
                     <span className="eyebrow">Team size</span>
                     <div className="match-type-options" aria-label="Team game sizes">
-                      {([2, 4] as const).map((size) => {
-                        const selected = selectedTeamSizes.includes(size);
+                      {([2, 3, 4] as const).map((size) => {
+                        const selected = effectiveTeamSizes.includes(size);
                         return (
                           <button
                             className={selected ? "civilization-mode active" : "civilization-mode"}
@@ -523,7 +532,7 @@ export function QueuePage() {
                               if (current.includes(size)) {
                                 return current.length === 1 ? current : current.filter((item) => item !== size);
                               }
-                              return [...current, size].sort() as Array<2 | 4>;
+                              return [...current, size].sort() as Array<2 | 3 | 4>;
                             })}
                           >
                             <Users size={20} />
@@ -680,7 +689,7 @@ export function QueuePage() {
                   onClick={() => startSelectedQueue({
                     ...selectedQueue,
                     classicMode,
-                    teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,
+                    teamSizes: selectedQueue.format === "team" ? effectiveTeamSizes : undefined,
                     mapPool: selectedQueue.mapPool.filter((map) => activeMapIds.includes(map.id)),
                     mapPreferences: {
                       enabledGroupIds: enabledGroups[selectedQueue.id] ?? [],

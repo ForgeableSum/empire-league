@@ -206,7 +206,7 @@ export function createPartyStore({ maximumMembers = defaultMaximumMembers, maxim
 }
 
 export function eligibleTeamSize(memberCount) {
-  return memberCount === 2 || memberCount === 4 ? memberCount : null;
+  return memberCount === 2 || memberCount === 3 || memberCount === 4 ? memberCount : null;
 }
 
 export function validatePartyQueue(party, queue) {
@@ -214,7 +214,7 @@ export function validatePartyQueue(party, queue) {
   if (party.leaderId === undefined || !Array.isArray(party.members)) throw new PartyOperationError("Invalid party.", 500);
   const size = eligibleTeamSize(party.members.length);
   if (!size) {
-    throw new PartyOperationError(`A party of ${party.members.length} cannot enter matchmaking. Ranked parties must have exactly 2 or 4 players.`, 409);
+    throw new PartyOperationError(`A party of ${party.members.length} cannot enter matchmaking. Ranked parties must have exactly 2, 3, or 4 players.`, 409);
   }
   if (queue.id !== "team-games" || queue.tournamentId || queue.format !== "team" || !queue.teamSizes?.includes(size)) {
     throw new PartyOperationError(`A party of ${party.members.length} can only queue for ${size}v${size}.`, 409);

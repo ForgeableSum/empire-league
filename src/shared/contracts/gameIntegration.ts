@@ -80,7 +80,7 @@ export interface CreateLobbyRequest {
   hostProfileId: number;
   guestProfileId: number;
   map: MapDefinition;
-  playerCount: 2 | 4 | 8;
+  playerCount: 2 | 4 | 6 | 8;
 }
 
 export interface CreateLobbyResult {

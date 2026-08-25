@@ -1365,7 +1365,7 @@ async function tryMatch(ticket) {
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
   ).sort((left, right) => compareOpponentPreference(ticket, left, right));
   const possibleSizes = ticket.queue.format === "team"
-    ? (ticket.partyId ? [ticket.partySize] : [4, 2]).filter((size) => ticket.queue.teamSizes?.includes(size))
+    ? (ticket.partyId ? [ticket.partySize] : [4, 3, 2]).filter((size) => ticket.queue.teamSizes?.includes(size))
     : [1];
   let teamSize;
   let participants;

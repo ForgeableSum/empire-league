@@ -130,7 +130,7 @@ export interface QueueDefinition {
   description: string;
   format: "1v1" | "team";
   findAnyone?: boolean;
-  teamSizes?: Array<2 | 4>;
+  teamSizes?: Array<2 | 3 | 4>;
   ruleset: "Random Map" | "Empire Wars";
   mapPool: MapDefinition[];
   mapPreferences?: MapPreferences;
@@ -145,7 +145,7 @@ export interface QueueDefinition {
 }
 
 export interface LobbySettings {
-  playerCount: 2 | 4 | 8;
+  playerCount: 2 | 4 | 6 | 8;
   gameMode: "Random Map";
   speed: "Normal";
   startingAge: "Dark Age";
