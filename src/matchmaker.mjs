@@ -65,6 +65,13 @@ import {
   customLobbyOccupiedCount,
   normalizeCustomLobbyHumanSlots
 } from "./custom-lobby-slots.mjs";
+import {
+  completePartyTeam,
+  createPartyStore,
+  partyMatchmakingRating,
+  PartyOperationError,
+  validatePartyQueue
+} from "./party-system.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
@@ -141,6 +148,7 @@ const tournamentChats = createTournamentChatStore();
 const maxSocialMessagesPerConversation = 100;
 const customLobbies = new Map();
 const weeklyQueue = new Map();
+const partyStore = createPartyStore();
 const weeklyPlayersRequired = Math.min(8, Math.max(2, Number(process.env.WEEKLY_QUEUE_PLAYERS ?? 8) || 8));
 const weeklyRatingRangeSchedule = teamRatingRangeSchedule.map((step) => ({
   afterMs: step.afterMs,
@@ -382,6 +390,19 @@ function sendToPlayer(playerId, message) {
   for (const socket of webSocketServer.clients) {
     if (socketSessions.get(socket)?.player?.id === playerId) sendSocket(socket, message);
   }
+}
+
+function emitPartySnapshots(...playerIds) {
+  for (const playerId of new Set(playerIds.filter(Boolean))) {
+    sendToPlayer(playerId, {
+      type: "party_event",
+      event: { type: "snapshot", snapshot: partyStore.snapshot(playerId) }
+    });
+  }
+}
+
+function emitParty(party, ...extraPlayerIds) {
+  emitPartySnapshots(...party.members.map((member) => member.id), ...extraPlayerIds);
 }
 
 async function refreshSocialCache(playerId) {
@@ -686,6 +707,7 @@ function deleteMatch(match) {
     if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
     ticket.matchId = null;
   }
+  clearPartyQueuesForTickets(matchTickets(match), match.resultResolved ? "Match complete." : "Matchmaking stopped.");
   if (match.matchType === "tournament" && !match.resultResolved && !match.startedAt) {
     void resetTournamentMatch(match.tournamentMatchId).then((tournamentId) => {
       if (tournamentId) broadcastTournamentChanged(tournamentId);
@@ -701,6 +723,14 @@ function releaseMatchTickets(match) {
     clearTicketDisconnectTimer(ticket);
     if (tickets.get(ticket.id) === ticket) tickets.delete(ticket.id);
   }
+  clearPartyQueuesForTickets(matchTickets(match), "Match complete.");
+}
+
+function clearPartyQueuesForTickets(ticketList, message) {
+  for (const partyId of new Set(ticketList.map((ticket) => ticket.partyId).filter(Boolean))) {
+    const party = partyStore.clearActiveQueue(partyId, message);
+    if (party) emitParty(party);
+  }
 }
 
 function deleteDisconnectedTicket(ticket, message = "The other player disconnected from the match.") {
@@ -714,6 +744,18 @@ function deleteDisconnectedTicket(ticket, message = "The other player disconnect
   clearTicketSearchTimers(ticket);
   clearTicketDisconnectTimer(ticket);
   if (!match) {
+    if (ticket.partyId) {
+      const partyTickets = [...tickets.values()].filter((candidate) => candidate.partyId === ticket.partyId);
+      for (const partyTicket of partyTickets) {
+        clearTicketSearchTimers(partyTicket);
+        clearTicketDisconnectTimer(partyTicket);
+        tickets.delete(partyTicket.id);
+      }
+      const party = partyStore.clearActiveQueue(ticket.partyId, `${ticket.player.displayName} disconnected. Matchmaking stopped.`);
+      if (party) emitParty(party);
+      console.warn(`[matchmaker] ${ticket.partyId}: disconnected party queue removed`);
+      return true;
+    }
     tickets.delete(ticket.id);
     if (ticket.source === "tournament") {
       void unreadyTournamentMatch(ticket.tournamentMatchId, ticket.player.id).then((tournamentId) => {
@@ -1049,13 +1091,18 @@ function hasCompletedMinimumQueueTime(ticket, now = Date.now()) {
 
 function opponentPreference(ticket, candidate) {
   const ratingDifference = Math.abs(
-    playerRatingForQueue(candidate.player, candidate.queueId)
-      - playerRatingForQueue(ticket.player, ticket.queueId)
+    matchmakingRating(candidate)
+      - matchmakingRating(ticket)
   );
   return [
     Number.isFinite(ratingDifference) ? ratingDifference : Number.MAX_SAFE_INTEGER,
     new Date(candidate.joinedAt).getTime()
   ];
+}
+
+function matchmakingRating(ticket) {
+  return partyMatchmakingRating(ticket, [...tickets.values()], (candidate) =>
+    playerRatingForQueue(candidate.player, candidate.queueId));
 }
 
 function compareOpponentPreference(ticket, left, right) {
@@ -1078,15 +1125,16 @@ function ratingSpreadForTicket(ticket, now = Date.now()) {
 }
 
 function emitRatingRange(ticket, now = Date.now()) {
-  const rating = playerRatingForQueue(ticket.player, ticket.queueId);
+  const rating = matchmakingRating(ticket);
   const spread = ratingSpreadForTicket(ticket, now);
   emit(ticket, { type: "range", minRating: rating - spread, maxRating: rating + spread });
 }
 
 function ratingsAreInRange(ticket, candidate, now = Date.now()) {
+  if (ticket.partyId && ticket.partyId === candidate.partyId) return true;
   const difference = Math.abs(
-    playerRatingForQueue(ticket.player, ticket.queueId)
-      - playerRatingForQueue(candidate.player, candidate.queueId)
+    matchmakingRating(ticket)
+      - matchmakingRating(candidate)
   );
   const ticketAllowsCandidate = ticket.queue.findAnyone === true
     || difference <= ratingSpreadForTicket(ticket, now);
@@ -1187,6 +1235,14 @@ function balancedTeamAssignments(participants, host, teamSize) {
   const teamOne = [host, ...bestTeamOne];
   const teamOneIds = new Set(teamOne.map((participant) => participant.id));
   return [teamOne, ranked.filter((participant) => !teamOneIds.has(participant.id))];
+}
+
+function partyAwareTeamAssignments(participants, host, teamSize) {
+  const completeParty = completePartyTeam(participants, teamSize);
+  if (!completeParty) return balancedTeamAssignments(participants, host, teamSize);
+  const partyIds = new Set(completeParty.map((participant) => participant.id));
+  const opponents = participants.filter((participant) => !partyIds.has(participant.id));
+  return partyIds.has(host.id) ? [completeParty, opponents] : [opponents, completeParty];
 }
 
 function sessionFor(match, ticket) {
@@ -1309,18 +1365,37 @@ async function tryMatch(ticket) {
       && sharedMapPool(candidate.queue, ticket.queue).length > 0
   ).sort((left, right) => compareOpponentPreference(ticket, left, right));
   const possibleSizes = ticket.queue.format === "team"
-    ? [4, 2].filter((size) => ticket.queue.teamSizes?.includes(size))
+    ? (ticket.partyId ? [ticket.partySize] : [4, 2]).filter((size) => ticket.queue.teamSizes?.includes(size))
     : [1];
   let teamSize;
   let participants;
   for (const size of possibleSizes) {
     const required = size * 2;
-    const compatible = [ticket];
+    const anchorGroup = ticket.partyId
+      ? [...tickets.values()].filter((candidate) => candidate.partyId === ticket.partyId && !candidate.matchId)
+      : [ticket];
+    if (anchorGroup.length > required || ticket.partyId && anchorGroup.length !== ticket.partySize) continue;
+    const compatible = [...anchorGroup];
+    const seenGroups = new Set(anchorGroup.map((candidate) => candidate.partyId ?? candidate.id));
     for (const candidate of candidates) {
-      if (ticket.queue.format === "team" && !candidate.queue.teamSizes?.includes(size)) continue;
-      if (!compatible.every((participant) => ratingsAreInRange(participant, candidate))) continue;
-      if (!compatible.every((participant) => ticketsAreClassicCompatible(participant, candidate))) continue;
-      compatible.push(candidate);
+      const groupKey = candidate.partyId ?? candidate.id;
+      if (seenGroups.has(groupKey)) continue;
+      seenGroups.add(groupKey);
+      const group = candidate.partyId
+        ? [...tickets.values()].filter((item) => item.partyId === candidate.partyId && !item.matchId)
+        : [candidate];
+      if (candidate.partyId && group.length !== candidate.partySize) continue;
+      if (compatible.length + group.length > required) continue;
+      if (group.some((item) => !hasCompletedMinimumQueueTime(item)
+        || item.queueId !== ticket.queueId
+        || compatible.some((participant) => hasDeclinedPairCooldown(participant.player.id, item.player.id))
+        || !allowsOpponentRating(ticket, item)
+        || !allowsOpponentRating(item, ticket))) continue;
+      if (group.some((item) => ticket.queue.format === "team" && !item.queue.teamSizes?.includes(size))) continue;
+      if (!group.every((item) => compatible.every((participant) => ratingsAreInRange(participant, item)))) continue;
+      if (!group.every((item) => compatible.every((participant) => ticketsAreClassicCompatible(participant, item)))) continue;
+      if (!group.every((item) => sharedMapPool(item.queue, ticket.queue).length > 0)) continue;
+      compatible.push(...group);
       if (compatible.length === required) break;
     }
     if (compatible.length === required) {
@@ -1360,7 +1435,7 @@ async function tryMatch(ticket) {
   const sharedCivilizationBans = participants.flatMap((participant) =>
     civilizationBansForMapGroup(effectivePreferences.get(participant.id), mapGroupId));
   const classicMatch = participants.some((participant) => participant.queue.classicMode === true);
-  const [teamOne, teamTwo] = balancedTeamAssignments(participants, host, teamSize);
+  const [teamOne, teamTwo] = partyAwareTeamAssignments(participants, host, teamSize);
   const ordered = [...teamOne, ...teamTwo];
   const assignments = new Map(ordered.map((participant, index) => [
     participant.id,
@@ -1578,6 +1653,20 @@ async function handleRequest(request, response) {
 
     const authenticatedPlayer = await authenticate(request);
     if (!authenticatedPlayer) return send(response, 401, { error: "authentication required" });
+
+    const activeParty = partyStore.partyFor(authenticatedPlayer.id);
+    const mutatingPartyIncompatibleActivity = request.method !== "GET" && (
+      url.pathname === "/weekly-queue"
+      || url.pathname.startsWith("/custom-lobbies")
+      || url.pathname === "/tournaments"
+      || /^\/tournaments\/[^/]+\/(join|leave)$/.test(url.pathname)
+    );
+    if (activeParty && mutatingPartyIncompatibleActivity) {
+      const detail = activeParty.leaderId === authenticatedPlayer.id
+        ? "Leave or disband your party before starting weekly, custom, or tournament play."
+        : "Only your party leader can start matchmaking. Leave the party to use weekly, custom, or tournament play.";
+      return send(response, 409, { error: detail });
+    }
 
     if (request.method === "GET" && url.pathname === "/streams/live") {
       try {
@@ -2298,10 +2387,84 @@ async function handleRequest(request, response) {
       return send(response, 201, { message });
     }
 
+    if (request.method === "GET" && url.pathname === "/party") {
+      return send(response, 200, { snapshot: partyStore.snapshot(authenticatedPlayer.id) });
+    }
+
+    if (request.method === "POST" && url.pathname === "/party") {
+      if (weeklyQueue.has(authenticatedPlayer.id) || playerCustomLobby(authenticatedPlayer.id) || playerHasRankedActivity(authenticatedPlayer.id)) {
+        return send(response, 409, { error: "Leave your active game or queue before creating a party." });
+      }
+      const party = partyStore.create(authenticatedPlayer);
+      emitParty(party);
+      return send(response, 201, { snapshot: partyStore.snapshot(authenticatedPlayer.id) });
+    }
+
+    if (request.method === "POST" && url.pathname === "/party/invites") {
+      const body = await readJson(request);
+      const recipientId = String(body.playerId ?? "");
+      if (!recipientId || recipientId === authenticatedPlayer.id) return send(response, 400, { error: "Choose a friend to invite." });
+      if (!await ensureFriends(authenticatedPlayer.id, recipientId)) return send(response, 403, { error: "You can only invite friends to your party." });
+      const recipient = await getPlayerProfile(recipientId);
+      if (!recipient) return send(response, 404, { error: "Player not found." });
+      if (publicPresence(recipientId).presence === "offline") return send(response, 409, { error: "That friend is offline." });
+      if (weeklyQueue.has(recipientId) || playerCustomLobby(recipientId) || playerHasRankedActivity(recipientId)) {
+        return send(response, 409, { error: "That friend is already in a game or queue." });
+      }
+      const invite = partyStore.invite(authenticatedPlayer, recipient);
+      emitPartySnapshots(authenticatedPlayer.id, recipientId);
+      return send(response, 201, { invite, snapshot: partyStore.snapshot(authenticatedPlayer.id) });
+    }
+
+    const acceptPartyInvite = url.pathname.match(/^\/party\/invites\/([^/]+)\/accept$/);
+    if (request.method === "POST" && acceptPartyInvite) {
+      if (weeklyQueue.has(authenticatedPlayer.id) || playerCustomLobby(authenticatedPlayer.id) || playerHasRankedActivity(authenticatedPlayer.id)) {
+        return send(response, 409, { error: "Leave your active game or queue before joining a party." });
+      }
+      const party = partyStore.accept(decodeURIComponent(acceptPartyInvite[1]), authenticatedPlayer);
+      emitParty(party);
+      return send(response, 200, { snapshot: partyStore.snapshot(authenticatedPlayer.id) });
+    }
+
+    const declinePartyInvite = url.pathname.match(/^\/party\/invites\/([^/]+)$/);
+    if (request.method === "DELETE" && declinePartyInvite) {
+      const invite = partyStore.decline(decodeURIComponent(declinePartyInvite[1]), authenticatedPlayer.id);
+      emitPartySnapshots(authenticatedPlayer.id, invite.inviterId);
+      return send(response, 200, { declined: true });
+    }
+
+    if (request.method === "DELETE" && url.pathname === "/party") {
+      const result = partyStore.removeMember(authenticatedPlayer.id, authenticatedPlayer.id);
+      emitPartySnapshots(...result.removedIds, ...result.party.members.map((member) => member.id));
+      return send(response, 200, { left: true });
+    }
+
+    const removePartyMember = url.pathname.match(/^\/party\/members\/([^/]+)$/);
+    if (request.method === "DELETE" && removePartyMember) {
+      const memberId = decodeURIComponent(removePartyMember[1]);
+      const result = partyStore.removeMember(authenticatedPlayer.id, memberId);
+      emitPartySnapshots(...result.removedIds, ...result.party.members.map((member) => member.id));
+      return send(response, 200, { removed: true });
+    }
+
+    if (request.method === "POST" && url.pathname === "/party/chat") {
+      const body = await readJson(request);
+      const text = String(body.text ?? "").trim().slice(0, 1000);
+      if (!text) return send(response, 400, { error: "A message is required." });
+      const { party, message } = partyStore.addMessage(authenticatedPlayer.id, text);
+      for (const member of party.members) {
+        sendToPlayer(member.id, { type: "party_event", event: { type: "chat_message", partyId: party.id, message } });
+      }
+      return send(response, 201, { message });
+    }
+
     if (request.method === "POST" && url.pathname === "/queue") {
       const body = await readJson(request);
       if (!body.queue?.id) return send(response, 400, { error: "queue is required" });
       if (typeof body.queue.tournamentId === "string") {
+        if (partyStore.partyFor(authenticatedPlayer.id)) {
+          return send(response, 409, { error: "Leave your party before readying for a tournament match." });
+        }
         for (const ticket of tickets.values()) {
           if (ticket.player.id === authenticatedPlayer.id && ticket.disconnectedAt) {
             if (ticket.source === "tournament" && !ticket.matchId) {
@@ -2409,43 +2572,75 @@ async function handleRequest(request, response) {
       } catch (error) {
         return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });
       }
-      for (const [ticketId, ticket] of tickets) {
-        if (ticket.player.id === authenticatedPlayer.id && ticket.matchId && matches.get(ticket.matchId)?.resultResolved) {
-          clearTicketDisconnectTimer(ticket);
-          tickets.delete(ticketId);
+      const party = partyStore.partyFor(authenticatedPlayer.id);
+      if (party && party.leaderId !== authenticatedPlayer.id) {
+        const activeTicketId = party.activeQueue?.ticketIds.get(authenticatedPlayer.id);
+        if (activeTicketId && party.activeQueue.queue.id === body.queue.id && tickets.has(activeTicketId)) {
+          return send(response, 201, {
+            id: activeTicketId,
+            queueId: party.activeQueue.queue.id,
+            joinedAt: party.activeQueue.joinedAt,
+            ignoredMapIds: []
+          });
+        }
+        return send(response, 403, { error: "Only your party leader can start matchmaking." });
+      }
+      if (party?.activeQueue) return send(response, 409, { error: "Your party is already queued." });
+      if (party) validatePartyQueue(party, body.queue);
+
+      const queuePlayers = party
+        ? await Promise.all(party.members.map(async (member) => await getPlayerProfile(member.id) ?? member))
+        : [authenticatedPlayer];
+      for (const queuePlayer of queuePlayers) {
+        for (const [ticketId, existingTicket] of tickets) {
+          if (existingTicket.player.id === queuePlayer.id && existingTicket.matchId && matches.get(existingTicket.matchId)?.resultResolved) {
+            clearTicketDisconnectTimer(existingTicket);
+            tickets.delete(ticketId);
+          }
+        }
+        for (const existingTicket of tickets.values()) {
+          if (existingTicket.player.id === queuePlayer.id && existingTicket.disconnectedAt) {
+            deleteDisconnectedTicket(existingTicket, "The other player restarted or left the match.");
+          }
+        }
+        const alreadyActive = weeklyQueue.has(queuePlayer.id)
+          || playerCustomLobby(queuePlayer.id)
+          || playerHasRankedActivity(queuePlayer.id);
+        if (alreadyActive) return send(response, 409, { error: `${queuePlayer.displayName} already has an active queue or match.` });
+        if (party && publicPresence(queuePlayer.id).presence === "offline") {
+          return send(response, 409, { error: `${queuePlayer.displayName} is offline.` });
         }
       }
-      for (const ticket of tickets.values()) {
-        if (ticket.player.id === authenticatedPlayer.id && ticket.disconnectedAt) {
-          deleteDisconnectedTicket(ticket, "The other player restarted or left the match.");
-        }
-      }
-      const alreadyActive = weeklyQueue.has(authenticatedPlayer.id)
-        || playerCustomLobby(authenticatedPlayer.id)
-        || playerHasRankedActivity(authenticatedPlayer.id);
-      if (alreadyActive) {
-        return send(response, 409, { error: "player already has an active queue or match" });
-      }
-      playersJoiningQueue.add(authenticatedPlayer.id);
-      const ticket = {
+
+      const joinedAt = new Date().toISOString();
+      const createdTickets = queuePlayers.map((queuePlayer) => ({
         id: `ticket-${randomUUID()}`,
         queueId: body.queue.id,
-        queue: body.queue,
-        player: authenticatedPlayer,
-        canHost: body.canHost !== false,
+        queue: structuredClone(body.queue),
+        player: queuePlayer,
+        canHost: party ? queuePlayer.id === party.leaderId && body.canHost !== false : body.canHost !== false,
         maximumLowerOpponentRatingGap: body.maximumLowerOpponentRatingGap,
-        joinedAt: new Date().toISOString(),
+        joinedAt,
         matchId: null,
-        events: []
-      };
-      refreshRandomCivilizationPool(ticket);
-      tickets.set(ticket.id, ticket);
-      scheduleRatingRanges(ticket);
-      ticket.matchSearchTimer = setTimeout(() => {
-        void tryMatch(ticket).catch((error) => {
-          console.error(`[matchmaker] Failed to match matured ticket ${ticket.id}:`, error);
-        });
-      }, minimumQueueTimeMs);
+        events: [],
+        ...(party ? { partyId: party.id, partyLeaderId: party.leaderId, partySize: party.members.length } : {})
+      }));
+      for (const queuePlayer of queuePlayers) playersJoiningQueue.add(queuePlayer.id);
+      for (const ticket of createdTickets) {
+        refreshRandomCivilizationPool(ticket);
+        tickets.set(ticket.id, ticket);
+        scheduleRatingRanges(ticket);
+        ticket.matchSearchTimer = setTimeout(() => {
+          void tryMatch(ticket).catch((error) => {
+            console.error(`[matchmaker] Failed to match matured ticket ${ticket.id}:`, error);
+          });
+        }, minimumQueueTimeMs);
+      }
+      const ticket = createdTickets.find((item) => item.player.id === authenticatedPlayer.id);
+      if (party) {
+        partyStore.setActiveQueue(party.id, body.queue, createdTickets.map((item) => [item.player.id, item.id]), joinedAt);
+        emitParty(party);
+      }
       try {
         await tryMatch(ticket);
         return send(response, 201, {
@@ -2455,10 +2650,17 @@ async function handleRequest(request, response) {
           ignoredMapIds
         });
       } catch (error) {
-        tickets.delete(ticket.id);
+        for (const createdTicket of createdTickets) {
+          clearTicketSearchTimers(createdTicket);
+          tickets.delete(createdTicket.id);
+        }
+        if (party) {
+          partyStore.clearActiveQueue(party.id, "Matchmaking could not be started.");
+          emitParty(party);
+        }
         throw error;
       } finally {
-        playersJoiningQueue.delete(authenticatedPlayer.id);
+        for (const queuePlayer of queuePlayers) playersJoiningQueue.delete(queuePlayer.id);
       }
     }
 
@@ -2470,6 +2672,9 @@ async function handleRequest(request, response) {
       }
       if (ticket.source === "tournament") {
         return send(response, 409, { error: "Tournament match settings are locked." });
+      }
+      if (ticket.partyId && ticket.partyLeaderId !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "Only your party leader can update matchmaking." });
       }
       if (ticket.matchId) return send(response, 409, { error: "queue preferences are locked after a match is found" });
       const body = await readJson(request);
@@ -2485,8 +2690,19 @@ async function handleRequest(request, response) {
         return send(response, 400, { error: error instanceof Error ? error.message : "invalid map preferences" });
       }
       const previousCivilizationMode = ticket.queue.civilizationPreference?.mode;
-      ticket.queue = body.queue;
-      refreshRandomCivilizationPool(ticket, previousCivilizationMode);
+      if (ticket.partyId) validatePartyQueue(partyStore.partyFor(authenticatedPlayer.id), body.queue);
+      const partyTickets = ticket.partyId
+        ? [...tickets.values()].filter((item) => item.partyId === ticket.partyId && !item.matchId)
+        : [ticket];
+      for (const partyTicket of partyTickets) {
+        partyTicket.queue = structuredClone(body.queue);
+        refreshRandomCivilizationPool(partyTicket, previousCivilizationMode);
+      }
+      if (ticket.partyId) {
+        const party = partyStore.partyFor(authenticatedPlayer.id);
+        if (party?.activeQueue) party.activeQueue.queue = body.queue;
+        if (party) emitParty(party);
+      }
       await tryMatch(ticket);
       return send(response, 200, { ok: true });
     }
@@ -2495,6 +2711,9 @@ async function handleRequest(request, response) {
       const ticketId = decodeURIComponent(ticketMatch[1]);
       const ticket = tickets.get(ticketId);
       if (!ticket || ticket.player.id !== authenticatedPlayer.id) return send(response, 404, { error: "ticket not found" });
+      if (ticket.partyId && ticket.partyLeaderId !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "Only your party leader can cancel matchmaking." });
+      }
       const body = await readJson(request);
       clearTicketSearchTimers(ticket);
       const match = ticket.matchId ? matches.get(ticket.matchId) : null;
@@ -2516,13 +2735,26 @@ async function handleRequest(request, response) {
             diagnosticLog: automationFailure.diagnosticLog
           });
         }
-        emitToMatch(match, {
-          type: "error",
-          code: setupStarted ? "MATCH_SETUP_FAILED" : "MATCH_DECLINED",
-          message: setupStarted
-            ? "The other player could not finish setting up the lobby."
-            : "The other player left the match."
-        }, ticket.id);
+        if (ticket.partyId && !setupStarted) {
+          for (const participant of matchTickets(match)) {
+            if (participant.id === ticket.id) continue;
+            if (participant.partyId === ticket.partyId) {
+              emit(participant, { type: "error", code: "PARTY_QUEUE_CANCELLED", message: "Your party leader cancelled matchmaking." });
+            } else if (participant.partyId && participant.player.id !== participant.partyLeaderId) {
+              emit(participant, { type: "error", code: "PARTY_REQUEUE_PENDING", message: "The other team declined. Your party leader is returning everyone to the queue." });
+            } else {
+              emit(participant, { type: "error", code: "MATCH_DECLINED", message: "The other player left the match." });
+            }
+          }
+        } else {
+          emitToMatch(match, {
+            type: "error",
+            code: setupStarted ? "MATCH_SETUP_FAILED" : "MATCH_DECLINED",
+            message: setupStarted
+              ? "The other player could not finish setting up the lobby."
+              : "The other player left the match."
+          }, ticket.id);
+        }
         addDeclinedPairCooldown(match);
         deleteMatch(match);
         return send(response, 200, { ok: true });
@@ -2531,7 +2763,18 @@ async function handleRequest(request, response) {
         const tournamentId = await unreadyTournamentMatch(ticket.tournamentMatchId, authenticatedPlayer.id);
         if (tournamentId) broadcastTournamentChanged(tournamentId);
       }
-      tickets.delete(ticketId);
+      if (ticket.partyId) {
+        const partyTickets = [...tickets.values()].filter((item) => item.partyId === ticket.partyId);
+        for (const partyTicket of partyTickets) {
+          clearTicketSearchTimers(partyTicket);
+          clearTicketDisconnectTimer(partyTicket);
+          tickets.delete(partyTicket.id);
+        }
+        const party = partyStore.clearActiveQueue(ticket.partyId, "Matchmaking cancelled.");
+        if (party) emitParty(party);
+      } else {
+        tickets.delete(ticketId);
+      }
       return send(response, 200, { ok: true });
     }
 
@@ -2544,11 +2787,18 @@ async function handleRequest(request, response) {
         || !matchTickets(match).some((item) => item.id === body.ticketId)) {
         return send(response, 404, { error: "match or ticket not found" });
       }
+      if (actingTicket.partyId && actingTicket.partyLeaderId !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "Your party leader controls match acceptance." });
+      }
       if (Date.now() >= new Date(match.acceptDeadline).getTime()) {
         await expireMatch(match);
         return send(response, 410, { error: "match acceptance window expired" });
       }
-      match.accepted.add(body.ticketId);
+      for (const participant of matchTickets(match)) {
+        if (participant.id === body.ticketId || actingTicket.partyId && participant.partyId === actingTicket.partyId) {
+          match.accepted.add(participant.id);
+        }
+      }
       if (match.accepted.size === matchTickets(match).length) {
         clearTimeout(match.expirationTimer);
         match.setupStartedAt ??= new Date().toISOString();
@@ -2577,12 +2827,20 @@ async function handleRequest(request, response) {
         || !matchTickets(match).some((item) => item.id === body.ticketId)) {
         return send(response, 404, { error: "match or ticket not found" });
       }
+      if (actingTicket.partyId && actingTicket.partyLeaderId !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "Your party leader controls match acceptance." });
+      }
       clearTimeout(match.expirationTimer);
-      emitToMatch(match, {
-        type: "error",
-        code: "MATCH_DECLINED",
-        message: "Another player declined the match."
-      }, body.ticketId);
+      for (const participant of matchTickets(match)) {
+        if (participant.id === body.ticketId) continue;
+        if (actingTicket.partyId && participant.partyId === actingTicket.partyId) {
+          emit(participant, { type: "error", code: "PARTY_QUEUE_CANCELLED", message: "Your party leader declined the match." });
+        } else if (participant.partyId && participant.player.id !== participant.partyLeaderId) {
+          emit(participant, { type: "error", code: "PARTY_REQUEUE_PENDING", message: "The other team declined. Your party leader is returning everyone to the queue." });
+        } else {
+          emit(participant, { type: "error", code: "MATCH_DECLINED", message: "Another player declined the match." });
+        }
+      }
       addDeclinedPairCooldown(match);
       deleteMatch(match);
       return send(response, 200, { declined: true });
@@ -2899,6 +3157,7 @@ async function handleRequest(request, response) {
 
     return send(response, 404, { error: "not found" });
   } catch (error) {
+    if (error instanceof PartyOperationError) return send(response, error.status, { error: error.message });
     console.error("[matchmaker]", error);
     return send(response, 500, { error: error instanceof Error ? error.message : "internal error" });
   }
@@ -2961,6 +3220,7 @@ webSocketServer.on("connection", (socket) => {
         session.player = player;
         session.token = message.token;
         sendSocket(socket, { type: "authenticated", player });
+        sendSocket(socket, { type: "party_event", event: { type: "snapshot", snapshot: partyStore.snapshot(player.id) } });
         await refreshSocialCache(player.id);
         broadcastPresence(player.id);
         return;

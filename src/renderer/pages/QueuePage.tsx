@@ -12,6 +12,7 @@ import { GroupedMapPool } from "../components/common/GroupedMapPool";
 import { mapGroups } from "../mocks/mockPlayers";
 import { isPreviewMode, previewSection } from "../previewMode";
 import { useAppStore } from "../state/appStore";
+import { useParty } from "../state/partyContext";
 
 const favoriteMapsKey = "empire-league-favorite-maps";
 const civilizationPreferenceKey = "empire-league-civilization-preference";
@@ -38,7 +39,9 @@ const civilizationModes: Array<{
 ];
 
 export function QueuePage() {
-  const { state, queues, startQueue, updateActiveQueue, cancelQueue, localizeAoe2Name } = useAppStore();
+  const { state, queues, startQueue, updateActiveQueue, cancelQueue, localizeAoe2Name, notify } = useAppStore();
+  const { snapshot: partySnapshot } = useParty();
+  const party = partySnapshot.party;
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (previewSection !== "map-pool") return;
@@ -83,6 +86,9 @@ export function QueuePage() {
     }
   });
   const [selectedTeamSizes, setSelectedTeamSizes] = useState<Array<2 | 4>>([2, 4]);
+  useEffect(() => {
+    if (party?.members.length === 2 || party?.members.length === 4) setSelectedTeamSizes([party.members.length]);
+  }, [party?.id, party?.members.length]);
   const [findAnyone, setFindAnyone] = useState(true);
   const [civilizationMode, setCivilizationMode] = useState<CivilizationMode>(() => {
     try {
@@ -215,6 +221,22 @@ export function QueuePage() {
     openLandBans: civilizationBans.open,
     closedLandBans: civilizationBans.closed
   };
+
+  function startSelectedQueue(queue: typeof selectedQueue): void {
+    if (!queue) return;
+    if (party && !party.isLeader) {
+      notify("Your party leader controls matchmaking.", "warning", { detail: "You will enter the queue automatically when the leader starts searching." });
+      return;
+    }
+    if (party) {
+      const size = party.members.length;
+      if ((size !== 2 && size !== 4) || queue.format !== "team" || !queue.teamSizes?.includes(size as 2 | 4)) {
+        notify(`A party of ${size} can only queue for ${size === 2 || size === 4 ? `${size}v${size}` : "team games with exactly 2 or 4 party members"}.`, "danger");
+        return;
+      }
+    }
+    void startQueue(queue);
+  }
 
   const toggleFavorite = (queueId: string, groupId: MapGroupId, mapId: string) => {
     setFavoriteMaps((current) => {
@@ -397,8 +419,8 @@ export function QueuePage() {
                     onChange={(event) => setFindAnyone(event.target.checked)}
                   />
                 </label>
-                <button className="secondary" type="button" onClick={() => void cancelQueue()}>
-                  <XCircle size={18} /> Cancel Search
+                <button className="secondary" type="button" disabled={Boolean(party && !party.isLeader)} onClick={() => void cancelQueue()}>
+                  <XCircle size={18} /> {party && !party.isLeader ? "Party leader is searching" : "Cancel Search"}
                 </button>
               </>
             ) : (
@@ -429,7 +451,7 @@ export function QueuePage() {
                   className="queue-search-button"
                   type="button"
                   disabled={!canStartQueue || activeMapIds.length === 0}
-                  onClick={() => void startQueue({
+                  onClick={() => startSelectedQueue({
                     ...selectedQueue,
                     classicMode,
                     findAnyone,
@@ -496,7 +518,7 @@ export function QueuePage() {
                             type="button"
                             key={size}
                             aria-pressed={selected}
-                            disabled={preferencesLocked}
+                            disabled={preferencesLocked || Boolean(party)}
                             onClick={() => setSelectedTeamSizes((current) => {
                               if (current.includes(size)) {
                                 return current.length === 1 ? current : current.filter((item) => item !== size);
@@ -655,7 +677,7 @@ export function QueuePage() {
                   className="queue-search-button"
                   type="button"
                   disabled={!canStartQueue || activeMapIds.length === 0}
-                  onClick={() => void startQueue({
+                  onClick={() => startSelectedQueue({
                     ...selectedQueue,
                     classicMode,
                     teamSizes: selectedQueue.format === "team" ? selectedTeamSizes : undefined,

@@ -2201,6 +2201,55 @@
   box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.48);
 }
 
+/* Party chat is persistent and occupies the bottom-right dock. */
+.party-window,
+.party-minimized,
+.party-invite-stack {
+  position: fixed;
+  z-index: 43;
+  right: 18px;
+  bottom: 0;
+}
+
+.chat-window.party-window {
+  height: 470px;
+  grid-template-rows: 58px auto minmax(0, 1fr) 54px;
+  border-color: #8b6737;
+  box-shadow: 0 -10px 36px rgba(0, 0, 0, .58), 0 0 24px rgba(197, 141, 69, .08);
+}
+
+.chat-header.party-header { background: linear-gradient(180deg, #3a3022, #27231d); }
+.party-mark { width: 34px; height: 34px; display: grid; place-items: center; color: #f0c978; border: 1px solid rgba(226, 181, 109, .45); border-radius: 50%; background: #3c2d1d; }
+.party-members { display: grid; gap: 6px; padding: 9px 10px; border-bottom: 1px solid var(--line); background: #24211c; }
+.party-members > div { min-width: 0; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto auto; align-items: center; gap: 7px; }
+.party-members > div > span:nth-child(2) { min-width: 0; display: grid; }
+.party-members strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.party-members small { color: var(--faint); font-size: 9px; }
+.party-members svg { color: #e2b56d; }
+.party-members > div > button { width: 25px; height: 25px; display: grid; place-items: center; color: var(--muted); background: transparent; }
+.party-members > div > button:hover { color: #e38c82; background: rgba(185, 75, 65, .14); }
+.party-leave { justify-self: start; display: flex; align-items: center; gap: 5px; padding: 4px 7px; color: var(--muted); background: transparent; font-size: 9px; }
+.party-leave:hover { color: #e5a29b; }
+.party-messages { background: linear-gradient(rgba(25, 23, 19, .98), rgba(19, 18, 15, .98)); }
+.party-system-message { align-self: center; color: var(--faint); font-size: 9px; text-align: center; }
+.party-empty { margin: auto; display: grid; justify-items: center; gap: 7px; color: var(--faint); font-size: 11px; text-align: center; }
+.party-minimized { min-width: 210px; height: 48px; display: flex; align-items: center; gap: 9px; padding: 0 14px; color: var(--text); border: 1px solid #8b6737; border-bottom: 0; border-radius: 8px 8px 0 0; background: linear-gradient(180deg, #3a3022, #27231d); box-shadow: 0 -8px 30px rgba(0, 0, 0, .5); }
+.party-minimized > span { display: grid; text-align: left; }
+.party-minimized small { color: var(--muted); font-size: 9px; }
+.party-invite-stack { bottom: 18px; display: grid; gap: 8px; }
+.party-invite-toast { width: 360px; display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid #8b6737; border-radius: 7px; background: #29241d; box-shadow: 0 10px 34px rgba(0, 0, 0, .58); }
+.party-invite-toast > div { min-width: 0; flex: 1; display: grid; }
+.party-invite-toast span { color: var(--muted); font-size: 10px; }
+.party-invite-toast .primary { padding: 7px 12px; }
+
+body:has(.party-window) .tournament-chat-window,
+body:has(.party-minimized) .tournament-chat-window,
+body:has(.party-window) .tournament-chat-minimized,
+body:has(.party-minimized) .tournament-chat-minimized { right: 354px; }
+
+body:has(.party-window) .chat-dock,
+body:has(.party-minimized) .chat-dock { max-width: calc(100vw - 620px); }
+
 .chat-window {
   width: 318px;
   height: 390px;

@@ -6,6 +6,7 @@ import { ThemedSelect } from "../components/common/ThemedSelect";
 import { customLobbyService } from "../services/customLobbyService";
 import { weeklyQueueService, type WeeklyQueueStatus } from "../services/weeklyQueueService";
 import { useAppStore } from "../state/appStore";
+import { useParty } from "../state/partyContext";
 import { AnimatedEllipsis, NetworkLobby } from "./CustomPage";
 
 export function WeeklyPage() {
@@ -19,6 +20,7 @@ export function WeeklyPage() {
   const [pending, setPending] = useState(false);
   const [now, setNow] = useState(Date.now());
   const activeRoomIdRef = useRef<string | undefined>(undefined);
+  const { snapshot: partySnapshot } = useParty();
 
   activeRoomIdRef.current = room?.id;
 
@@ -90,6 +92,12 @@ export function WeeklyPage() {
 
   async function toggleQueue() {
     if (!status || pending) return;
+    if (partySnapshot.party) {
+      notify("The weekly queue is unavailable while you are in a party.", "warning", {
+        detail: partySnapshot.party.isLeader ? "Disband the party first." : "Leave the party first. Your leader controls matchmaking."
+      });
+      return;
+    }
     setPending(true);
     try {
       if (status.queued) {

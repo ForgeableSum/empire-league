@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { maps } from "../../mocks/mockPlayers";
 import { useAppStore } from "../../state/appStore";
+import { useParty } from "../../state/partyContext";
 
 export function MatchFoundOverlay() {
   const { state, acceptMatch, declineMatch } = useAppStore();
+  const { snapshot } = useParty();
+  const waitingForPartyLeader = Boolean(snapshot.party && !snapshot.party.isLeader);
   const match = state.activeMatch;
   const requiresFamilySharingDecision = match?.queue.id === "ranked-rm-1v1"
     && match.opponent.steamLicenseStatus === "family_shared";
@@ -25,7 +28,7 @@ export function MatchFoundOverlay() {
   }, [deadline]);
 
   useEffect(() => {
-    if (requiresFamilySharingDecision) return;
+    if (requiresFamilySharingDecision || waitingForPartyLeader) return;
     const delay = Math.max(0, deadline - Date.now());
     const autoAcceptTimer = window.setTimeout(() => {
       if (autoAcceptStarted.current) return;
@@ -35,15 +38,15 @@ export function MatchFoundOverlay() {
     return () => {
       window.clearTimeout(autoAcceptTimer);
     };
-  }, [acceptMatch, deadline, requiresFamilySharingDecision]);
+  }, [acceptMatch, deadline, requiresFamilySharingDecision, waitingForPartyLeader]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") void declineMatch();
+      if (event.key === "Escape" && !waitingForPartyLeader) void declineMatch();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [declineMatch]);
+  }, [declineMatch, waitingForPartyLeader]);
 
   if (!match) return null;
 
@@ -54,6 +57,7 @@ export function MatchFoundOverlay() {
           {requiresFamilySharingDecision ? "Decision required" : "Auto-accepting"}
         </span>
         <h2 id="match-found-title">Match Found</h2>
+        {waitingForPartyLeader && <p>Your party leader is accepting this match for the whole party.</p>}
         {selectedMap && (
           <figure className="match-map-thumbnail">
             <img src={selectedMap.thumbnailUrl} alt="" />
@@ -67,12 +71,12 @@ export function MatchFoundOverlay() {
           </p>
         )}
         <div className="countdown">{remaining}s</div>
-        <div className="modal-actions">
+        {!waitingForPartyLeader && <div className="modal-actions">
           <button className="secondary" type="button" onClick={() => void declineMatch()}>Decline Match</button>
           {requiresFamilySharingDecision && (
             <button className="primary" type="button" onClick={() => void acceptMatch()}>Accept Match</button>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

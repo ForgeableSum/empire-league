@@ -34,10 +34,11 @@ interface SocialPageProps {
   onAccept: (request: FriendRequest) => void;
   onDecline: (id: string) => void;
   onInvite: (name: string) => Promise<string>;
+  onPartyInvite: (friend: SocialFriend) => void;
   onUnfriend: (friend: SocialFriend) => void;
 }
 
-export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, onInvite, onUnfriend }: SocialPageProps) {
+export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, onInvite, onPartyInvite, onUnfriend }: SocialPageProps) {
   const [query, setQuery] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteSent, setInviteSent] = useState<string | null>(null);
@@ -118,6 +119,9 @@ export function SocialPage({ friends, requests, onMessage, onAccept, onDecline, 
                   <span>{friend.activity}{friend.lastSeen ? ` · ${friend.lastSeen}` : ""}</span>
                 </div>
                 <div className="friend-actions">
+                  <button className="secondary friend-party" type="button" disabled={friend.presence === "offline"} onClick={() => onPartyInvite(friend)}>
+                    <Users size={16} /> Party
+                  </button>
                   <button className="secondary friend-message" type="button" onClick={() => onMessage(friend)}>
                     <MessageCircle size={16} /> Message
                     {!!friend.unread && <span className="unread-badge">{friend.unread}</span>}

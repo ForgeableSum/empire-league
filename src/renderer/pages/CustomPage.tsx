@@ -29,6 +29,7 @@ import { estimateCustomLobbySetupMs } from "../services/lobbyTimingService";
 import { inspectReplayEnd, shouldUseAiReplayCompletionFallback } from "../services/replayMetadataService";
 import { stopYouTubeShorts } from "../services/shortsPlaybackService";
 import { useAppStore } from "../state/appStore";
+import { useParty } from "../state/partyContext";
 
 const emptyCatalog: LocalCustomContentCatalog = { maps: [], dataMods: [], scannedRoots: [], scannedAt: new Date(0).toISOString() };
 
@@ -45,6 +46,7 @@ export function CustomPage() {
   const [scenarioId, setScenarioId] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(8);
   const [pending, setPending] = useState(false);
+  const { snapshot: partySnapshot } = useParty();
 
   const customRooms = rooms.filter((room) => room.source !== "weekly");
   const activeRoom = customRooms.find((room) => room.players.some((player) => player.id === state.currentUser.id));
@@ -52,6 +54,12 @@ export function CustomPage() {
     && (!state.activeMatch || state.queueStatus === "completed");
 
   async function guardCustomLobbyEntry(): Promise<boolean> {
+    if (partySnapshot.party) {
+      notify("Custom games are unavailable while you are in a party.", "warning", {
+        detail: partySnapshot.party.isLeader ? "Disband the party first." : "Leave the party first. Your leader controls matchmaking."
+      });
+      return false;
+    }
     if (canEnterCustomLobby) {
       await retireCompletedRankedSession();
       return true;

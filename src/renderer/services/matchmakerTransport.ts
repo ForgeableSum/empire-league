@@ -41,6 +41,9 @@ export type TournamentEvent =
   | { type: "tournaments_changed"; tournamentId: string }
   | { type: "chat_message"; tournamentId: string; message: import("../../shared/contracts/tournaments").TournamentChatMessage };
 export type AdminMessage = { message: string; sentAt: string };
+export type PartyEvent =
+  | { type: "snapshot"; snapshot: import("../../shared/contracts/parties").PartySnapshot }
+  | { type: "chat_message"; partyId: string; message: import("../../shared/contracts/parties").PartyMessage };
 
 class MatchmakerTransport {
   private token: string | null = null;
@@ -57,6 +60,7 @@ class MatchmakerTransport {
   private customLobbyListeners = new Set<(event: CustomLobbyEvent) => void>();
   private tournamentListeners = new Set<(event: TournamentEvent) => void>();
   private adminMessageListeners = new Set<(event: AdminMessage) => void>();
+  private partyListeners = new Set<(event: PartyEvent) => void>();
   private connectionStatus: MatchmakerConnectionStatus = "disconnected";
   private connectionStatusListeners = new Set<() => void>();
 
@@ -126,6 +130,11 @@ class MatchmakerTransport {
     return () => this.adminMessageListeners.delete(listener);
   }
 
+  onPartyEvent(listener: (event: PartyEvent) => void): UnsubscribeFunction {
+    this.partyListeners.add(listener);
+    return () => this.partyListeners.delete(listener);
+  }
+
   private connect(): Promise<void> {
     if (this.socket?.readyState === WebSocket.OPEN && !this.connectPromise) return Promise.resolve();
     if (this.connectPromise) return this.connectPromise;
@@ -161,7 +170,7 @@ class MatchmakerTransport {
       message?: string;
       ticketId?: string;
       sequence?: number;
-      event?: Parameters<QueueEventListener>[0] | SocialEvent | CustomLobbyEvent | TournamentEvent;
+      event?: Parameters<QueueEventListener>[0] | SocialEvent | CustomLobbyEvent | TournamentEvent | PartyEvent;
       sentAt?: string;
     };
     try {
@@ -184,6 +193,10 @@ class MatchmakerTransport {
     }
     if (message.type === "tournament_event" && message.event) {
       for (const listener of this.tournamentListeners) listener(message.event as TournamentEvent);
+      return;
+    }
+    if (message.type === "party_event" && message.event) {
+      for (const listener of this.partyListeners) listener(message.event as PartyEvent);
       return;
     }
     if (message.type === "admin_message" && typeof message.message === "string") {
@@ -258,7 +271,7 @@ class MatchmakerTransport {
     this.rejectConnecting(new Error("Matchmaker connection closed."));
     for (const pending of this.pending.values()) pending.reject(new Error("Matchmaker connection closed."));
     this.pending.clear();
-    if (this.deliberatelyClosed || !this.subscription) return;
+    if (this.deliberatelyClosed || (!this.subscription && !this.token)) return;
     this.reconnectAttempts += 1;
     if (this.reconnectAttempts > 15) {
       this.failSubscription("The connection to the matchmaker was lost.");

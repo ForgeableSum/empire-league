@@ -149,7 +149,7 @@ export const queueDefinitions: QueueDefinition[] = [
   {
     id: "team-games",
     name: "Team Games",
-    description: "Find a match for solo, two-player, or three-player teams.",
+    description: "Find a match as a solo player or a complete 2v2 or 4v4 party.",
     format: "team",
     teamSizes: [2, 4],
     ruleset: "Random Map",
@@ -1693,6 +1693,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           if (event.code === "MATCH_DISCONNECTED") {
             void handleLobbySetupFailure(queue, event.message);
+            return;
+          }
+          if (event.code === "PARTY_QUEUE_CANCELLED" || event.code === "PARTY_REQUEUE_PENDING") {
+            void window.electronApi?.stopMatchFoundAlert();
+            clearRoomSetupWatchdog();
+            queueJoinInFlightRef.current = false;
+            matchedSessionRef.current = null;
+            ticketRef.current = null;
+            unsubscribeRef.current?.();
+            unsubscribeRef.current = null;
+            setState((previous) => ({
+              ...previous,
+              queueStatus: "cancelled",
+              selectedQueue: null,
+              queueStartedAt: null,
+              activeMatch: null,
+              error: null
+            }));
+            notify(event.message, "info", { durationMs: 5000 });
             return;
           }
           if (event.code === "MATCH_DECLINED") {

@@ -24,6 +24,10 @@ import { isRankedInputGuardActive } from "./services/automationLock";
 import { tournamentService } from "./services/tournamentService";
 import { isPreviewMode } from "./previewMode";
 import { previewFriendRequests, previewFriends } from "./mocks/previewData";
+import { partyService, emptyPartySnapshot } from "./services/partyService";
+import { PartyDock } from "./components/social/PartyDock";
+import { PartyContext } from "./state/partyContext";
+import type { PartySnapshot } from "../shared/contracts/parties";
 
 const permanentLoadingScreen = import.meta.env.VITE_PERMANENT_LOADING_SCREEN === "true";
 
@@ -35,6 +39,7 @@ export function App() {
   const [outgoingRequestIds, setOutgoingRequestIds] = useState<string[]>([]);
   const [chats, setChats] = useState<OpenChat[]>([]);
   const [tournamentToOpen, setTournamentToOpen] = useState<string | null>(null);
+  const [partySnapshot, setPartySnapshot] = useState<PartySnapshot>(emptyPartySnapshot);
   const chatsRef = useRef<OpenChat[]>([]);
   const notifiedTournamentMatchesRef = useRef(new Set<string>());
   useEffect(() => window.electronApi?.onMouseTestModeChanged(setMouseTestActive), []);
@@ -44,7 +49,7 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const { page, setPage, state, lobbyAutomationActive, authStatus, authError, signInWithSteam, notify } = useAppStore();
+  const { page, setPage, state, lobbyAutomationActive, authStatus, authError, signInWithSteam, notify, startQueue, cancelQueue } = useAppStore();
   const rankedInputGuardActive = isRankedInputGuardActive(state);
   const gameInSession = state.queueStatus === "in_game" || state.gameStatus === "in_match";
 
@@ -59,6 +64,41 @@ export function App() {
   useEffect(() => matchmakerTransport.onAdminMessage(({ message }) => {
     notify("Message from Empire League", "info", { detail: message, durationMs: 15_000 });
   }), [notify]);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated" || isPreviewMode) return;
+    void partyService.getSnapshot().then(setPartySnapshot).catch(() => undefined);
+    return partyService.onEvent((event) => {
+      if (event.type === "snapshot") setPartySnapshot(event.snapshot);
+      if (event.type === "chat_message") {
+        setPartySnapshot((current) => current.party?.id === event.partyId
+          ? { ...current, party: { ...current.party, messages: [...current.party.messages, event.message].slice(-100) } }
+          : current);
+      }
+    });
+  }, [authStatus]);
+
+  useEffect(() => {
+    const activeQueue = partySnapshot.party?.activeQueue;
+    if (!partySnapshot.party || partySnapshot.party.isLeader) return;
+    if (activeQueue && ["idle", "cancelled", "completed", "error"].includes(state.queueStatus)) {
+      notify("Your party leader started matchmaking.", "info", { detail: activeQueue.queue.name });
+      void startQueue(activeQueue.queue);
+    } else if (!activeQueue && state.queueStatus === "searching") {
+      notify("Your party leader stopped matchmaking.", "info");
+      void cancelQueue();
+    }
+  }, [partySnapshot.party?.activeQueue?.ticketId, partySnapshot.party?.isLeader, state.gameStatus, state.queueStatus]);
+
+  async function inviteToParty(playerId: string): Promise<void> {
+    try {
+      if (!partySnapshot.party) setPartySnapshot(await partyService.create());
+      await partyService.invite(playerId);
+      notify("Party invite sent.", "success");
+    } catch (error) {
+      notify("Party invite could not be sent.", "danger", { detail: error instanceof Error ? error.message : undefined });
+    }
+  }
 
   useEffect(() => window.electronApi?.onTournamentNotificationClicked((tournamentId) => {
     setTournamentToOpen(tournamentId);
@@ -285,7 +325,7 @@ export function App() {
   }
 
   return (
-    <>
+    <PartyContext.Provider value={{ snapshot: partySnapshot, invite: inviteToParty }}>
       <LobbyInputForwarding active={lobbyAutomationActive || rankedInputGuardActive} />
       <Shell socialUnreadCount={friends.reduce((total, friend) => total + (friend.unread ?? 0), 0)}>
         {page === "home" && <HomePage />}
@@ -311,7 +351,7 @@ export function App() {
             }}
           />
         )}
-        {page === "social" && <SocialPage friends={friends} requests={requests} onMessage={(friend) => void openChat(friend)} onAccept={(request) => void acceptRequest(request)} onDecline={(id) => void socialService.declineRequest(requests.find((item) => item.id === id)?.connectionId ?? id)} onInvite={inviteFriend} onUnfriend={(friend) => void unfriend(friend)} />}
+        {page === "social" && <SocialPage friends={friends} requests={requests} onMessage={(friend) => void openChat(friend)} onAccept={(request) => void acceptRequest(request)} onDecline={(id) => void socialService.declineRequest(requests.find((item) => item.id === id)?.connectionId ?? id)} onInvite={inviteFriend} onPartyInvite={(friend) => void inviteToParty(friend.id)} onUnfriend={(friend) => void unfriend(friend)} />}
         {page === "settings" && <SettingsPage />}
       </Shell>
       {state.queueStatus === "match_found" && state.activeMatch?.matchType !== "tournament" && <MatchFoundOverlay />}
@@ -326,8 +366,17 @@ export function App() {
           messages: [...chat.messages, { id: message.id, from: "me", text: message.text, time: new Date(message.sentAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }]
         } : chat)))}
       />
+      <PartyDock
+        snapshot={partySnapshot}
+        currentPlayerId={state.currentUser.id}
+        onAccept={(id) => void partyService.accept(id).then(setPartySnapshot).catch((error) => notify("Could not join the party.", "danger", { detail: error instanceof Error ? error.message : undefined }))}
+        onDecline={(id) => void partyService.decline(id)}
+        onLeave={() => void partyService.leave().catch((error) => notify("Could not leave the party.", "danger", { detail: error instanceof Error ? error.message : undefined }))}
+        onRemove={(id) => void partyService.removeMember(id).catch((error) => notify("Could not remove that party member.", "danger", { detail: error instanceof Error ? error.message : undefined }))}
+        onSend={(text) => void partyService.sendMessage(text).catch((error) => notify("Party message could not be sent.", "danger", { detail: error instanceof Error ? error.message : undefined }))}
+      />
       {mouseTestActive && <TestOverlay />}
-    </>
+    </PartyContext.Provider>
   );
 }
 
