@@ -14,17 +14,32 @@ function replayPaths(): Record<string, string> {
   }
 }
 
+function saveReplayPaths(paths: Record<string, string>): void {
+  if (Object.keys(paths).length === 0) {
+    window.localStorage.removeItem(replayPathsStorageKey);
+    return;
+  }
+  window.localStorage.setItem(replayPathsStorageKey, JSON.stringify(paths));
+}
+
+function retainReplayPaths(matchIds: Set<string>): Record<string, string> {
+  const paths = replayPaths();
+  const retained = Object.fromEntries(Object.entries(paths).filter(([matchId]) => matchIds.has(matchId)));
+  if (Object.keys(retained).length !== Object.keys(paths).length) saveReplayPaths(retained);
+  return retained;
+}
+
 export const matchHistoryService = {
   async getMine(): Promise<MatchSummary[]> {
     if (isPreviewMode) return previewMatches;
     const body = await matchmakerTransport.request<{ matches: MatchSummary[] }>("/matches/history");
-    const paths = replayPaths();
+    const paths = retainReplayPaths(new Set(body.matches.map((match) => match.id)));
     return body.matches.map((match) => ({ ...match, replayPath: paths[match.id] }));
   },
 
   rememberReplay(matchId: string, replayPath: string): void {
     const paths = replayPaths();
     paths[matchId] = replayPath;
-    window.localStorage.setItem(replayPathsStorageKey, JSON.stringify(paths));
+    saveReplayPaths(paths);
   }
 };

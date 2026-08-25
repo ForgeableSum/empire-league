@@ -16,6 +16,32 @@ if ($IdentityFile) {
     $sshArgs += @("-i", (Resolve-Path -LiteralPath $IdentityFile).Path)
 }
 
+$askPassPath = $null
+$previousAskPass = $env:SSH_ASKPASS
+$previousAskPassRequirement = $env:SSH_ASKPASS_REQUIRE
+$previousDisplay = $env:DISPLAY
+$previousDeployPassword = $env:EMPIRE_DEPLOY_PASSWORD
+$deployPassword = $env:EMPIRE_DEPLOY_PASSWORD
+$secretsFile = Join-Path $repoRoot ".deploy-secrets.ps1"
+if ([string]::IsNullOrWhiteSpace($deployPassword) -and (Test-Path -LiteralPath $secretsFile)) {
+    . $secretsFile
+    $savedPassword = Get-Variable -Name EmpireMatchmakerPassword -ValueOnly -ErrorAction SilentlyContinue
+    if ($savedPassword) { $deployPassword = [string]$savedPassword }
+}
+if ([string]::IsNullOrWhiteSpace($deployPassword)) {
+    $sshArgs += @("-o", "BatchMode=yes")
+} else {
+    $askPassPath = Join-Path ([System.IO.Path]::GetTempPath()) ("empire-deploy-askpass-{0}.cmd" -f [guid]::NewGuid())
+    [System.IO.File]::WriteAllLines($askPassPath, @(
+        "@echo off",
+        'powershell.exe -NoLogo -NoProfile -NonInteractive -Command "[Console]::Out.Write($env:EMPIRE_DEPLOY_PASSWORD)"'
+    ), [System.Text.Encoding]::ASCII)
+    $env:EMPIRE_DEPLOY_PASSWORD = $deployPassword
+    $env:SSH_ASKPASS = $askPassPath
+    $env:SSH_ASKPASS_REQUIRE = "force"
+    $env:DISPLAY = "empire-deploy"
+}
+
 Push-Location $repoRoot
 try {
     Write-Host "Packaging matchmaker release $releaseId..."
@@ -36,4 +62,9 @@ try {
 finally {
     Pop-Location
     Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+    if ($askPassPath -and (Test-Path -LiteralPath $askPassPath)) { Remove-Item -LiteralPath $askPassPath -Force }
+    if ($null -eq $previousAskPass) { Remove-Item Env:SSH_ASKPASS -ErrorAction SilentlyContinue } else { $env:SSH_ASKPASS = $previousAskPass }
+    if ($null -eq $previousAskPassRequirement) { Remove-Item Env:SSH_ASKPASS_REQUIRE -ErrorAction SilentlyContinue } else { $env:SSH_ASKPASS_REQUIRE = $previousAskPassRequirement }
+    if ($null -eq $previousDisplay) { Remove-Item Env:DISPLAY -ErrorAction SilentlyContinue } else { $env:DISPLAY = $previousDisplay }
+    if ($null -eq $previousDeployPassword) { Remove-Item Env:EMPIRE_DEPLOY_PASSWORD -ErrorAction SilentlyContinue } else { $env:EMPIRE_DEPLOY_PASSWORD = $previousDeployPassword }
 }

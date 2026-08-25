@@ -1,6 +1,6 @@
 {
   "name": "empire-league",
-  "version": "0.1.59",
+  "version": "0.1.60",
   "description": "AoE2 DE Community Client & Matchmaker",
   "author": "Empire League Prototype",
   "main": "dist/main/main.js",

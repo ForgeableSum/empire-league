@@ -5,7 +5,7 @@ import { HistoryCivilizations, HistoryPlayers } from "../components/match/Histor
 import { MapPool } from "../components/common/MapPool";
 import { mapGroups } from "../mocks/mockPlayers";
 import { useAppStore } from "../state/appStore";
-import { AlertTriangle, MessageCircle } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { isPreviewMode } from "../previewMode";
 import { useSyncExternalStore } from "react";
 import { matchmakerTransport } from "../services/matchmakerTransport";
@@ -28,12 +28,6 @@ export function HomePage() {
   const openDiscord = () => openExternalUrl("https://discord.gg/arRjVxx2y7");
   return (
     <section className="page-grid">
-      {!isPreviewMode && (
-        <div className="closed-beta-warning" role="note" aria-label="Closed beta data notice">
-          <AlertTriangle size={20} aria-hidden="true" />
-          <p><strong>Empire League is in closed beta.</strong> Elo ratings and match data will be reset when the platform fully launches.</p>
-        </div>
-      )}
       <div className="hero-panel">
         <div>
           <span className="eyebrow">Current Rating</span>
