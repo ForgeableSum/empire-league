@@ -85,6 +85,10 @@ find "`$webroot" -type f -exec chmod 0644 {} +
 rm -f '$remoteArchive'
 "@
 
+    # Bash receives this string directly over SSH and requires Unix line
+    # endings. PowerShell here-strings use CRLF on Windows by default.
+    $remoteCommand = $remoteCommand -replace "`r`n", "`n"
+
     Write-Host "Activating release..."
     & ssh @sshArgs "${User}@${Server}" $remoteCommand
     if ($LASTEXITCODE -ne 0) { throw "Remote activation failed." }
