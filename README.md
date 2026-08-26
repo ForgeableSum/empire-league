@@ -56,16 +56,6 @@ npm.cmd run test:replay-results
 npm.cmd run test:ratings
 ```
 
-## Secret-handling rules
-
-- Do not add host addresses, passwords, private keys, database credentials, or
-  authentication files to this README or to Git.
-- Prefer SSH keys protected by an agent or secure credential store.
-- Keep server environment files readable only by the service group and root.
-- Review `git diff` and `git status` before every commit and deployment.
-- Rotate a credential immediately if it is ever pasted into a tracked file or
-  committed.
-
 ## License
 
 Original Empire League source code and documentation are available under the
