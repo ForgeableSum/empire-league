@@ -4,7 +4,16 @@
   <img src="src/renderer/assets/el5-ranked.png" alt="Empire League logo" width="420">
 </p>
 
-Electron client and production matchmaking service for Empire League.
+Empire League is an open-source community desktop client and matchmaker for
+Age of Empires II: Definitive Edition. It provides ranked 1v1 and team
+matchmaking, curated map pools, seasonal leagues, parties, social features,
+custom games, and automated tournaments in a single Windows app.
+
+The client coordinates private AoE2 lobbies through the game's standard user
+interface, while the matchmaker handles queues, player ratings, and social
+services. Recorded games are used to verify match results before ratings and
+leaderboards are updated. Empire League is an independent community project
+and is not affiliated with Microsoft or World's Edge.
 
 This document is the deployment runbook. It intentionally contains no server
 addresses, passwords, private keys, or database credentials. Substitute values
