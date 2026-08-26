@@ -24,8 +24,9 @@ and is not affiliated with Microsoft or World's Edge.
   mandatory, themed restart prompt when ready.
 - Production clients connect to the public matchmaker hostname. Development
   uses `VITE_MATCHMAKER_URL`, falling back to `http://127.0.0.1:4317`.
-- The matchmaker runs as a systemd service behind Nginx and stores persistent
-  state in MariaDB.
+- The matchmaker uses the `mysql2` driver with a MySQL-compatible database.
+  Local Windows development uses MySQL 8, while production uses MariaDB behind
+  a systemd service and Nginx.
 
 ## Deployment
 
@@ -33,6 +34,24 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for website, Windows client, auto-updater,
 and matchmaker deployment instructions.
 
 ## Local development
+
+Local development requires Node.js, npm, and a MySQL-compatible database.
+MySQL 8 matches the Windows development environment; MariaDB is also supported
+and is used in production.
+
+Install dependencies and create a local environment file:
+
+```powershell
+npm.cmd install
+Copy-Item .env.example .env
+```
+
+Create the database and application user configured in `.env`, replace the
+example `DB_PASSWORD`, and apply the schema migrations:
+
+```powershell
+npm.cmd run db:migrate
+```
 
 Start the local matchmaker and Electron development client in separate shells:
 
