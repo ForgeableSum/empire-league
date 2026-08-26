@@ -1,5 +1,9 @@
 # Empire League
 
+<p align="center">
+  <img src="src/renderer/assets/el5-ranked.png" alt="Empire League logo" width="420">
+</p>
+
 Electron client and production matchmaking service for Empire League.
 
 This document is the deployment runbook. It intentionally contains no server
@@ -261,3 +265,10 @@ npm.cmd run test:ratings
 - Review `git diff` and `git status` before every commit and deployment.
 - Rotate a credential immediately if it is ever pasted into a tracked file or
   committed.
+
+## License
+
+Original Empire League source code and documentation are available under the
+[MIT License](LICENSE). The license does not grant rights to the Empire League
+name or logos, or to Microsoft, Age of Empires, and other third-party assets.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
