@@ -102,19 +102,22 @@ try {
 
     # Install binaries first and latest.yml last. Clients never see metadata for
     # an artifact that has not finished uploading.
-    $remoteCommand = @"
-set -eu
-install -d -m 0755 '$UpdateRoot'
-find '$remoteStage' -type f ! -name latest.yml -exec mv {} '$UpdateRoot/' \;
-cp '$UpdateRoot/$($installer.Name)' '$UpdateRoot/Empire-League-Setup.exe.new'
-chmod 0644 '$UpdateRoot/Empire-League-Setup.exe.new'
-mv '$UpdateRoot/Empire-League-Setup.exe.new' '$UpdateRoot/Empire-League-Setup.exe'
-mv '$remoteStage/latest.yml' '$UpdateRoot/latest.yml.new'
-chmod 0644 '$UpdateRoot'/*
-mv '$UpdateRoot/latest.yml.new' '$UpdateRoot/latest.yml'
-rmdir '$remoteStage'
-test -s '$UpdateRoot/latest.yml'
-"@
+    # Keep this as one LF-free command. Windows PowerShell here-strings use
+    # CRLF, and ssh can pass those carriage returns through to remote Bash.
+    $remoteCommand = @(
+        "set -eu",
+        "install -d -m 0755 '$UpdateRoot'",
+        "mv '$remoteStage/$($installer.Name)' '$UpdateRoot/'",
+        "mv '$remoteStage/$($blockmap.Name)' '$UpdateRoot/'",
+        "cp '$UpdateRoot/$($installer.Name)' '$UpdateRoot/Empire-League-Setup.exe.new'",
+        "chmod 0644 '$UpdateRoot/Empire-League-Setup.exe.new'",
+        "mv '$UpdateRoot/Empire-League-Setup.exe.new' '$UpdateRoot/Empire-League-Setup.exe'",
+        "mv '$remoteStage/latest.yml' '$UpdateRoot/latest.yml.new'",
+        "chmod 0644 '$UpdateRoot'/*",
+        "mv '$UpdateRoot/latest.yml.new' '$UpdateRoot/latest.yml'",
+        "rmdir '$remoteStage'",
+        "test -s '$UpdateRoot/latest.yml'"
+    ) -join "; "
     Write-Host "Publishing version $Version atomically..."
     & ssh @sshArgs "${User}@${Server}" $remoteCommand
     if ($LASTEXITCODE -ne 0) { throw "Remote release activation failed." }
