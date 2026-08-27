@@ -422,6 +422,10 @@ const automationSensitiveWidgetUiFiles = new Set([
   "screenselectscenario.json"
 ]);
 
+const knownAutomationBreakingModNames = new Set([
+  "no intro"
+]);
+
 function isAutomationSensitiveUiPath(path: string): boolean {
   const normalized = path.replace(/\\/g, "/").toLowerCase();
   const fileName = normalized.split("/").at(-1) ?? "";
@@ -492,6 +496,7 @@ async function detectEnabledUiModsDetailed(): Promise<DetectedUiMods> {
     if (!folder) continue;
     const displayName = String(mod.Title || folder.replace(/^\d+_/, "")).trim();
     if (displayName.toLowerCase() === empireLeagueMapsModName.toLowerCase()) continue;
+    const isKnownAutomationBreakingMod = knownAutomationBreakingModNames.has(displayName.toLowerCase());
     const indicatedCategory = pathParts.find((part) => ["local", "subscribed"].includes(part.toLowerCase()))?.toLowerCase();
     const categories = indicatedCategory === "local" || indicatedCategory === "subscribed"
       ? [indicatedCategory]
@@ -499,7 +504,7 @@ async function detectEnabledUiModsDetailed(): Promise<DetectedUiMods> {
     const hasSensitiveUi = (await Promise.all(categories.map((category) =>
       containsAutomationSensitiveUi(join(profilesRoot, profile.name, "mods", category, folder))
     ))).some(Boolean);
-    if (hasSensitiveUi) {
+    if (isKnownAutomationBreakingMod || hasSensitiveUi) {
       detected.set(String(mod.Path).replace(/\\/g, "/").toLowerCase(), displayName);
     }
   }
