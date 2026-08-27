@@ -5377,6 +5377,11 @@ body:has(.party-minimized) .chat-dock { max-width: calc(100vw - 620px); }
   padding: 24px;
 }
 
+.custom-create-card:has(.themed-select[open]),
+.custom-create-card .themed-select-field:has(.themed-select[open]) {
+  z-index: 30;
+}
+
 .custom-create-heading {
   display: flex;
   align-items: start;

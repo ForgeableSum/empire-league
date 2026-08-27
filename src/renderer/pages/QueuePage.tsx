@@ -586,6 +586,7 @@ export function QueuePage() {
                               onChange={selectCivilization}
                               disabled={preferencesLocked || civilizationMode !== "pick"}
                               searchable
+                              searchPlaceholder="Search civilizations..."
                               displayValue={civilizationMode === "pick" ? undefined : "N/A"}
                             />
                             <button

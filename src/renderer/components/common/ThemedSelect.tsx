@@ -14,6 +14,7 @@ export function ThemedSelect({
   className,
   disabled = false,
   searchable = false,
+  searchPlaceholder,
   displayValue
 }: {
   label: string;
@@ -23,6 +24,7 @@ export function ThemedSelect({
   className?: string;
   disabled?: boolean;
   searchable?: boolean;
+  searchPlaceholder?: string;
   displayValue?: string;
 }) {
   const dropdownRef = useRef<HTMLDetailsElement>(null);
@@ -59,7 +61,7 @@ export function ThemedSelect({
               aria-label={`Search ${label}`}
               autoFocus
               className="themed-select-search"
-              placeholder="Search civilizations..."
+              placeholder={searchPlaceholder}
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}

@@ -5,7 +5,7 @@ import ts from "typescript";
 const sourceRoot = join(process.cwd(), "src");
 const rendererRoot = join(sourceRoot, "renderer");
 const outputPath = join(rendererRoot, "i18n", "en.json");
-const translatedAttributeNames = new Set(["aria-label", "label", "placeholder", "title"]);
+const translatedAttributeNames = new Set(["aria-label", "label", "placeholder", "searchPlaceholder", "title"]);
 const translatedPropertyNames = new Set(["description", "detail", "eyebrow", "label", "message", "placeholder", "title"]);
 const translatedCallNames = new Set(["Error", "notify"]);
 const strings = new Set();

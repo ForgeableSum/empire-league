@@ -234,7 +234,14 @@ function ContentSelect({ label, items, value, onChange, displayName = (item) => 
     ...items.filter((item) => !item.enabled && !item.builtIn),
     ...items.filter((item) => item.builtIn)
   ];
-  return <div><ThemedSelect label={label} value={value} onChange={onChange} options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${displayName(item)}${item.enabled ? "" : ` (Disabled: ${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]} />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
+  return <div><ThemedSelect
+    label={label}
+    value={value}
+    onChange={onChange}
+    options={[{ value: "", label: `Choose ${label.toLowerCase()}…` }, ...orderedItems.map((item) => ({ value: item.id, label: `${displayName(item)}${item.enabled ? "" : ` (Disabled: ${item.modName ?? "enable in AoE2 Mods"})`}`, disabled: !item.enabled }))]}
+    searchable={label === "Map"}
+    searchPlaceholder="Search maps..."
+  />{value && <small>{items.find((item) => item.id === value)?.source}</small>}</div>;
 }
 
 export function NetworkLobby({ room, currentPlayerId, notify, weeklyView }: {
