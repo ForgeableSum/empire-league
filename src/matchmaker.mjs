@@ -72,11 +72,13 @@ import {
   PartyOperationError,
   validatePartyQueue
 } from "./party-system.mjs";
+import { createDiscordNotifier } from "./discord-notifier.mjs";
 
 const port = Number(process.env.EMPIRE_MATCHMAKER_PORT ?? 4317);
 const host = process.env.MATCHMAKER_HOST ?? "127.0.0.1";
 const publicBaseUrl = (process.env.PUBLIC_MATCHMAKER_URL ?? `http://127.0.0.1:${port}`).replace(/\/$/, "");
 const adminToken = process.env.MATCHMAKER_ADMIN_TOKEN ?? "";
+const discordNotifier = createDiscordNotifier();
 const adminSessions = new Map();
 const adminSessionLifetimeMs = 12 * 60 * 60 * 1000;
 const systemdManaged = Boolean(process.env.INVOCATION_ID || process.env.JOURNAL_STREAM);
@@ -1050,6 +1052,7 @@ async function resolveVerifiedResult(match, replay) {
   try {
     const ratings = await recordVerifiedMatchResult(match, replay);
     match.resultResolved = true;
+    void discordNotifier.matchCompleted(match, replay, ratings);
     for (const participant of matchTickets(match)) {
       emit(participant, {
         type: "result_verified",
@@ -2643,6 +2646,7 @@ async function handleRequest(request, response) {
       }
       try {
         await tryMatch(ticket);
+        void discordNotifier.playerLooking(ticket);
         return send(response, 201, {
           id: ticket.id,
           queueId: ticket.queueId,

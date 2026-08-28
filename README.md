@@ -33,6 +33,9 @@ and is not affiliated with Microsoft or World's Edge.
 See [DEPLOYMENT.md](DEPLOYMENT.md) for website, Windows client, auto-updater,
 and matchmaker deployment instructions.
 
+See [docs/discord-notifications.md](docs/discord-notifications.md) to enable
+ranked 1v1 queue and verified-result posts in a Discord channel.
+
 ## Local development
 
 Local development requires Node.js, npm, and a MySQL-compatible database.
@@ -73,6 +76,7 @@ npm.cmd run test:civilizations
 npm.cmd run test:replays
 npm.cmd run test:replay-results
 npm.cmd run test:ratings
+npm.cmd run test:discord
 ```
 
 ## License
