@@ -75,3 +75,53 @@ test("posts through Discord's bot channel endpoint", async () => {
   assert.equal(calls[0][0], "https://discord.com/api/v10/channels/123456789/messages");
   assert.equal(calls[0][1].headers.Authorization, "Bot test-token");
 });
+
+test("limits Discord posts involving a player to five per rolling minute", async () => {
+  const calls = [];
+  let currentTime = 1_000_000;
+  const notifier = createDiscordNotifier({
+    token: "test-token",
+    channelId: "123456789",
+    now: () => currentTime,
+    fetchImpl: async (...args) => {
+      calls.push(args);
+      return { ok: true, status: 200 };
+    }
+  });
+
+  for (let count = 0; count < 5; count += 1) {
+    assert.equal(await notifier.playerLooking(first), true);
+  }
+  assert.equal(await notifier.playerLooking(first), false);
+  assert.equal(calls.length, 5);
+
+  assert.equal(await notifier.playerLooking(second), true);
+  assert.equal(calls.length, 6);
+
+  currentTime += 60_001;
+  assert.equal(await notifier.playerLooking(first), true);
+  assert.equal(calls.length, 7);
+});
+
+test("a completed match is suppressed if either participant reached the limit", async () => {
+  let calls = 0;
+  const notifier = createDiscordNotifier({
+    token: "test-token",
+    channelId: "123456789",
+    fetchImpl: async () => {
+      calls += 1;
+      return { ok: true, status: 200 };
+    }
+  });
+
+  for (let count = 0; count < 5; count += 1) await notifier.playerLooking(first);
+  assert.equal(await notifier.matchCompleted(
+    match,
+    { winnerProfileId: 101, winningProfileIds: [101], durationMs: 60_000 },
+    {}
+  ), false);
+  assert.equal(calls, 5);
+
+  for (let count = 0; count < 5; count += 1) assert.equal(await notifier.playerLooking(second), true);
+  assert.equal(calls, 10);
+});

@@ -9,6 +9,11 @@ Team games, tournaments, custom games, expired matches, and contested results do
 not generate Discord messages. Discord failures are logged and never block
 matchmaking or result processing.
 
+Discord posts are limited to five per player in any rolling 60-second window.
+Queue posts count against the searching player. A completed-match post counts
+against both participants and is suppressed when either participant has reached
+the limit.
+
 ## Matchmaker configuration
 
 Set both values in the matchmaker's server-side environment:

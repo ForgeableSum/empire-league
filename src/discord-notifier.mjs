@@ -1,5 +1,7 @@
 const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
 const MAX_ATTEMPTS = 3;
+const DEFAULT_PLAYER_RATE_LIMIT = 5;
+const DEFAULT_PLAYER_RATE_WINDOW_MS = 60_000;
 
 export function isRanked1v1Ticket(ticket) {
   return ticket?.source !== "tournament"
@@ -89,13 +91,33 @@ export function createDiscordNotifier({
   token = process.env.DISCORD_BOT_TOKEN,
   channelId = process.env.DISCORD_CHANNEL_ID,
   fetchImpl = globalThis.fetch,
-  logger = console
+  logger = console,
+  now = Date.now,
+  playerRateLimit = DEFAULT_PLAYER_RATE_LIMIT,
+  playerRateWindowMs = DEFAULT_PLAYER_RATE_WINDOW_MS
 } = {}) {
   const enabled = Boolean(token && channelId);
   if (Boolean(token) !== Boolean(channelId)) {
     logger.warn("[discord] Notifications disabled: set both DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID.");
   }
   let pending = Promise.resolve();
+  const playerMessageTimes = new Map();
+
+  function reservePlayerRateLimit(playerIds) {
+    const timestamp = now();
+    const cutoff = timestamp - playerRateWindowMs;
+    const uniquePlayerIds = [...new Set(playerIds.filter(Boolean))];
+    const recentByPlayer = new Map();
+    for (const playerId of uniquePlayerIds) {
+      const recent = (playerMessageTimes.get(playerId) ?? []).filter((sentAt) => sentAt > cutoff);
+      recentByPlayer.set(playerId, recent);
+      if (recent.length >= playerRateLimit) return false;
+    }
+    for (const [playerId, recent] of recentByPlayer) {
+      playerMessageTimes.set(playerId, [...recent, timestamp]);
+    }
+    return true;
+  }
 
   async function send(payload) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
@@ -132,8 +154,9 @@ export function createDiscordNotifier({
     return false;
   }
 
-  function enqueue(payload) {
+  function enqueue(payload, playerIds) {
     if (!enabled) return Promise.resolve(false);
+    if (!reservePlayerRateLimit(playerIds)) return Promise.resolve(false);
     const notification = pending.then(() => send(payload));
     pending = notification.catch((error) => {
       logger.error("[discord] Could not post notification:", error instanceof Error ? error.message : error);
@@ -144,11 +167,16 @@ export function createDiscordNotifier({
   return {
     enabled,
     playerLooking(ticket) {
-      return isRanked1v1Ticket(ticket) ? enqueue(lookingForMatchPayload(ticket)) : Promise.resolve(false);
+      return isRanked1v1Ticket(ticket)
+        ? enqueue(lookingForMatchPayload(ticket), [ticket.player.id])
+        : Promise.resolve(false);
     },
     matchCompleted(match, replay, ratings) {
       return isRanked1v1Match(match)
-        ? enqueue(matchCompletedPayload(match, replay, ratings))
+        ? enqueue(
+            matchCompletedPayload(match, replay, ratings),
+            (match.participants ?? [match.host, match.guest]).map((ticket) => ticket.player.id)
+          )
         : Promise.resolve(false);
     }
   };
