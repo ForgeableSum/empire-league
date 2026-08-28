@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $archive = Join-Path ([System.IO.Path]::GetTempPath()) ("empire-league-matchmaker-{0}.tar.gz" -f [guid]::NewGuid())
+$activationScript = Join-Path ([System.IO.Path]::GetTempPath()) ("activate-matchmaker-{0}.sh" -f [guid]::NewGuid())
 $remoteArchive = "/tmp/empire-league-matchmaker.tar.gz"
 $releaseId = Get-Date -Format "yyyyMMddHHmmss"
 $sshArgs = @("-o", "StrictHostKeyChecking=accept-new")
@@ -51,7 +52,13 @@ try {
     Write-Host "Uploading matchmaker release..."
     & scp @sshArgs $archive "${User}@${Server}:$remoteArchive"
     if ($LASTEXITCODE -ne 0) { throw "Matchmaker archive upload failed." }
-    & scp @sshArgs (Join-Path $PSScriptRoot "activate-matchmaker.sh") "${User}@${Server}:/tmp/activate-matchmaker.sh"
+    $activationSource = Get-Content -Raw (Join-Path $PSScriptRoot "activate-matchmaker.sh")
+    [System.IO.File]::WriteAllText(
+        $activationScript,
+        $activationSource.Replace("`r`n", "`n"),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    & scp @sshArgs $activationScript "${User}@${Server}:/tmp/activate-matchmaker.sh"
     if ($LASTEXITCODE -ne 0) { throw "Matchmaker upload failed." }
 
     Write-Host "Activating and restarting matchmaker..."
@@ -62,6 +69,7 @@ try {
 finally {
     Pop-Location
     Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $activationScript -Force -ErrorAction SilentlyContinue
     if ($askPassPath -and (Test-Path -LiteralPath $askPassPath)) { Remove-Item -LiteralPath $askPassPath -Force }
     if ($null -eq $previousAskPass) { Remove-Item Env:SSH_ASKPASS -ErrorAction SilentlyContinue } else { $env:SSH_ASKPASS = $previousAskPass }
     if ($null -eq $previousAskPassRequirement) { Remove-Item Env:SSH_ASKPASS_REQUIRE -ErrorAction SilentlyContinue } else { $env:SSH_ASKPASS_REQUIRE = $previousAskPassRequirement }
