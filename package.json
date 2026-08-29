@@ -33,7 +33,8 @@
     "test:custom-lobbies": "node --test src/custom-lobby-slots.test.mjs",
     "test:weekly": "node --test src/weekly-rotation.test.mjs",
     "test:tournaments": "node --test src/tournament-bracket.test.mjs src/tournament-chat.test.mjs src/tournament-map.test.mjs src/tournament-password.test.mjs src/tournament-spectator.test.mjs",
-    "test:translations": "node scripts/extract-ui-strings.mjs --check && node scripts/audit-ui-translations.mjs"
+    "test:translations": "node scripts/extract-ui-strings.mjs --check && node scripts/audit-ui-translations.mjs",
+    "test:ui-mods": "node --test src/ui-mod-detection.test.mjs"
   },
   "dependencies": {
     "aoe2rec-js": "^0.1.22",
