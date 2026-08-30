@@ -4,6 +4,7 @@ import {
   createDiscordNotifier,
   isRanked1v1Match,
   isRanked1v1Ticket,
+  leaderboardPayload,
   lookingForMatchPayload,
   matchCompletedPayload
 } from "./discord-notifier.mjs";
@@ -53,6 +54,24 @@ test("builds safe Discord embeds for queue and completed-match messages", () => 
   assert.deepEqual(completed.embeds[0].fields.map((field) => field.value), [
     "1,217 Elo (+17)", "1,163 Elo (-17)", "Arabia", "25:25"
   ]);
+});
+
+test("formats the top 50 leaderboard as two safe Discord embeds", () => {
+  const players = Array.from({ length: 50 }, (_, index) => ({
+    id: `player-${index + 1}`,
+    rank: index + 1,
+    displayName: index === 0 ? "Champion *One*" : `Player ${index + 1}`,
+    rating: 2000 - index * 10,
+    wins: 10 + index,
+    losses: index
+  }));
+  const payload = leaderboardPayload(players, new Date("2026-08-29T12:00:00.000Z"));
+  assert.deepEqual(payload.allowed_mentions, { parse: [] });
+  assert.equal(payload.embeds.length, 2);
+  assert.match(payload.embeds[0].title, /1v1 Top 50/);
+  assert.match(payload.embeds[0].description, /🥇 \*\*Champion \\\*One\\\*\*\*.*2,000 Elo.*10W–0L.*100\.0%/);
+  assert.match(payload.embeds[1].description, /\*\*#50\*\*.*Player 50/);
+  assert.equal(payload.embeds[1].timestamp, "2026-08-29T12:00:00.000Z");
 });
 
 test("posts through Discord's bot channel endpoint", async () => {
@@ -124,4 +143,24 @@ test("a completed match is suppressed if either participant reached the limit", 
 
   for (let count = 0; count < 5; count += 1) assert.equal(await notifier.playerLooking(second), true);
   assert.equal(calls, 10);
+});
+
+test("posts changed leaderboards to the dedicated channel and suppresses duplicates", async () => {
+  const calls = [];
+  const notifier = createDiscordNotifier({
+    token: "test-token",
+    channelId: "123456789",
+    leaderboardChannelId: "1543424444935045260",
+    fetchImpl: async (...args) => {
+      calls.push(args);
+      return { ok: true, status: 200 };
+    }
+  });
+  const players = [{ id: "one", rank: 1, displayName: "Player One", rating: 1200, wins: 1, losses: 0 }];
+  assert.equal(notifier.leaderboardEnabled, true);
+  assert.equal(await notifier.leaderboard(players), true);
+  assert.equal(await notifier.leaderboard(players), false);
+  assert.equal(await notifier.leaderboard([{ ...players[0], rating: 1216, wins: 2 }]), true);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][0], "https://discord.com/api/v10/channels/1543424444935045260/messages");
 });

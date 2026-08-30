@@ -2,6 +2,7 @@ const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
 const MAX_ATTEMPTS = 3;
 const DEFAULT_PLAYER_RATE_LIMIT = 5;
 const DEFAULT_PLAYER_RATE_WINDOW_MS = 60_000;
+const DEFAULT_LEADERBOARD_CHANNEL_ID = "1543424444935045260";
 
 export function isRanked1v1Ticket(ticket) {
   return ticket?.source !== "tournament"
@@ -30,6 +31,36 @@ function formatDuration(durationMs) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return `${minutes}:${String(remainder).padStart(2, "0")}`;
+}
+
+function leaderboardEntry(player) {
+  const rank = Number(player.rank);
+  const rankLabel = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `**#${rank}**`;
+  const wins = Math.max(0, Number(player.wins) || 0);
+  const losses = Math.max(0, Number(player.losses) || 0);
+  const games = wins + losses;
+  const winRate = games ? `${((wins / games) * 100).toFixed(1)}%` : "0%";
+  const displayName = escapeMarkdown(player.displayName).slice(0, 32).replace(/\\$/, "");
+  return `${rankLabel} **${displayName}** — **${formatRating(player.rating)} Elo** · ${wins}W–${losses}L · ${winRate}`;
+}
+
+export function leaderboardPayload(players, generatedAt = new Date()) {
+  const entries = players.slice(0, 50).map(leaderboardEntry);
+  const sections = entries.length
+    ? [entries.slice(0, 25), entries.slice(25, 50)].filter((section) => section.length)
+    : [["*No eligible players have completed an Empire League match yet.*"]];
+  return {
+    allowed_mentions: { parse: [] },
+    embeds: sections.map((section, index) => ({
+      title: index === 0 ? "Empire League · 1v1 Top 50" : "Ranks 26–50",
+      description: section.join("\n"),
+      color: index === 0 ? 0xc58d45 : 0x8c642e,
+      ...(index === sections.length - 1 ? {
+        footer: { text: "Only players with a completed Empire League match are ranked." },
+        timestamp: generatedAt.toISOString()
+      } : {})
+    }))
+  };
 }
 
 function ratingLine(ticket, ratings) {
@@ -90,6 +121,7 @@ function wait(milliseconds) {
 export function createDiscordNotifier({
   token = process.env.DISCORD_BOT_TOKEN,
   channelId = process.env.DISCORD_CHANNEL_ID,
+  leaderboardChannelId = process.env.DISCORD_LEADERBOARD_CHANNEL_ID ?? DEFAULT_LEADERBOARD_CHANNEL_ID,
   fetchImpl = globalThis.fetch,
   logger = console,
   now = Date.now,
@@ -102,6 +134,8 @@ export function createDiscordNotifier({
   }
   let pending = Promise.resolve();
   const playerMessageTimes = new Map();
+  let lastLeaderboardSignature = null;
+  let queuedLeaderboardSignature = null;
 
   function reservePlayerRateLimit(playerIds) {
     const timestamp = now();
@@ -119,13 +153,13 @@ export function createDiscordNotifier({
     return true;
   }
 
-  async function send(payload) {
+  async function send(payload, targetChannelId) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10_000);
       try {
         const response = await fetchImpl(
-          `${DISCORD_API_BASE_URL}/channels/${encodeURIComponent(channelId)}/messages`,
+          `${DISCORD_API_BASE_URL}/channels/${encodeURIComponent(targetChannelId)}/messages`,
           {
             method: "POST",
             headers: {
@@ -154,10 +188,10 @@ export function createDiscordNotifier({
     return false;
   }
 
-  function enqueue(payload, playerIds) {
-    if (!enabled) return Promise.resolve(false);
+  function enqueue(payload, playerIds, targetChannelId = channelId) {
+    if (!token || !targetChannelId) return Promise.resolve(false);
     if (!reservePlayerRateLimit(playerIds)) return Promise.resolve(false);
-    const notification = pending.then(() => send(payload));
+    const notification = pending.then(() => send(payload, targetChannelId));
     pending = notification.catch((error) => {
       logger.error("[discord] Could not post notification:", error instanceof Error ? error.message : error);
     });
@@ -166,6 +200,7 @@ export function createDiscordNotifier({
 
   return {
     enabled,
+    leaderboardEnabled: Boolean(token && leaderboardChannelId),
     playerLooking(ticket) {
       return isRanked1v1Ticket(ticket)
         ? enqueue(lookingForMatchPayload(ticket), [ticket.player.id])
@@ -178,6 +213,19 @@ export function createDiscordNotifier({
             (match.participants ?? [match.host, match.guest]).map((ticket) => ticket.player.id)
           )
         : Promise.resolve(false);
+    },
+    async leaderboard(players) {
+      if (!token || !leaderboardChannelId) return false;
+      const topPlayers = players.slice(0, 50);
+      const signature = JSON.stringify(topPlayers.map((player) => [
+        player.id, player.rank, player.displayName, player.rating, player.wins, player.losses
+      ]));
+      if (signature === lastLeaderboardSignature || signature === queuedLeaderboardSignature) return false;
+      queuedLeaderboardSignature = signature;
+      const posted = await enqueue(leaderboardPayload(topPlayers), [], leaderboardChannelId);
+      if (posted) lastLeaderboardSignature = signature;
+      if (queuedLeaderboardSignature === signature) queuedLeaderboardSignature = null;
+      return posted;
     }
   };
 }

@@ -473,6 +473,17 @@ async function getCachedLeaderboard(page, division, mode) {
   return promise;
 }
 
+async function publishDiscordLeaderboard() {
+  if (!discordNotifier.leaderboardEnabled) return false;
+  try {
+    const leaderboard = await getLeaderboard(1, 50, "all", "solo");
+    return await discordNotifier.leaderboard(leaderboard.players);
+  } catch (error) {
+    console.error("[discord] Could not publish leaderboard:", error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
 function send(response, status, body) {
   response.writeHead(status, {
     "Access-Control-Allow-Origin": "*",
@@ -1053,6 +1064,10 @@ async function resolveVerifiedResult(match, replay) {
     const ratings = await recordVerifiedMatchResult(match, replay);
     match.resultResolved = true;
     void discordNotifier.matchCompleted(match, replay, ratings);
+    if (match.ratingEligible !== false) {
+      leaderboardCache.clear();
+      void publishDiscordLeaderboard();
+    }
     for (const participant of matchTickets(match)) {
       emit(participant, {
         type: "result_verified",
@@ -3423,6 +3438,7 @@ function escapeHtml(value) {
 
 const databaseInfo = await checkDatabase();
 console.log(`[matchmaker] MySQL ${databaseInfo.version} connected (${databaseInfo.databaseName}, schema ${databaseInfo.schemaVersion})`);
+void publishDiscordLeaderboard();
 const recoveredTournamentIds = await recoverInterruptedTournamentMatches();
 if (recoveredTournamentIds.length) {
   console.warn(`[matchmaker] Recovered ${recoveredTournamentIds.length} interrupted tournament(s) with a fresh ready check.`);
