@@ -1162,6 +1162,9 @@ export async function getLeaderboard(page = 1, pageSize = 100, division = "all",
   const winsColumn = safeMode === "team" ? "team_wins" : "wins";
   const lossesColumn = safeMode === "team" ? "team_losses" : "losses";
   const streakColumn = safeMode === "team" ? "team_streak" : "streak";
+  // Seeded/imported records live in the legacy columns. Requiring an Empire
+  // League result keeps players who have only signed in off both ladders.
+  const leaderboardEligibility = "wins + losses + team_wins + team_losses > 0";
   const conditions = [];
   const filterValues = [];
   if (range?.minimum !== undefined) {
@@ -1186,6 +1189,7 @@ export async function getLeaderboard(page = 1, pageSize = 100, division = "all",
               ${streakColumn} AS ladder_streak,
               RANK() OVER (ORDER BY ${ratingColumn} DESC) AS ladder_rank
        FROM players
+       WHERE ${leaderboardEligibility}
      ) AS ranked_players
      ${whereClause}
      ORDER BY ladder_rating DESC, ladder_wins DESC, display_name ASC
@@ -1193,7 +1197,13 @@ export async function getLeaderboard(page = 1, pageSize = 100, division = "all",
       filterValues
     ),
     database.query(
-      `SELECT COUNT(*) AS total FROM (SELECT ${ratingColumn} AS ladder_rating FROM players) AS ranked_players ${whereClause}`,
+      `SELECT COUNT(*) AS total
+       FROM (
+         SELECT ${ratingColumn} AS ladder_rating
+         FROM players
+         WHERE ${leaderboardEligibility}
+       ) AS ranked_players
+       ${whereClause}`,
       filterValues
     )
   ]);
