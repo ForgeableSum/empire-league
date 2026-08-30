@@ -145,12 +145,20 @@ test("a completed match is suppressed if either participant reached the limit", 
   assert.equal(calls, 10);
 });
 
-test("posts changed leaderboards to the dedicated channel and suppresses duplicates", async () => {
+test("posts leaderboards to the dedicated channel at most once every five minutes", async () => {
   const calls = [];
+  const scheduled = [];
+  let currentTime = 1_000_000;
   const notifier = createDiscordNotifier({
     token: "test-token",
     channelId: "123456789",
     leaderboardChannelId: "1543424444935045260",
+    now: () => currentTime,
+    schedule: (callback, delay) => {
+      const timer = { callback, delay, unref() {} };
+      scheduled.push(timer);
+      return timer;
+    },
     fetchImpl: async (...args) => {
       calls.push(args);
       return { ok: true, status: 200 };
@@ -160,7 +168,15 @@ test("posts changed leaderboards to the dedicated channel and suppresses duplica
   assert.equal(notifier.leaderboardEnabled, true);
   assert.equal(await notifier.leaderboard(players), true);
   assert.equal(await notifier.leaderboard(players), false);
-  assert.equal(await notifier.leaderboard([{ ...players[0], rating: 1216, wins: 2 }]), true);
+  assert.equal(await notifier.leaderboard([{ ...players[0], rating: 1216, wins: 2 }]), false);
+  assert.equal(await notifier.leaderboard([{ ...players[0], rating: 1232, wins: 3 }]), false);
+  assert.equal(calls.length, 1);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delay, 5 * 60_000);
+
+  currentTime += 5 * 60_000;
+  await scheduled[0].callback();
   assert.equal(calls.length, 2);
   assert.equal(calls[0][0], "https://discord.com/api/v10/channels/1543424444935045260/messages");
+  assert.match(JSON.parse(calls[1][1].body).embeds[0].description, /1,232 Elo.*3W/);
 });

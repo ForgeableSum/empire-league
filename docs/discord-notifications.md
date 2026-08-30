@@ -9,7 +9,8 @@ The matchmaker posts ranked activity and a live leaderboard to Discord:
 The leaderboard is sent to channel `1543424444935045260` by default. It includes
 only players who have completed at least one rated Empire League match; seeded
 and imported ladder history does not make an account eligible. Unchanged top-50
-snapshots are suppressed.
+snapshots are suppressed. Leaderboard posts are limited to one every five
+minutes; changes during the cooldown are combined into the newest snapshot.
 
 Team games, tournaments, custom games, expired matches, and contested results do
 not generate activity messages. A rated team result can still make a previously

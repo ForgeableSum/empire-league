@@ -2,6 +2,7 @@ const DISCORD_API_BASE_URL = "https://discord.com/api/v10";
 const MAX_ATTEMPTS = 3;
 const DEFAULT_PLAYER_RATE_LIMIT = 5;
 const DEFAULT_PLAYER_RATE_WINDOW_MS = 60_000;
+const DEFAULT_LEADERBOARD_RATE_WINDOW_MS = 5 * 60_000;
 const DEFAULT_LEADERBOARD_CHANNEL_ID = "1543424444935045260";
 
 export function isRanked1v1Ticket(ticket) {
@@ -125,8 +126,10 @@ export function createDiscordNotifier({
   fetchImpl = globalThis.fetch,
   logger = console,
   now = Date.now,
+  schedule = setTimeout,
   playerRateLimit = DEFAULT_PLAYER_RATE_LIMIT,
-  playerRateWindowMs = DEFAULT_PLAYER_RATE_WINDOW_MS
+  playerRateWindowMs = DEFAULT_PLAYER_RATE_WINDOW_MS,
+  leaderboardRateWindowMs = DEFAULT_LEADERBOARD_RATE_WINDOW_MS
 } = {}) {
   const enabled = Boolean(token && channelId);
   if (Boolean(token) !== Boolean(channelId)) {
@@ -136,6 +139,9 @@ export function createDiscordNotifier({
   const playerMessageTimes = new Map();
   let lastLeaderboardSignature = null;
   let queuedLeaderboardSignature = null;
+  let lastLeaderboardPostAt = Number.NEGATIVE_INFINITY;
+  let scheduledLeaderboard = null;
+  let leaderboardTimer = null;
 
   function reservePlayerRateLimit(playerIds) {
     const timestamp = now();
@@ -198,6 +204,15 @@ export function createDiscordNotifier({
     return notification.catch(() => false);
   }
 
+  async function postLeaderboard(snapshot) {
+    queuedLeaderboardSignature = snapshot.signature;
+    lastLeaderboardPostAt = now();
+    const posted = await enqueue(leaderboardPayload(snapshot.players), [], leaderboardChannelId);
+    if (posted) lastLeaderboardSignature = snapshot.signature;
+    if (queuedLeaderboardSignature === snapshot.signature) queuedLeaderboardSignature = null;
+    return posted;
+  }
+
   return {
     enabled,
     leaderboardEnabled: Boolean(token && leaderboardChannelId),
@@ -220,12 +235,28 @@ export function createDiscordNotifier({
       const signature = JSON.stringify(topPlayers.map((player) => [
         player.id, player.rank, player.displayName, player.rating, player.wins, player.losses
       ]));
-      if (signature === lastLeaderboardSignature || signature === queuedLeaderboardSignature) return false;
-      queuedLeaderboardSignature = signature;
-      const posted = await enqueue(leaderboardPayload(topPlayers), [], leaderboardChannelId);
-      if (posted) lastLeaderboardSignature = signature;
-      if (queuedLeaderboardSignature === signature) queuedLeaderboardSignature = null;
-      return posted;
+      if (signature === lastLeaderboardSignature || signature === queuedLeaderboardSignature) {
+        scheduledLeaderboard = null;
+        return false;
+      }
+      if (signature === scheduledLeaderboard?.signature) return false;
+
+      const snapshot = { players: topPlayers, signature };
+      const delay = Math.max(0, lastLeaderboardPostAt + leaderboardRateWindowMs - now());
+      if (delay === 0 && !queuedLeaderboardSignature) return postLeaderboard(snapshot);
+
+      scheduledLeaderboard = snapshot;
+      if (!leaderboardTimer) {
+        leaderboardTimer = schedule(async () => {
+          leaderboardTimer = null;
+          const latest = scheduledLeaderboard;
+          scheduledLeaderboard = null;
+          if (!latest || latest.signature === lastLeaderboardSignature) return;
+          await postLeaderboard(latest);
+        }, delay);
+        leaderboardTimer.unref?.();
+      }
+      return false;
     }
   };
 }
