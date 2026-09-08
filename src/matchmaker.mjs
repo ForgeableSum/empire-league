@@ -2880,6 +2880,27 @@ async function handleRequest(request, response) {
       return send(response, 200, { published: true });
     }
 
+    const setupProgressMatch = url.pathname.match(/^\/matches\/([^/]+)\/setup-progress$/);
+    if (request.method === "POST" && setupProgressMatch) {
+      const match = matches.get(decodeURIComponent(setupProgressMatch[1]));
+      const body = await readJson(request);
+      if (!match || body.ticketId !== match.host.id || match.host.player.id !== authenticatedPlayer.id) {
+        return send(response, 403, { error: "only the host may report lobby setup progress" });
+      }
+      if (match.lobby || match.accepted.size !== matchTickets(match).length) {
+        return send(response, 409, { error: "host lobby setup is not active" });
+      }
+      const now = Date.now();
+      if (now - (match.lastSetupProgressAt ?? 0) >= 4000) {
+        match.lastSetupProgressAt = now;
+        refreshMatchSetupTimeout(match);
+        for (const guest of matchGuests(match)) {
+          emit(guest, { type: "lobby_setup_progress", matchId: match.id });
+        }
+      }
+      return send(response, 200, { published: true });
+    }
+
     const setupEstimateMatch = url.pathname.match(/^\/matches\/([^/]+)\/setup-estimate$/);
     if (request.method === "POST" && setupEstimateMatch) {
       const match = matches.get(decodeURIComponent(setupEstimateMatch[1]));

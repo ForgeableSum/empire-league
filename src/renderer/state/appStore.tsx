@@ -1,3 +1,4 @@
+import { LobbySetupProgressGate } from "../../shared/lobbySetupProgress";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { aoe2UiManifest } from "../../shared/aoe2UiManifest";
@@ -321,6 +322,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const customLobbyAutomationStepsRef = useRef(new Set<string>());
   const lobbyRecoveryInFlightRef = useRef(false);
   const matchedSessionRef = useRef<MatchSession | null>(null);
+  const hostSetupProgressRef = useRef<{ matchId: string; gate: LobbySetupProgressGate } | null>(null);
   const roomSetupTimeoutRef = useRef<number | null>(null);
   const roomSetupWatchdogDurationRef = useRef(roomSetupTimeoutMs);
   const replayResultInFlightRef = useRef(false);
@@ -996,6 +998,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return window.electronApi?.onAoe2AutomationLog((message) => {
       log(`[AoE2 automation] ${message}`);
       if (isLobbyAutomationProgress(message)) touchRoomSetupWatchdog();
+      const progress = hostSetupProgressRef.current;
+      if (progress && matchedSessionRef.current?.id === progress.matchId
+        && progress.gate.accept(message, performance.now())) {
+        void services.matchmaking.reportLobbySetupProgress(progress.matchId).catch((error: unknown) => {
+          if (matchedSessionRef.current?.id === progress.matchId) {
+            log("Could not relay host setup progress: " + (error instanceof Error ? error.message : "unknown error"));
+          }
+        });
+      }
     });
   }, []);
 
@@ -1060,6 +1071,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ): Promise<void> {
     if (lobbyRecoveryInFlightRef.current) return;
     lobbyRecoveryInFlightRef.current = true;
+    hostSetupProgressRef.current = null;
     const criticalFailure: AutomationFailureReport | undefined = options.criticalFailure
       ? { severity: "critical", ...options.criticalFailure, message }
       : undefined;
@@ -1299,12 +1311,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }));
           log("Both players accepted");
           if (event.role === "host" && window.electronApi) {
+            hostSetupProgressRef.current = { matchId: acceptedSession.id, gate: new LobbySetupProgressGate() };
             log("Assigned as host; waiting for AoE2 lobby automation to settle");
             lobbyAutomationRef.current = delayForLobbyInput(lobbySetupTiming.hostLobbyAutomationSettleMs)
               .then(async () => {
+                if (matchedSessionRef.current?.id !== acceptedSession.id) throw new Error("Lobby setup cancelled.");
                 auditLobbyPhase("preflight-start");
                 setState((previous) => ({ ...previous, roomSetupMilestone: "Verifying AoE2 main menu" }));
                 const prepared = await prepareAoe2ForAutomation("host-start");
+                if (matchedSessionRef.current?.id !== acceptedSession.id) throw new Error("Lobby setup cancelled.");
                 auditLobbyPhase(prepared ? "preflight-complete" : "preflight-failed");
                 if (!prepared) throw new Error("AoE2 could not be prepared at the main menu for lobby automation.");
                 void services.matchmaking.reportLobbySetupEstimate(
@@ -1329,6 +1344,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               });
             void prepareLobby(acceptedSession);
           }
+        }
+        if (event.type === "lobby_setup_progress") {
+          if (event.matchId !== matchedSessionRef.current?.id
+            || lobbyTimingAuditRef.current?.role !== "guest"
+            || stateRef.current.activeMatch?.lobby) return;
+          auditLobbyPhase("host-setup-progress");
         }
         if (event.type === "lobby_setup_estimate") {
           if (event.matchId !== matchedSessionRef.current?.id) return;
@@ -1874,16 +1895,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   async function prepareLobby(matchOverride?: MatchSession): Promise<void> {
     const match = matchOverride ?? state.activeMatch;
     if (!match?.selectedMap) return;
+    const isActive = () => matchedSessionRef.current?.id === match.id;
+    if (!isActive()) return;
     try {
       setPage("ranked");
       setState((previous) => ({ ...previous, queueStatus: "creating_lobby" }));
       log("Detecting AoE2 installation");
       const install = await services.game.detectInstallation();
+      if (!isActive()) return;
       if (!install.installed) throw new Error("AoE2 installation not detected.");
       log("Installation detected");
       await services.game.detectRunningGame();
       log("AoE2 process found");
       await services.game.launchGame();
+      if (!isActive()) return;
       log("Opening multiplayer menu");
       if (window.electronApi) {
         const automation = await (
@@ -1897,6 +1922,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               : "ranked"
           )
         );
+        if (!isActive()) return;
         lobbyAutomationRef.current = null;
         if (!automation.sent) throw new Error(automation.message);
         if (!automation.lobbyUri) throw new Error("AoE2 did not copy a valid lobby URI.");
@@ -1910,6 +1936,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             selection,
             1
           );
+          if (!isActive()) return;
           if (!selected.sent) throw new Error(selected.message);
           if (selected.usedRandomCivilizationFallback) {
             notify("The civilization you selected requires a DLC purchase. Choosing random instead.", "warning");
@@ -1923,6 +1950,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const team = match.team ?? 1;
           log(`Selecting Team ${team} for host lobby slot ${lobbySlot}`);
           const selectedTeam = await window.electronApi.selectAoe2Team(team, lobbySlot);
+          if (!isActive()) return;
           if (!selectedTeam.sent) throw new Error(selectedTeam.message);
         }
         log(`Lobby URI discovered: ${automation.lobbyUri}`);
@@ -1936,9 +1964,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? ((match.queue.teamSizes?.[0] ?? 2) * 2) as 4 | 6 | 8
             : 2
         });
+        if (!isActive()) return;
         const discoveredLobby = { ...lobbyResult.lobby, platformLobbyId: automation.lobbyUri };
         log(`Lobby created: ${discoveredLobby.platformLobbyId}`);
         await services.matchmaking.publishLobby(match.id, discoveredLobby);
+        if (!isActive()) return;
+        hostSetupProgressRef.current = null;
         log("Lobby details published to opponent");
         clearRoomSetupWatchdog();
         setState((previous) => ({
@@ -1982,6 +2013,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : null
       }));
     } catch (error) {
+      if (!isActive()) return;
       const message = error instanceof Error ? error.message : "We could not create the AoE2 lobby.";
       log(`Lobby preparation failed: ${message}`);
       const queue = match.queue;

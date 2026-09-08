@@ -137,6 +137,7 @@ let aoe2WindowIsOffscreen = false;
 let replayEndPoller: NodeJS.Timeout | undefined;
 let replayFocusTimers: NodeJS.Timeout[] = [];
 let returnToMenuPoller: NodeJS.Timeout | undefined;
+let lobbyCloseGeneration = 0;
 let returnToMenuWatchGeneration = 0;
 let replayDetectionGeneration = 0;
 let replayAlreadyRecoveredAtMainMenu = false;
@@ -3006,6 +3007,7 @@ export function registerGameHandlers(): void {
   });
 
   ipcMain.handle("game:close", async (_event, force: boolean) => {
+    lobbyCloseGeneration += 1;
     const processStatus = await detectAoe2Process();
     if (!processStatus.running || !processStatus.pid) {
       endAoe2MatchAudioSuppression();
@@ -4236,7 +4238,12 @@ export function registerGameHandlers(): void {
       return { sent: false, message: "That civilization selection is not supported." };
     }
 
+    const generation = lobbyCloseGeneration;
+    const assertActive = () => {
+      if (generation !== lobbyCloseGeneration) throw new Error("Lobby setup cancelled.");
+    };
     const emitLog = (message: string) => {
+      assertActive();
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
@@ -4245,11 +4252,13 @@ export function registerGameHandlers(): void {
       ? await loadAoe2Localization(installation.path)
       : { languageCode: "en", names: {} as Record<string, string> };
     const localizedSelection = localization.names[selection] ?? selection;
+    if (generation !== lobbyCloseGeneration) return { sent: false, message: "Lobby setup cancelled." };
     const appWindow = BrowserWindow.fromWebContents(event.sender);
     if (appWindow) showAutomationCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
       const gameProcess = await prepareHiddenAoe2WindowBehind();
+      assertActive();
       if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
@@ -4258,6 +4267,8 @@ export function registerGameHandlers(): void {
       emitLog(`CIV_SELECT|Step=Open|Slot=${slot}|DesignPoint=${slotX},${slotY}|${slotResult.detail}`);
       if (!slotResult.sent) throw new Error(`Lobby slot ${slot} civilization button could not be opened.`);
       await delay(aoe2UiManifest.civilizationSlotButtons.settleMs);
+
+      assertActive();
 
       let civilizationX: number;
       let civilizationY: number;
@@ -4287,6 +4298,8 @@ export function registerGameHandlers(): void {
         if (!fallbackSearchClear.sent) throw new Error("The civilization search could not be cleared for fallback.");
         await delay(aoe2UiManifest.civilizationPicker.searchSettleMs);
 
+        assertActive();
+
         const [randomX, randomY] = civilizationDesignPoint("Random");
         let randomSelected = false;
         for (let attempt = 1; attempt <= 1 && !randomSelected; attempt += 1) {
@@ -4306,6 +4319,8 @@ export function registerGameHandlers(): void {
           );
           if (!randomTile.sent) continue;
           await delay(aoe2UiManifest.civilizationPicker.selectionSettleMs);
+
+          assertActive();
           let randomState = readAoe2CivilizationTileState(gameProcess.pid!, randomX, randomY);
           emitLog(
             `CIV_SELECT|Step=FallbackRandomVerify|FailedSelection=${selection}|Reason=${reason}`
@@ -4320,6 +4335,8 @@ export function registerGameHandlers(): void {
             );
             if (!randomEnter.sent) continue;
             await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+
+            assertActive();
             const enterPickerState = readAoe2CivilizationPickerState(gameProcess.pid!);
             emitLog(
               `CIV_SELECT|Step=FallbackRandomEnterVerify|FailedSelection=${selection}|Reason=${reason}`
@@ -4365,6 +4382,8 @@ export function registerGameHandlers(): void {
         if (!randomConfirm.sent) throw new Error("Random civilization confirmation could not be clicked.");
         await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
+        assertActive();
+
         if (explicitRandom) {
           const readyDesignY = useHostLayout
             ? aoe2UiManifest.actions.hostReady.point[1]
@@ -4379,6 +4398,8 @@ export function registerGameHandlers(): void {
             emitLog(`CIV_SELECT|Step=ExplicitRandomConfirmEnter|Slot=${slot}|${confirmEnter.detail}`);
             if (!confirmEnter.sent) throw new Error("Random civilization confirmation Enter could not be sent.");
             await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+
+            assertActive();
             readyState = readAoe2ReadyState(gameProcess.pid!, readyDesignY, {
               minimumVoteChannel: 80,
               minimumVotes: 5
@@ -4408,6 +4429,8 @@ export function registerGameHandlers(): void {
           );
           if (!randomEnter.sent) throw new Error("Random civilization confirmation Enter could not be sent.");
           await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+
+          assertActive();
           fallbackPickerState = readAoe2CivilizationPickerState(gameProcess.pid!);
         }
         if (fallbackPickerState.state !== "closed") {
@@ -4448,6 +4471,8 @@ export function registerGameHandlers(): void {
         emitLog(`CIV_SELECT|Step=SearchText|Selection=${selection}|Localized=${localizedSelection}|Language=${localization.languageCode}|${searchText.detail}`);
         if (!searchText.sent) throw new Error(`${selection} could not be entered in the civilization search.`);
         await delay(aoe2UiManifest.civilizationPicker.searchSettleMs);
+
+        assertActive();
         [civilizationX, civilizationY] = aoe2UiManifest.civilizationPicker.filteredCivilizationPoint;
       } else {
         [civilizationX, civilizationY] = civilizationDesignPoint(selection);
@@ -4471,6 +4496,8 @@ export function registerGameHandlers(): void {
         );
         if (!tileResult.sent) continue;
         await delay(aoe2UiManifest.civilizationPicker.selectionSettleMs);
+
+        assertActive();
         const tileState = readAoe2CivilizationTileState(gameProcess.pid, civilizationX, civilizationY);
         emitLog(`CIV_SELECT|Step=TileVerify|Selection=${selection}|Attempt=${attempt}|${tileState.detail}`);
         tileSelected = tileState.state === "selected";
@@ -4483,6 +4510,8 @@ export function registerGameHandlers(): void {
           emitLog(`CIV_SELECT|Step=TileEnter|Selection=${selection}|Attempt=${attempt}|${tileEnter.detail}`);
           if (!tileEnter.sent) continue;
           await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+
+          assertActive();
           const enterPickerState = usesFilteredPicker
             ? readAoe2CivilizationPickerState(gameProcess.pid)
             : null;
@@ -4522,6 +4551,8 @@ export function registerGameHandlers(): void {
       if (!confirmClick.sent) throw new Error("The civilization Confirm button could not be clicked.");
       await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
+      assertActive();
+
       const pickerState = usesFilteredPicker
         ? readAoe2CivilizationPickerState(gameProcess.pid)
         : null;
@@ -4538,6 +4569,8 @@ export function registerGameHandlers(): void {
         emitLog(`CIV_SELECT|Step=ConfirmEnterFallback|Selection=${selection}|${enter.detail}`);
         if (!enter.sent) throw new Error("Civilization confirmation Enter could not be sent.");
         await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
+
+        assertActive();
         const enterPickerState = usesFilteredPicker
           ? readAoe2CivilizationPickerState(gameProcess.pid)
           : null;
@@ -4562,6 +4595,7 @@ export function registerGameHandlers(): void {
       emitLog(`CIV_SELECT|Complete=True|Selection=${selection}|Slot=${slot}`);
       return { sent: true, message: `${selection} selected for AoE2 lobby slot ${slot}.` };
     } catch (error) {
+      if (generation !== lobbyCloseGeneration) return { sent: false, message: "Lobby setup cancelled." };
       const detail = error instanceof Error ? error.message : "Civilization selection failed.";
       emitLog(`CIV_SELECT|Complete=False|Error=${detail}`);
       setWindowsInputBlocked(false);
@@ -4569,7 +4603,7 @@ export function registerGameHandlers(): void {
       emitLog("INPUT_LOCK|Requested=False|Source=CivilizationSelectionFailure");
       return { sent: false, message: detail };
     } finally {
-      setMainWindowGameCoverClickThrough(false);
+      if (generation === lobbyCloseGeneration) setMainWindowGameCoverClickThrough(false);
     }
   });
 

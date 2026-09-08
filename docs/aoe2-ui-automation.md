@@ -113,6 +113,10 @@ The baseline also includes measured allowances for AoE2 UI verification work tha
 
 Adaptive calibration is controlled by `adaptiveLobbyTimingEnabled` in `runtimeConfig.ts` and is disabled by default, so countdowns use the deterministic match-specific baseline. When enabled, the client stores the difference between a successful match's calculated baseline and its measured end-to-end duration. Standard and custom-map histories are kept separately, and future estimates add the rolling median of the latest successful residuals to the baseline.
 
+Before publishing a ranked or tournament lobby, the host relays completed input steps through `/matches/:id/setup-progress`, at most once every five seconds. Each step counts only once per match; retries, verification polling, failed inputs, and input-guard health messages do not count. The server accepts reports only from the accepted match's host before lobby publication, refreshes its setup timeout, and sends `lobby_setup_progress` to waiting guests to refresh their watchdogs. This allows slow but advancing setup without changing the displayed estimate. Deploy the matchmaker support before updating clients; both host and guest clients need the update for the guest watchdog fix.
+
+Closing AoE2 cancels pending civilization selection at its next asynchronous boundary. Cancelled host preparation cannot publish a lobby or report a second critical failure after match cleanup.
+
 ## Replay completion
 
 Every detected replay write prompts an immediate operation-stream inspection.

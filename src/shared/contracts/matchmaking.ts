@@ -231,6 +231,7 @@ export type QueueEvent =
   | { type: "range"; minRating: number; maxRating: number }
   | { type: "match_found"; match: MatchSession }
   | { type: "opponent_accepted"; matchId: string; role?: "host" | "guest" }
+  | { type: "lobby_setup_progress"; matchId: string }
   | { type: "lobby_setup_estimate"; matchId: string; estimateMs: number }
   | { type: "lobby_ready"; matchId: string; lobby: LobbySession }
   | { type: "guest_lobby_joined"; matchId: string }
