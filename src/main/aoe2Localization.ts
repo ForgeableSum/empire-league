@@ -1,3 +1,4 @@
+import { timeAutomationPhase, type AutomationTimingLog } from "./automationTiming.js";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -81,52 +82,60 @@ async function sessionFolders(logsRoot: string): Promise<string[]> {
   }
 }
 
-async function activeLanguageId(currentSessionOnly: boolean): Promise<number | null> {
+async function activeLanguageId(currentSessionOnly: boolean, timing?: AutomationTimingLog): Promise<number | null> {
   const logsRoot = join(homedir(), "Games", "Age of Empires 2 DE", "logs");
   if (currentSessionOnly) {
-    const newest = (await sessionFolders(logsRoot))[0];
+    const newest = (await timeAutomationPhase(timing, "language-session-folders", () => sessionFolders(logsRoot)))[0];
     if (!newest) return null;
-    const entries = await languageEntries(join(logsRoot, newest, "MainLog.txt"));
+    const entries = await timeAutomationPhase(timing, "language-current-log", () => languageEntries(join(logsRoot, newest, "MainLog.txt")));
     // Complete startups log an OS fallback first and the saved profile
     // language after player-profile loading. Only the latter is authoritative.
     const languageId = entries.length >= 2 ? entries.at(-1)! : null;
-    if (languageId !== null) await rememberLanguageId(languageId);
+    if (languageId !== null) await timeAutomationPhase(timing, "language-cache-write", () => rememberLanguageId(languageId));
     return languageId;
   }
 
-  for (const folder of await sessionFolders(logsRoot)) {
-    const entries = await languageEntries(join(logsRoot, folder, "MainLog.txt"));
+  let scannedLogs = 0;
+  const folders = await timeAutomationPhase(timing, "language-session-folders", () => sessionFolders(logsRoot));
+  timing?.(`Phase=language-history|Folders=${folders.length}`);
+  for (const folder of folders) {
+    const entries = await timeAutomationPhase(timing, "language-history-log-" + (++scannedLogs), () => languageEntries(join(logsRoot, folder, "MainLog.txt")));
     // A single entry is AoE2's startup fallback, not the player's saved setting.
     // Skip incomplete sessions and retain the newest previously confirmed language.
     if (entries.length >= 2) {
       const languageId = entries.at(-1)!;
-      await rememberLanguageId(languageId);
+      timing?.(`Phase=language-history|LogsScanned=${scannedLogs}|Source=confirmed-log`);
+      await timeAutomationPhase(timing, "language-cache-write", () => rememberLanguageId(languageId));
       return languageId;
     }
   }
-  return readRememberedLanguageId();
+  timing?.("Phase=language-history|LogsScanned=" + scannedLogs + "|Source=remembered-fallback");
+  return timeAutomationPhase(timing, "language-remembered-cache", () => readRememberedLanguageId());
 }
 
-export async function loadAoe2Localization(gamePath: string, currentSessionOnly = false): Promise<Aoe2Localization> {
-  const detectedLanguageId = currentSessionOnly ? await activeLanguageId(true) : null;
+export async function loadAoe2Localization(gamePath: string, currentSessionOnly = false, timing?: AutomationTimingLog): Promise<Aoe2Localization> {
+  const detectedLanguageId = currentSessionOnly ? await timeAutomationPhase(timing, "language-detection", () => activeLanguageId(true, timing)) : null;
   if (detectedLanguageId !== null && languageOverrideId !== null && detectedLanguageId !== languageOverrideId) {
     languageOverrideId = null;
   }
   const languageId = currentSessionOnly
     ? detectedLanguageId
-    : languageOverrideId ?? await activeLanguageId(false);
+    : languageOverrideId ?? await timeAutomationPhase(timing, "language-detection", () => activeLanguageId(false, timing));
   const language = aoe2Languages[languageId ?? 2] ?? aoe2Languages[2];
   const cachedResources = localizationResourceCache.get(language[0]);
+  timing?.("Phase=localization-cache|Language=" + language[0] + "|Override=" + (languageOverrideId !== null) + "|Hit=" + Boolean(cachedResources));
   if (cachedResources) return { languageId, ...cachedResources };
   const stringsPath = (code: string) => join(gamePath, "resources", code, "strings", "key-value", "key-value-strings-utf8.txt");
   try {
     const [englishText, localizedText] = await Promise.all([
-      readFile(stringsPath("en"), "utf8"),
-      readFile(stringsPath(language[0]), "utf8")
+      timeAutomationPhase(timing, "english-strings-read", () => readFile(stringsPath("en"), "utf8")),
+      timeAutomationPhase(timing, "localized-strings-read", () => readFile(stringsPath(language[0]), "utf8"))
     ]);
-    const english = parseStrings(englishText);
-    const localized = parseStrings(localizedText);
-    const builtInMapNames = await installedBuiltInMapNames(gamePath);
+    const english = await timeAutomationPhase(timing, "english-strings-parse", () => parseStrings(englishText));
+    const localized = await timeAutomationPhase(timing, "localized-strings-parse", () => parseStrings(localizedText));
+    const builtInMapNames = await timeAutomationPhase(timing, "built-in-maps", () => installedBuiltInMapNames(gamePath));
+    const lookupStarted = performance.now();
+    timing?.("Phase=localization-lookups|Event=Started");
     const wanted = new Set<string>([
       ...civilizations,
       "Random", "Full Random", "Mirror",
@@ -199,8 +208,10 @@ export async function loadAoe2Localization(gamePath: string, currentSessionOnly 
     }
     const resources = { languageCode: language[0], languageName: language[1], names, mapDescriptions, civilizationBonuses };
     localizationResourceCache.set(language[0], resources);
+    timing?.("Phase=localization-lookups|Event=Complete|DurationMs=" + Math.round(performance.now() - lookupStarted));
     return { languageId, ...resources };
   } catch {
+    timing?.("Phase=localization-resources|Event=Fallback");
     return { languageId, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
   }
 }

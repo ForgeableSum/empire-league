@@ -117,6 +117,8 @@ Before publishing a ranked or tournament lobby, the host relays completed input 
 
 Closing AoE2 cancels pending civilization selection at its next asynchronous boundary. Cancelled host preparation cannot publish a lobby or report a second critical failure after match cleanup.
 
+`PREP_TIMING` diagnostics start at create-lobby and civilization-selection IPC entry, before the existing sequence timer. Each trace has an ID, context, elapsed time, and phase start/completion durations. Nested phases identify Steam registry/library/manifest checks, language-history scans, localization cache hits, resource reads/parsing, lookup construction, and window preparation. These records reach the downloadable diagnostic log and do not refresh setup watchdogs. Missing manifests in alternate Steam libraries can produce a failed read phase during otherwise successful detection.
+
 ## Replay completion
 
 Every detected replay write prompts an immediate operation-stream inspection.

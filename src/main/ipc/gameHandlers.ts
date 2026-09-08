@@ -1,3 +1,4 @@
+import { createAutomationTimingLog, timeAutomationPhase, type AutomationTimingLog } from "../automationTiming.js";
 import { app, BrowserWindow, clipboard, ipcMain, screen, shell, type WebContents } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { access, appendFile, copyFile, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
@@ -2442,11 +2443,11 @@ async function readRegistryValue(key: string, value: string): Promise<string | u
   }
 }
 
-async function getSteamRoots(): Promise<string[]> {
+async function getSteamRoots(timing?: AutomationTimingLog): Promise<string[]> {
   const registryRoots = await Promise.all([
-    readRegistryValue("HKCU\\Software\\Valve\\Steam", "SteamPath"),
-    readRegistryValue("HKLM\\Software\\WOW6432Node\\Valve\\Steam", "InstallPath"),
-    readRegistryValue("HKLM\\Software\\Valve\\Steam", "InstallPath")
+    timeAutomationPhase(timing, "steam-registry-1", () => readRegistryValue("HKCU\\Software\\Valve\\Steam", "SteamPath")),
+    timeAutomationPhase(timing, "steam-registry-2", () => readRegistryValue("HKLM\\Software\\WOW6432Node\\Valve\\Steam", "InstallPath")),
+    timeAutomationPhase(timing, "steam-registry-3", () => readRegistryValue("HKLM\\Software\\Valve\\Steam", "InstallPath"))
   ]);
   const programFiles = process.env.ProgramFiles;
   const programFilesX86 = process.env["ProgramFiles(x86)"];
@@ -2511,24 +2512,26 @@ async function getSteamAppsFolders(steamRoot: string): Promise<string[]> {
   return [...new Set(folders)];
 }
 
-async function detectAoe2Installation() {
+async function detectAoe2Installation(timing?: AutomationTimingLog) {
   if (process.platform !== "win32") {
     return { installed: false, message: "Automatic Steam detection is currently supported on Windows only." };
   }
 
-  const steamRoots = await getSteamRoots();
-  const steamAppsFolders = (await Promise.all(steamRoots.map(getSteamAppsFolders))).flat();
+  const steamRoots = await timeAutomationPhase(timing, "steam-roots", () => getSteamRoots(timing));
+  const steamAppsFolders = (await Promise.all(steamRoots.map((root, index) => timeAutomationPhase(timing, "steam-libraries-" + index, () => getSteamAppsFolders(root))))).flat();
 
+  let libraryIndex = 0;
   for (const steamApps of [...new Set(steamAppsFolders)]) {
+    const index = libraryIndex++;
     const manifestPath = join(steamApps, `appmanifest_${aoe2AppId}.acf`);
     try {
-      const manifest = await readFile(manifestPath, "utf8");
+      const manifest = await timeAutomationPhase(timing, "steam-manifest-" + index, () => readFile(manifestPath, "utf8"));
       const installDir = manifest.match(/"installdir"\s+"([^"]+)"/i)?.[1];
       if (!installDir) continue;
 
       const gamePath = join(steamApps, "common", installDir);
       const executablePath = join(gamePath, "AoE2DE_s.exe");
-      if (await pathExists(executablePath)) {
+      if (await timeAutomationPhase(timing, "game-executable-" + index, () => pathExists(executablePath))) {
         return { installed: true, path: gamePath, message: "AoE2: Definitive Edition was found through Steam." };
       }
     } catch {
@@ -3471,6 +3474,11 @@ export function registerGameHandlers(): void {
     automationRequest: "ranked" | "tournament" | "custom" | { context: "tournament"; password: string } | { context: "custom"; gameSettings: CustomLobbyGameSettings; aiSlots?: CustomLobbyAiSlot[] } = "ranked",
     requestedGameSettings?: CustomLobbyGameSettings
   ) => {
+    const timing = createAutomationTimingLog("create-lobby", (message) => {
+      console.info("[AoE2 automation] " + message);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+    });
+
     stopTabTest();
     setMouseCoordinateOverlayEnabled(false);
     const normalizedMapName = typeof mapName === "string" ? mapName.trim() : "";
@@ -3510,9 +3518,9 @@ export function registerGameHandlers(): void {
     if (isTournamentAutomation && !/^[A-Za-z0-9]{12}$/.test(tournamentLobbyPassword ?? "")) {
       return { sent: false, message: "A valid tournament lobby password is required." };
     }
-    const installation = await detectAoe2Installation();
+    const installation = await timeAutomationPhase(timing, "installation", () => detectAoe2Installation(timing));
     const localization = installation.installed && installation.path
-      ? await loadAoe2Localization(installation.path)
+      ? await timeAutomationPhase(timing, "localization", () => loadAoe2Localization(installation.path!, false, timing))
       : { languageCode: "en", names: {} as Record<string, string> };
     const localizedMapName = localization.names[normalizedMapName] ?? normalizedMapName;
 
@@ -3541,6 +3549,7 @@ export function registerGameHandlers(): void {
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", sequencedMessage);
       refreshSequenceSafetyTimer();
     };
+    timing("Phase=sequence-entry|Event=Complete");
     emitLog("Started=True");
     emitLog(`PLAYER_COUNT_REQUEST|Value=${playerCount}`);
     emitLog(`GAME_SETTINGS_PAYLOAD|${JSON.stringify(requestedGameSettings ?? null)}`);
@@ -3548,7 +3557,7 @@ export function registerGameHandlers(): void {
     if (appWindow) showAutomationCover(appWindow);
     let gameProcess: Awaited<ReturnType<typeof detectAoe2Process>>;
     try {
-      gameProcess = await prepareHiddenAoe2WindowBehind();
+      gameProcess = await timeAutomationPhase(timing, "window-preparation", () => prepareHiddenAoe2WindowBehind());
     } catch (error) {
       const detail = error instanceof Error ? error.message : "AoE2 process detection failed.";
       emitLog(`ERROR|${detail}`);
@@ -4229,6 +4238,11 @@ export function registerGameHandlers(): void {
     automationContext: "ranked" | "custom" = "ranked",
     useHostLayout = slot === 1
   ) => {
+    const timing = createAutomationTimingLog("civilization", (message) => {
+      console.info("[AoE2 automation] " + message);
+      if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
+    });
+
     if (process.platform !== "win32"
       || !Number.isInteger(slot)
       || slot < 1
@@ -4247,9 +4261,9 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
-    const installation = await detectAoe2Installation();
+    const installation = await timeAutomationPhase(timing, "installation", () => detectAoe2Installation(timing));
     const localization = installation.installed && installation.path
-      ? await loadAoe2Localization(installation.path)
+      ? await timeAutomationPhase(timing, "localization", () => loadAoe2Localization(installation.path!, false, timing))
       : { languageCode: "en", names: {} as Record<string, string> };
     const localizedSelection = localization.names[selection] ?? selection;
     if (generation !== lobbyCloseGeneration) return { sent: false, message: "Lobby setup cancelled." };
@@ -4257,7 +4271,7 @@ export function registerGameHandlers(): void {
     if (appWindow) showAutomationCover(appWindow);
     setMainWindowGameCoverClickThrough(false);
     try {
-      const gameProcess = await prepareHiddenAoe2WindowBehind();
+      const gameProcess = await timeAutomationPhase(timing, "window-preparation", () => prepareHiddenAoe2WindowBehind());
       assertActive();
       if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
         return { sent: false, message: "The AoE2 process was not found." };
