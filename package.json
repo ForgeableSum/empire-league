@@ -30,6 +30,7 @@
     "test:matchmaker": "node --test src/matchmaker-request-url.test.mjs",
     "test:lobby-progress": "node --test src/lobby-setup-progress.test.mjs",
     "test:civilization-verification": "node --test src/civilization-verification.test.mjs",
+    "test:audio": "node --experimental-test-module-mocks --test src/audio-suppression.test.mjs",
     "test:window-capture": "node --experimental-test-module-mocks --test src/window-capture.test.mjs",
     "test:discord": "node --test src/discord-notifier.test.mjs",
     "test:parties": "node --test src/party-system.test.mjs",

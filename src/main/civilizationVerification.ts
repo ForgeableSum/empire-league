@@ -1,8 +1,10 @@
-export async function verifyCivilizationCapture<T extends { detail: string }>(options: {
+export async function verifyScreenCapture<T extends { detail: string }>(options: {
   read: () => T;
   assertActive: () => void;
   log: (message: string) => void;
   phase: string;
+  logPrefix?: string;
+  failureMessage?: string;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }): Promise<T> {
@@ -18,15 +20,23 @@ export async function verifyCivilizationCapture<T extends { detail: string }>(op
     const result = options.read();
     attempts += 1;
     if (!result.detail.includes("PIXEL_READ_FAILED")) {
-      if (attempts > 1) options.log(`CIV_CAPTURE|Phase=${options.phase}|Event=Recovered|Attempts=${attempts}|ElapsedMs=${Math.round(now() - started)}`);
+      if (attempts > 1) options.log(`${options.logPrefix ?? "CAPTURE"}|Phase=${options.phase}|Event=Recovered|Attempts=${attempts}|ElapsedMs=${Math.round(now() - started)}`);
       return result;
     }
     const elapsed = now() - started;
-    if (attempts === 1) options.log(`CIV_CAPTURE|Phase=${options.phase}|Event=Waiting|TimeoutMs=${timeoutMs}`);
+    if (attempts === 1) options.log(`${options.logPrefix ?? "CAPTURE"}|Phase=${options.phase}|Event=Waiting|TimeoutMs=${timeoutMs}`);
     if (elapsed >= timeoutMs) {
-      options.log(`CIV_CAPTURE|Phase=${options.phase}|Event=Timeout|Attempts=${attempts}|ElapsedMs=${Math.round(elapsed)}`);
-      throw new Error("Civilization selection could not be verified because screen capture failed.");
+      options.log(`${options.logPrefix ?? "CAPTURE"}|Phase=${options.phase}|Event=Timeout|Attempts=${attempts}|ElapsedMs=${Math.round(elapsed)}`);
+      throw new Error(options.failureMessage ?? "Screen capture could not be verified.");
     }
     await sleep(Math.min(100, timeoutMs - elapsed));
   }
+}
+
+export function verifyCivilizationCapture<T extends { detail: string }>(options: Parameters<typeof verifyScreenCapture<T>>[0]): Promise<T> {
+  return verifyScreenCapture({
+    ...options,
+    logPrefix: "CIV_CAPTURE",
+    failureMessage: "Civilization selection could not be verified because screen capture failed."
+  });
 }

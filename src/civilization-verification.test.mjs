@@ -57,3 +57,21 @@ test("picker-close verification also recovers before any confirmation fallback",
   const options = fixture(() => ++reads === 1 ? unreadable : closed);
   assert.equal(await verifyCivilizationCapture(options), closed);
 });
+
+test("Ready capture recovery waits without input and respects cancellation", async () => {
+  const { verifyScreenCapture } = await import("./main/civilizationVerification.ts");
+  let reads = 0;
+  const ready = { state: "ready", detail: "State=ready" };
+  const options = fixture(() => ++reads < 3 ? unreadable : ready);
+  options.logPrefix = "READY_CAPTURE";
+  assert.equal(await verifyScreenCapture(options), ready);
+  assert.equal(options.now(), 200);
+  assert.match(options.logs.at(-1), /^READY_CAPTURE.*Recovered/);
+  const cancelled = fixture(() => unreadable);
+  cancelled.assertActive = () => { if (cancelled.now() > 0) throw new Error("Cancelled"); };
+  await assert.rejects(verifyScreenCapture(cancelled), /Cancelled/);
+  const timeout = fixture(() => unreadable);
+  timeout.failureMessage = "Ready capture failed";
+  await assert.rejects(verifyScreenCapture(timeout), /Ready capture failed/);
+  assert.equal(timeout.now(), 5000);
+});

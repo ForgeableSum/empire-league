@@ -218,3 +218,7 @@ A replay containing `PostGame` can still be an intermediate file snapshot: AoE2
 may flush the terminal operation before the parsed winner/loser summary settles.
 An inconsistent summary remains retryable so the next replay write or stability
 notification can produce usable result metadata.
+
+Audio suppression discovers the AoE2 process inside its PowerShell worker. The main-thread 100 ms guard only queues commands, with at most one periodic command outstanding; explicit mute/unmute/restore transitions retain ordering and bypass periodic coalescing. Worker responses include `DiscoveryMs`. A live reproduction with input suppression active reduced input probe latency from 375–423 ms to 2–5 ms after moving discovery out of the main thread.
+
+Host and guest Ready verification retry `PIXEL_READ_FAILED` for up to five seconds without sending input. Cancellation stops the retry. A readable state still controls whether Ready needs a click; an unreadable capture never justifies a second click. `READY_CAPTURE` reports waiting, recovery, and timeout. Run `npm run test:audio` and `npm run test:civilization-verification` for the related regressions.

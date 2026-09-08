@@ -1,17 +1,14 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { detectAoe2NativeProcess } from "./aoe2Win32Automation.js";
 
 let matchAudioManaged = false;
 let gameplayStarted = false;
 let desiredMuted = false;
 let worker: ChildProcessWithoutNullStreams | null = null;
 let refreshTimer: NodeJS.Timeout | undefined;
-let lastManagedPid: number | undefined;
 let shuttingDown = false;
 let workerGeneration = 0;
 let nextRequestId = 0;
-let observedPid: number | undefined;
-let missingProcessRestored = false;
+let periodicRequestId: number | undefined;
 const pendingRequests = new Map<number, { resolve: (message: string) => void; timer: NodeJS.Timeout }>();
 
 // Core Audio exposes per-process mute through audio sessions, but not through a
@@ -70,7 +67,7 @@ public static class SessionMute {
         leases.RemoveAt(i);
       }
     }
-    if (pid == 0) return "Sessions=0|Changed=0|Verified=False";
+    if (pid == 0) return "Sessions=0|Changed=0|Verified=False|Restored=" + RestoreAll().ToString();
     IMMDevice d; ((IMMDeviceEnumerator)new MMDeviceEnumerator()).GetDefaultAudioEndpoint(EDataFlow.eRender, ERole.eMultimedia, out d);
     Guid id = typeof(IAudioSessionManager2).GUID; object o; d.Activate(ref id, 23, IntPtr.Zero, out o);
     IAudioSessionEnumerator e; ((IAudioSessionManager2)o).GetSessionEnumerator(out e); int count; e.GetCount(out count);
@@ -109,8 +106,20 @@ try {
   while (($line = [Console]::ReadLine()) -ne $null) {
     try {
       $parts = $line -split '\|'
-      $result = [SessionMute].GetMethod('Apply').Invoke($null, @([uint32]$parts[1], [string]$parts[2]))
-      [Console]::WriteLine("AUDIO_RESULT|" + $parts[0] + "|Mode=" + $parts[2] + "|Pid=" + $parts[1] + "|" + $result)
+      # Discovery belongs here: native process snapshots on Electron's main
+      # thread can stall input and capture delivery when the input guard runs.
+      $discovery = [Diagnostics.Stopwatch]::StartNew()
+      $gameProcesses = [Diagnostics.Process]::GetProcessesByName('AoE2DE_s')
+      $gamePid = [uint32]0
+      try { if ($gameProcesses.Length -gt 0) { $gamePid = [uint32]$gameProcesses[0].Id } }
+      finally { foreach ($gameProcess in $gameProcesses) { $gameProcess.Dispose() } }
+      $discovery.Stop()
+      # A recreated worker has no leases; still clear any persisted game mute.
+      if ($parts[2] -eq 'RESTORE' -and $gamePid -ne 0) {
+        $null = [SessionMute].GetMethod('Apply').Invoke($null, @($gamePid, [string]'AUDIBLE'))
+      }
+      $result = [SessionMute].GetMethod('Apply').Invoke($null, @($gamePid, [string]$parts[2]))
+      [Console]::WriteLine("AUDIO_RESULT|" + $parts[0] + "|Mode=" + $parts[2] + "|Pid=" + $gamePid + "|DiscoveryMs=" + $discovery.ElapsedMilliseconds + "|" + $result)
       [Console]::Out.Flush()
     } catch { [Console]::WriteLine("AUDIO_RESULT|" + $parts[0] + "|Error=" + $_.Exception.Message); [Console]::Out.Flush() }
   }
@@ -131,13 +140,13 @@ function ensureWorker(): ChildProcessWithoutNullStreams | null {
   const generation = ++workerGeneration;
   const handleFailure = (error: Error) => {
     console.warn(`[AoE2 audio] WORKER_PIPE_ERROR|Generation=${generation}|${error.message}`);
-    if (worker === activeWorker) worker = null;
+    if (worker === activeWorker) { worker = null; periodicRequestId = undefined; }
   };
   activeWorker.on("error", handleFailure);
   activeWorker.stdin.on("error", handleFailure);
   activeWorker.on("exit", (code) => {
     console.info(`[AoE2 audio] WORKER_EXIT|Generation=${generation}|Code=${code ?? "null"}`);
-    if (worker === activeWorker) worker = null;
+    if (worker === activeWorker) { worker = null; periodicRequestId = undefined; }
   });
   let stdoutBuffer = "";
   activeWorker.stdout.on("data", (data: Buffer) => {
@@ -150,6 +159,7 @@ function ensureWorker(): ChildProcessWithoutNullStreams | null {
         console.info(`[AoE2 audio] ${message}`);
         continue;
       }
+      if (periodicRequestId === Number(match[1])) periodicRequestId = undefined;
       const request = pendingRequests.get(Number(match[1]));
       // Periodic guards are intentionally quiet when they are successful
       // no-ops. Awaited transitions, actual changes, and errors remain visible.
@@ -167,41 +177,30 @@ function ensureWorker(): ChildProcessWithoutNullStreams | null {
 }
 
 function sendAudioCommand(mode: "MUTE" | "AUDIBLE" | "RESTORE", waitForResult = false): Promise<string> {
-  const pid = detectAoe2NativeProcess().pid;
   const activeWorker = ensureWorker();
   if (!activeWorker?.stdin.writable) return Promise.resolve("AUDIO_RESULT|0|Error=WorkerUnavailable");
-  if (pid) lastManagedPid = pid;
+  // Keep at most one periodic command queued while the worker starts or stalls.
+  if (!waitForResult && periodicRequestId !== undefined) {
+    return Promise.resolve("AUDIO_RESULT|0|Queued=False|Reason=PeriodicPending");
+  }
   const requestId = ++nextRequestId;
   if (!waitForResult) {
-    activeWorker.stdin.write(`${requestId}|${pid ?? 0}|${mode}\n`);
+    periodicRequestId = requestId;
+    activeWorker.stdin.write(`${requestId}|0|${mode}\n`);
     return Promise.resolve(`AUDIO_RESULT|${requestId}|Queued=True`);
   }
   const result = new Promise<string>((resolve) => {
     const timer = setTimeout(() => {
       pendingRequests.delete(requestId);
-      resolve(`AUDIO_RESULT|${requestId}|Mode=${mode}|Pid=${pid ?? 0}|Error=Timeout`);
+      resolve(`AUDIO_RESULT|${requestId}|Mode=${mode}|Pid=0|Error=Timeout`);
     }, 2_000);
     pendingRequests.set(requestId, { resolve, timer });
   });
-  activeWorker.stdin.write(`${requestId}|${pid ?? 0}|${mode}\n`);
+  activeWorker.stdin.write(`${requestId}|0|${mode}\n`);
   return result;
 }
 
 function applyDesiredMute(): void {
-  const pid = detectAoe2NativeProcess().pid;
-  if (!pid) {
-    observedPid = undefined;
-    if (!missingProcessRestored) {
-      missingProcessRestored = true;
-      void sendAudioCommand("RESTORE");
-    }
-    return;
-  }
-  if (observedPid !== pid) {
-    observedPid = pid;
-    missingProcessRestored = false;
-    console.info(`[AoE2 audio] PROCESS|Pid=${pid}|DesiredMuted=${desiredMuted}`);
-  }
   void sendAudioCommand(desiredMuted ? "MUTE" : "AUDIBLE");
 }
 
@@ -211,7 +210,7 @@ function setDesiredMute(muted: boolean, source: string): void {
     `[AoE2 audio] STATE|Muted=${muted}|Source=${source}`
     + `|Managed=${matchAudioManaged}|GameplayStarted=${gameplayStarted}`
   );
-  applyDesiredMute();
+  void sendAudioCommand(muted ? "MUTE" : "AUDIBLE", true);
   if (refreshTimer) clearInterval(refreshTimer);
   // Audio sessions can be recreated while AoE2 changes screens. Poll quickly
   // enough that a replacement session cannot leak an audible second.
@@ -269,11 +268,11 @@ export async function restoreAoe2AudioOnShutdown(): Promise<void> {
   gameplayStarted = false;
   desiredMuted = false;
 
-  const pid = detectAoe2NativeProcess().pid ?? lastManagedPid;
+  const usedWorker = workerGeneration > 0;
   // Recreate a failed worker if necessary. A previous worker may have applied
   // mute successfully and then exited before shutdown restoration.
-  const activeWorker = pid ? ensureWorker() : worker;
-  if (pid && activeWorker?.stdin.writable) {
+  const activeWorker = usedWorker ? ensureWorker() : worker;
+  if (activeWorker?.stdin.writable) {
     // Preserve ordering on the worker's stdin: this unmute is processed after
     // every queued mute, then EOF triggers its independent finally safeguard.
     await sendAudioCommand("RESTORE", true);
@@ -285,7 +284,5 @@ export async function restoreAoe2AudioOnShutdown(): Promise<void> {
   }
   shuttingDown = true;
   worker = null;
-  lastManagedPid = undefined;
-  observedPid = undefined;
-  missingProcessRestored = false;
+  periodicRequestId = undefined;
 }

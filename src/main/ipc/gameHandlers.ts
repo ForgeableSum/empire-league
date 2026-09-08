@@ -1,4 +1,4 @@
-import { verifyCivilizationCapture } from "../civilizationVerification.js";
+import { verifyCivilizationCapture, verifyScreenCapture } from "../civilizationVerification.js";
 import { createAutomationTimingLog, timeAutomationPhase, type AutomationTimingLog } from "../automationTiming.js";
 import { app, BrowserWindow, clipboard, ipcMain, screen, shell, type WebContents } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
@@ -4132,7 +4132,20 @@ export function registerGameHandlers(): void {
         if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", verificationMessage);
       };
       const verifiesReady = target === "guest-ready" || target === "host-ready";
-      let readyState = verifiesReady ? readAoe2ReadyState(process.pid, action.point[1]) : null;
+      const readyGeneration = lobbyCloseGeneration;
+      const readReadyCapture = () => verifyScreenCapture({
+        read: () => readAoe2ReadyState(process.pid!, action.point[1]),
+        assertActive: () => {
+          if (readyGeneration !== lobbyCloseGeneration || event.sender.isDestroyed()) {
+            throw new Error("Lobby setup cancelled.");
+          }
+        },
+        log: (message) => emitVerification("capture", message),
+        phase: target,
+        logPrefix: "READY_CAPTURE",
+        failureMessage: target + " ready state could not be verified because screen capture failed."
+      });
+      let readyState = verifiesReady ? await readReadyCapture() : null;
       if (readyState) emitVerification("before", readyState.detail);
       if (verifiesReady && readyState?.state === "unknown") {
         // Lobby transitions can temporarily render either Ready button neutral
@@ -4141,7 +4154,7 @@ export function registerGameHandlers(): void {
         const readyDeadline = Date.now() + 10_000;
         while (readyState.state === "unknown" && Date.now() < readyDeadline) {
           await delay(250);
-          readyState = readAoe2ReadyState(process.pid, action.point[1]);
+          readyState = await readReadyCapture();
         }
         emitVerification("before-settled", readyState.detail);
       }
@@ -4213,7 +4226,7 @@ export function registerGameHandlers(): void {
         }
       }
       if (verifiesReady) {
-        readyState = readAoe2ReadyState(process.pid, action.point[1]);
+        readyState = await readReadyCapture();
         emitVerification("1", readyState.detail);
         if (readyState.state === "not-ready") {
           result = await postAoe2DesignClick(process.pid, action.point[0], action.point[1], {
@@ -4222,7 +4235,7 @@ export function registerGameHandlers(): void {
             synchronous: true
           });
           await delay(action.settleMs);
-          readyState = readAoe2ReadyState(process.pid, action.point[1]);
+          readyState = await readReadyCapture();
           emitVerification("2", readyState.detail);
         }
       }
