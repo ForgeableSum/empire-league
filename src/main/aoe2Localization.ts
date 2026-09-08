@@ -95,6 +95,13 @@ async function activeLanguageId(currentSessionOnly: boolean, timing?: Automation
     return languageId;
   }
 
+  // Current-session polling above remains authoritative and updates this value.
+  // Automation can reuse it instead of reading the same historical logs again.
+  if (rememberedLanguageId != null) {
+    timing?.(`Phase=language-cache|Hit=true|LanguageId=${rememberedLanguageId}`);
+    return rememberedLanguageId;
+  }
+  timing?.("Phase=language-cache|Hit=false");
   let scannedLogs = 0;
   const folders = await timeAutomationPhase(timing, "language-session-folders", () => sessionFolders(logsRoot));
   timing?.(`Phase=language-history|Folders=${folders.length}`);

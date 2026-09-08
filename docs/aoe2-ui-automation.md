@@ -119,6 +119,8 @@ Closing AoE2 cancels pending civilization selection at its next asynchronous bou
 
 `PREP_TIMING` diagnostics start at create-lobby and civilization-selection IPC entry, before the existing sequence timer. Each trace has an ID, context, elapsed time, and phase start/completion durations. Nested phases identify Steam registry/library/manifest checks, language-history scans, localization cache hits, resource reads/parsing, lookup construction, and window preparation. These records reach the downloadable diagnostic log and do not refresh setup watchdogs. Missing manifests in alternate Steam libraries can produce a failed read phase during otherwise successful detection.
 
+Create-lobby, civilization selection, and localization requests reuse the last successfully detected installation. Explicit installation checks still rescan and replace or clear that cache; unsuccessful detection is never cached. Historical language lookup reuses the in-memory confirmed/remembered language, while current-session polling continues reading the newest log and updating the language. Overrides retain their existing precedence. `installation-cache` and `language-cache` timing records identify the fast paths.
+
 ## Replay completion
 
 Every detected replay write prompts an immediate operation-stream inspection.

@@ -2512,7 +2512,22 @@ async function getSteamAppsFolders(steamRoot: string): Promise<string[]> {
   return [...new Set(folders)];
 }
 
-async function detectAoe2Installation(timing?: AutomationTimingLog) {
+let cachedAoe2Installation: Awaited<ReturnType<typeof scanAoe2Installation>> | undefined;
+
+async function detectAoe2Installation(timing?: AutomationTimingLog, reuseConfirmed = false) {
+  if (reuseConfirmed && cachedAoe2Installation) {
+    timing?.("Phase=installation-cache|Hit=true");
+    return cachedAoe2Installation;
+  }
+  timing?.("Phase=installation-cache|Hit=false");
+  const installation = await scanAoe2Installation(timing);
+  // Explicit installation checks still rescan and invalidate a moved/removed game.
+  // Never retain a miss: installing AoE2 must work without restarting EL.
+  cachedAoe2Installation = installation.installed && installation.path ? installation : undefined;
+  return installation;
+}
+
+async function scanAoe2Installation(timing?: AutomationTimingLog) {
   if (process.platform !== "win32") {
     return { installed: false, message: "Automatic Steam detection is currently supported on Windows only." };
   }
@@ -2839,14 +2854,14 @@ export function registerGameHandlers(): void {
     beginAoe2MatchAudioSuppression();
   });
   ipcMain.handle("game:get-localization", async (_event, currentSessionOnly = false) => {
-    const installation = await detectAoe2Installation();
+    const installation = await detectAoe2Installation(undefined, true);
     if (!installation.installed || !installation.path) {
       return { languageId: null, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
     }
     return loadAoe2Localization(installation.path, currentSessionOnly === true);
   });
   ipcMain.handle("game:set-language-override", async (_event, languageId: number | null) => {
-    const installation = await detectAoe2Installation();
+    const installation = await detectAoe2Installation(undefined, true);
     if (!installation.installed || !installation.path) {
       return { languageId: null, languageCode: "en", languageName: "English", names: {}, mapDescriptions: {}, civilizationBonuses: {} };
     }
@@ -3518,7 +3533,7 @@ export function registerGameHandlers(): void {
     if (isTournamentAutomation && !/^[A-Za-z0-9]{12}$/.test(tournamentLobbyPassword ?? "")) {
       return { sent: false, message: "A valid tournament lobby password is required." };
     }
-    const installation = await timeAutomationPhase(timing, "installation", () => detectAoe2Installation(timing));
+    const installation = await timeAutomationPhase(timing, "installation", () => detectAoe2Installation(timing, true));
     const localization = installation.installed && installation.path
       ? await timeAutomationPhase(timing, "localization", () => loadAoe2Localization(installation.path!, false, timing))
       : { languageCode: "en", names: {} as Record<string, string> };
@@ -4261,7 +4276,7 @@ export function registerGameHandlers(): void {
       console.info(`[AoE2 automation] ${message}`);
       if (!event.sender.isDestroyed()) event.sender.send("game:automation-log", message);
     };
-    const installation = await timeAutomationPhase(timing, "installation", () => detectAoe2Installation(timing));
+    const installation = await timeAutomationPhase(timing, "installation", () => detectAoe2Installation(timing, true));
     const localization = installation.installed && installation.path
       ? await timeAutomationPhase(timing, "localization", () => loadAoe2Localization(installation.path!, false, timing))
       : { languageCode: "en", names: {} as Record<string, string> };
