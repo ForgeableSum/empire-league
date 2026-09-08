@@ -1025,7 +1025,7 @@ export function readAoe2CivilizationTileState(
       return { ...point, rgb: readWindowRgb(window, point.x, point.y) };
     })
     .filter((sample): sample is { x: number; y: number; rgb: [number, number, number] } => Boolean(sample.rgb));
-  if (samples.length === 0) {
+  if (samples.length !== sampleDesignPoints.length) {
     return { state: "unknown", detail: "State=unknown|Reason=PIXEL_READ_FAILED" };
   }
 

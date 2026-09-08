@@ -1,3 +1,4 @@
+import { verifyCivilizationCapture } from "../civilizationVerification.js";
 import { createAutomationTimingLog, timeAutomationPhase, type AutomationTimingLog } from "../automationTiming.js";
 import { app, BrowserWindow, clipboard, ipcMain, screen, shell, type WebContents } from "electron";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
@@ -4291,8 +4292,11 @@ export function registerGameHandlers(): void {
       if (!gameProcess.running || !gameProcess.pid || !gameProcess.windowReady) {
         return { sent: false, message: "The AoE2 process was not found." };
       }
+      const gamePid = gameProcess.pid;
+      const verifyCapture = <T extends { detail: string }>(phase: string, read: () => T) =>
+        verifyCivilizationCapture({ phase, read, assertActive, log: emitLog });
       const [slotX, slotY] = civilizationSlotDesignPoint(slot);
-      const slotResult = await postAoe2DesignClick(gameProcess.pid, slotX, slotY, { synchronous: true });
+      const slotResult = await postAoe2DesignClick(gamePid, slotX, slotY, { synchronous: true });
       emitLog(`CIV_SELECT|Step=Open|Slot=${slot}|DesignPoint=${slotX},${slotY}|${slotResult.detail}`);
       if (!slotResult.sent) throw new Error(`Lobby slot ${slot} civilization button could not be opened.`);
       await delay(aoe2UiManifest.civilizationSlotButtons.settleMs);
@@ -4309,7 +4313,7 @@ export function registerGameHandlers(): void {
         const explicitRandom = reason === "ExplicitRandom";
         const searchPoint = aoe2UiManifest.civilizationPicker.searchPoint;
         const fallbackSearchFocus = await postAoe2DesignClick(
-          gameProcess.pid!,
+          gamePid,
           searchPoint[0],
           searchPoint[1],
           { synchronous: true }
@@ -4319,7 +4323,7 @@ export function registerGameHandlers(): void {
           + `|${fallbackSearchFocus.detail}`
         );
         if (!fallbackSearchFocus.sent) throw new Error("The civilization search could not be focused for fallback.");
-        const fallbackSearchClear = await clearAoe2TextField(gameProcess.pid!);
+        const fallbackSearchClear = await clearAoe2TextField(gamePid);
         emitLog(
           `CIV_SELECT|Step=FallbackSearchClear|Selection=${selection}|Reason=${reason}`
           + `|${fallbackSearchClear.detail}`
@@ -4333,7 +4337,7 @@ export function registerGameHandlers(): void {
         let randomSelected = false;
         for (let attempt = 1; attempt <= 1 && !randomSelected; attempt += 1) {
           const randomTile = await postAoe2DesignClick(
-            gameProcess.pid!,
+            gamePid,
             randomX,
             randomY,
             {
@@ -4350,14 +4354,14 @@ export function registerGameHandlers(): void {
           await delay(aoe2UiManifest.civilizationPicker.selectionSettleMs);
 
           assertActive();
-          let randomState = readAoe2CivilizationTileState(gameProcess.pid!, randomX, randomY);
+          let randomState = await verifyCapture("readAoe2CivilizationTileState", () => readAoe2CivilizationTileState(gamePid, randomX, randomY));
           emitLog(
             `CIV_SELECT|Step=FallbackRandomVerify|FailedSelection=${selection}|Reason=${reason}`
             + `|Attempt=${attempt}|${randomState.detail}`
           );
           randomSelected = randomState.state === "selected";
           if (!randomSelected && randomState.state === "not-selected") {
-            const randomEnter = await sendAoe2Enter(gameProcess.pid!);
+            const randomEnter = await sendAoe2Enter(gamePid);
             emitLog(
               `CIV_SELECT|Step=FallbackRandomEnter|FailedSelection=${selection}|Reason=${reason}`
               + `|Attempt=${attempt}|${randomEnter.detail}`
@@ -4366,7 +4370,7 @@ export function registerGameHandlers(): void {
             await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
             assertActive();
-            const enterPickerState = readAoe2CivilizationPickerState(gameProcess.pid!);
+            const enterPickerState = await verifyCapture("readAoe2CivilizationPickerState", () => readAoe2CivilizationPickerState(gamePid));
             emitLog(
               `CIV_SELECT|Step=FallbackRandomEnterVerify|FailedSelection=${selection}|Reason=${reason}`
               + `|Attempt=${attempt}|${enterPickerState.detail}`
@@ -4389,7 +4393,7 @@ export function registerGameHandlers(): void {
               // confirmation path instead of returning early.
               randomSelected = true;
             } else {
-              randomState = readAoe2CivilizationTileState(gameProcess.pid!, randomX, randomY);
+              randomState = await verifyCapture("readAoe2CivilizationTileState", () => readAoe2CivilizationTileState(gamePid, randomX, randomY));
               randomSelected = randomState.state === "selected";
             }
           }
@@ -4399,7 +4403,7 @@ export function registerGameHandlers(): void {
         }
 
         const randomConfirm = await postAoe2DesignClick(
-          gameProcess.pid!,
+          gamePid,
           confirmPoint[0],
           confirmPoint[1],
           { synchronous: true }
@@ -4417,22 +4421,22 @@ export function registerGameHandlers(): void {
           const readyDesignY = useHostLayout
             ? aoe2UiManifest.actions.hostReady.point[1]
             : aoe2UiManifest.actions.guestReady.point[1];
-          let readyState = readAoe2ReadyState(gameProcess.pid!, readyDesignY, {
+          let readyState = await verifyCapture("readAoe2ReadyState", () => readAoe2ReadyState(gamePid, readyDesignY, {
             minimumVoteChannel: 80,
             minimumVotes: 5
-          });
+          }));
           emitLog(`CIV_SELECT|Step=ExplicitRandomVerifyReturn|Slot=${slot}|${readyState.detail}`);
           if (readyState.state === "unknown") {
-            const confirmEnter = await sendAoe2Enter(gameProcess.pid!);
+            const confirmEnter = await sendAoe2Enter(gamePid);
             emitLog(`CIV_SELECT|Step=ExplicitRandomConfirmEnter|Slot=${slot}|${confirmEnter.detail}`);
             if (!confirmEnter.sent) throw new Error("Random civilization confirmation Enter could not be sent.");
             await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
             assertActive();
-            readyState = readAoe2ReadyState(gameProcess.pid!, readyDesignY, {
+            readyState = await verifyCapture("readAoe2ReadyState", () => readAoe2ReadyState(gamePid, readyDesignY, {
               minimumVoteChannel: 80,
               minimumVotes: 5
-            });
+            }));
             emitLog(`CIV_SELECT|Step=ExplicitRandomVerifyEnterReturn|Slot=${slot}|${readyState.detail}`);
           }
           if (readyState.state === "unknown") {
@@ -4445,13 +4449,13 @@ export function registerGameHandlers(): void {
           };
         }
 
-        let fallbackPickerState = readAoe2CivilizationPickerState(gameProcess.pid!);
+        let fallbackPickerState = await verifyCapture("readAoe2CivilizationPickerState", () => readAoe2CivilizationPickerState(gamePid));
         emitLog(
           `CIV_SELECT|Step=FallbackVerifyReturn|FailedSelection=${selection}|Reason=${reason}`
           + `|${fallbackPickerState.detail}`
         );
         if (fallbackPickerState.state === "open") {
-          const randomEnter = await sendAoe2Enter(gameProcess.pid!);
+          const randomEnter = await sendAoe2Enter(gamePid);
           emitLog(
             `CIV_SELECT|Step=FallbackConfirmEnter|FailedSelection=${selection}|Reason=${reason}`
             + `|${randomEnter.detail}`
@@ -4460,7 +4464,7 @@ export function registerGameHandlers(): void {
           await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
           assertActive();
-          fallbackPickerState = readAoe2CivilizationPickerState(gameProcess.pid!);
+          fallbackPickerState = await verifyCapture("readAoe2CivilizationPickerState", () => readAoe2CivilizationPickerState(gamePid));
         }
         if (fallbackPickerState.state !== "closed") {
           throw new Error(`Random selection did not close the civilization picker after ${selection} failed.`);
@@ -4486,17 +4490,17 @@ export function registerGameHandlers(): void {
       if (usesFilteredPicker) {
         const searchPoint = aoe2UiManifest.civilizationPicker.searchPoint;
         const searchFocus = await postAoe2DesignClick(
-          gameProcess.pid,
+          gamePid,
           searchPoint[0],
           searchPoint[1],
           { synchronous: true }
         );
         emitLog(`CIV_SELECT|Step=SearchFocus|Selection=${selection}|${searchFocus.detail}`);
         if (!searchFocus.sent) throw new Error("The civilization search field could not be focused.");
-        const clearSearch = await clearAoe2TextField(gameProcess.pid);
+        const clearSearch = await clearAoe2TextField(gamePid);
         emitLog(`CIV_SELECT|Step=SearchClear|Selection=${selection}|${clearSearch.detail}`);
         if (!clearSearch.sent) throw new Error("The civilization search field could not be cleared.");
-        const searchText = await sendAoe2Text(gameProcess.pid, localizedSelection);
+        const searchText = await sendAoe2Text(gamePid, localizedSelection);
         emitLog(`CIV_SELECT|Step=SearchText|Selection=${selection}|Localized=${localizedSelection}|Language=${localization.languageCode}|${searchText.detail}`);
         if (!searchText.sent) throw new Error(`${selection} could not be entered in the civilization search.`);
         await delay(aoe2UiManifest.civilizationPicker.searchSettleMs);
@@ -4510,7 +4514,7 @@ export function registerGameHandlers(): void {
       let tileSelected = false;
       for (let attempt = 1; attempt <= 1 && !tileSelected; attempt += 1) {
         const tileResult = await postAoe2DesignClick(
-          gameProcess.pid,
+          gamePid,
           civilizationX,
           civilizationY,
           {
@@ -4527,7 +4531,7 @@ export function registerGameHandlers(): void {
         await delay(aoe2UiManifest.civilizationPicker.selectionSettleMs);
 
         assertActive();
-        const tileState = readAoe2CivilizationTileState(gameProcess.pid, civilizationX, civilizationY);
+        const tileState = await verifyCapture("readAoe2CivilizationTileState", () => readAoe2CivilizationTileState(gamePid, civilizationX, civilizationY));
         emitLog(`CIV_SELECT|Step=TileVerify|Selection=${selection}|Attempt=${attempt}|${tileState.detail}`);
         tileSelected = tileState.state === "selected";
         if (!tileSelected && tileState.state === "not-selected") {
@@ -4535,16 +4539,16 @@ export function registerGameHandlers(): void {
           // hover/focus outline, but some builds defer tile activation until
           // Enter. Only use this path after verifying that the requested tile,
           // rather than an unrelated red/unhovered area, acquired focus.
-          const tileEnter = await sendAoe2Enter(gameProcess.pid);
+          const tileEnter = await sendAoe2Enter(gamePid);
           emitLog(`CIV_SELECT|Step=TileEnter|Selection=${selection}|Attempt=${attempt}|${tileEnter.detail}`);
           if (!tileEnter.sent) continue;
           await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
           assertActive();
           const enterPickerState = usesFilteredPicker
-            ? readAoe2CivilizationPickerState(gameProcess.pid)
+            ? await verifyCapture("readAoe2CivilizationPickerState", () => readAoe2CivilizationPickerState(gamePid))
             : null;
-          const enterLobbyState = enterPickerState ? null : readAoe2HostSetupState(gameProcess.pid);
+          const enterLobbyState = enterPickerState ? null : await verifyCapture("readAoe2HostSetupState", () => readAoe2HostSetupState(gamePid));
           emitLog(
             `CIV_SELECT|Step=TileEnterVerify|Selection=${selection}|Attempt=${attempt}`
             + `|${enterPickerState?.detail ?? enterLobbyState?.detail ?? "State=unknown"}`
@@ -4553,11 +4557,11 @@ export function registerGameHandlers(): void {
             emitLog(`CIV_SELECT|Complete=True|Selection=${selection}|Slot=${slot}|Activation=TileEnter`);
             return { sent: true, message: `${selection} selected for AoE2 lobby slot ${slot}.` };
           }
-          const afterEnterTileState = readAoe2CivilizationTileState(
-            gameProcess.pid,
+          const afterEnterTileState = await verifyCapture("readAoe2CivilizationTileState", () => readAoe2CivilizationTileState(
+            gamePid,
             civilizationX,
             civilizationY
-          );
+          ));
           emitLog(
             `CIV_SELECT|Step=TileEnterSelectionVerify|Selection=${selection}`
             + `|Attempt=${attempt}|${afterEnterTileState.detail}`
@@ -4571,7 +4575,7 @@ export function registerGameHandlers(): void {
       }
 
       const confirmClick = await postAoe2DesignClick(
-        gameProcess.pid,
+        gamePid,
         confirmPoint[0],
         confirmPoint[1],
         { synchronous: true }
@@ -4583,9 +4587,9 @@ export function registerGameHandlers(): void {
       assertActive();
 
       const pickerState = usesFilteredPicker
-        ? readAoe2CivilizationPickerState(gameProcess.pid)
+        ? await verifyCapture("readAoe2CivilizationPickerState", () => readAoe2CivilizationPickerState(gamePid))
         : null;
-      const lobbyState = pickerState ? null : readAoe2HostSetupState(gameProcess.pid);
+      const lobbyState = pickerState ? null : await verifyCapture("readAoe2HostSetupState", () => readAoe2HostSetupState(gamePid));
       emitLog(
         `CIV_SELECT|Step=VerifyReturn|Selection=${selection}`
         + `|${pickerState?.detail ?? lobbyState?.detail ?? "State=unknown"}`
@@ -4594,16 +4598,16 @@ export function registerGameHandlers(): void {
         ? pickerState.state === "closed"
         : lobbyState?.state === "lobby-room";
       if (!selectionVerified) {
-        const enter = await sendAoe2Enter(gameProcess.pid);
+        const enter = await sendAoe2Enter(gamePid);
         emitLog(`CIV_SELECT|Step=ConfirmEnterFallback|Selection=${selection}|${enter.detail}`);
         if (!enter.sent) throw new Error("Civilization confirmation Enter could not be sent.");
         await delay(aoe2UiManifest.actions.confirmCivilization.settleMs);
 
         assertActive();
         const enterPickerState = usesFilteredPicker
-          ? readAoe2CivilizationPickerState(gameProcess.pid)
+          ? await verifyCapture("readAoe2CivilizationPickerState", () => readAoe2CivilizationPickerState(gamePid))
           : null;
-        const enterLobbyState = enterPickerState ? null : readAoe2HostSetupState(gameProcess.pid);
+        const enterLobbyState = enterPickerState ? null : await verifyCapture("readAoe2HostSetupState", () => readAoe2HostSetupState(gamePid));
         emitLog(
           `CIV_SELECT|Step=VerifyEnterFallback|Selection=${selection}`
           + `|${enterPickerState?.detail ?? enterLobbyState?.detail ?? "State=unknown"}`

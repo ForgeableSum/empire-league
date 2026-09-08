@@ -121,6 +121,8 @@ Closing AoE2 cancels pending civilization selection at its next asynchronous bou
 
 Create-lobby, civilization selection, and localization requests reuse the last successfully detected installation. Explicit installation checks still rescan and replace or clear that cache; unsuccessful detection is never cached. Historical language lookup reuses the in-memory confirmed/remembered language, while current-session polling continues reading the newest log and updating the language. Overrides retain their existing precedence. `installation-cache` and `language-cache` timing records identify the fast paths.
 
+Civilization tile and return-to-lobby verification retry unavailable pixels for up to five seconds, polling every 100 ms while the existing capture worker refreshes. No additional input is sent during this wait. Partial tile-border samples count as unavailable too. Readable states retain the existing selection/fallback rules; persistent missing pixels produce a screen-capture error rather than a civilization-unavailable error. `CIV_CAPTURE` records waiting, recovery, and timeout without refreshing the progress watchdog. Match cancellation interrupts the wait before another read.
+
 ## Replay completion
 
 Every detected replay write prompts an immediate operation-stream inspection.
