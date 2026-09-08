@@ -22,7 +22,7 @@ const GetDIBits = gdi32.func("int32_t __stdcall GetDIBits(EL_CAPTURE_WORKER_HDC 
 const DeleteObject = gdi32.func("bool __stdcall DeleteObject(EL_CAPTURE_WORKER_HGDIOBJ object)");
 const DeleteDC = gdi32.func("bool __stdcall DeleteDC(EL_CAPTURE_WORKER_HDC dc)");
 
-function captureWindow(windowHandle: string) {
+function captureWindow(windowHandle: string, timings: { renderMs?: number; copyMs?: number }) {
   const window = BigInt(windowHandle);
   const rect = {} as { left: number; top: number; right: number; bottom: number };
   if (!GetWindowRect(window, rect)) return;
@@ -41,9 +41,12 @@ function captureWindow(windowHandle: string) {
     if (!bitmap) return;
     previousObject = SelectObject(memoryDc, bitmap) as bigint | null;
     if (!previousObject) return;
+    const renderStarted = performance.now();
     const rendered = Boolean(PrintWindow(window, memoryDc, 0x00000002))
       || Boolean(BitBlt(memoryDc, 0, 0, width, height, windowDc, 0, 0, 0x00cc0020));
+    timings.renderMs = Math.round(performance.now() - renderStarted);
     if (!rendered) return;
+    const copyStarted = performance.now();
     const pixels = Buffer.allocUnsafe(width * height * 4);
     const bitmapInfo = Buffer.alloc(40);
     bitmapInfo.writeUInt32LE(40, 0);
@@ -52,6 +55,7 @@ function captureWindow(windowHandle: string) {
     bitmapInfo.writeUInt16LE(1, 12);
     bitmapInfo.writeUInt16LE(32, 14);
     if (Number(GetDIBits(memoryDc, bitmap, 0, height, pixels, bitmapInfo, 0)) !== height) return;
+    timings.copyMs = Math.round(performance.now() - copyStarted);
     return { bitmap: pixels, capturedAt: Date.now(), height, sourceId: `window:${windowHandle}`, width };
   } finally {
     if (memoryDc && previousObject) SelectObject(memoryDc, previousObject);
@@ -62,11 +66,14 @@ function captureWindow(windowHandle: string) {
 }
 
 parentPort?.on("message", ({ id, windowHandle }: { id: number; windowHandle: string }) => {
+  const startedAt = Date.now();
+  const timings: { renderMs?: number; copyMs?: number } = {};
   try {
-    const frame = captureWindow(windowHandle);
-    if (!frame) return parentPort?.postMessage({ id });
-    parentPort?.postMessage({ id, frame }, [frame.bitmap.buffer]);
+    const frame = captureWindow(windowHandle, timings);
+    const result = { id, startedAt, finishedAt: Date.now(), ...timings };
+    if (!frame) return parentPort?.postMessage(result);
+    parentPort?.postMessage({ ...result, frame }, [frame.bitmap.buffer]);
   } catch (error) {
-    parentPort?.postMessage({ id, error: error instanceof Error ? error.message : String(error) });
+    parentPort?.postMessage({ id, startedAt, finishedAt: Date.now(), ...timings, error: error instanceof Error ? error.message : String(error) });
   }
 });

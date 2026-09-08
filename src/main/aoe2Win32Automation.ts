@@ -2,6 +2,7 @@ import koffi from "koffi";
 import { aoe2PhysicalClickSettleMs } from "../shared/runtimeConfig.js";
 import {
   describeAoe2WindowCapture,
+  withAoe2CaptureSnapshot,
   readAoe2CapturedClientPixel
 } from "./aoe2WindowCapture.js";
 
@@ -819,6 +820,14 @@ export function readAoe2ReadyState(
   designY: number,
   options: { minimumVoteChannel?: number; minimumVotes?: number } = {}
 ): NativeReadyStateResult {
+  return withAoe2CaptureSnapshot(() => readAoe2ReadyStateFromSnapshot(processId, designY, options));
+}
+
+function readAoe2ReadyStateFromSnapshot(
+  processId: number,
+  designY: number,
+  options: { minimumVoteChannel?: number; minimumVotes?: number } = {}
+): NativeReadyStateResult {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return { state: "unknown", detail: "WINDOW_NOT_FOUND" };
@@ -876,6 +885,10 @@ export function readAoe2ReadyState(
 }
 
 export function readAoe2ContentWarningState(processId: number): NativeContentWarningStateResult {
+  return withAoe2CaptureSnapshot(() => readAoe2ContentWarningStateFromSnapshot(processId));
+}
+
+function readAoe2ContentWarningStateFromSnapshot(processId: number): NativeContentWarningStateResult {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return { state: "unknown", detail: "WINDOW_NOT_FOUND" };
@@ -945,6 +958,10 @@ export function readAoe2ContentWarningState(processId: number): NativeContentWar
 }
 
 export function readAoe2CivilizationPickerState(processId: number): NativeCivilizationPickerStateResult {
+  return withAoe2CaptureSnapshot(() => readAoe2CivilizationPickerStateFromSnapshot(processId));
+}
+
+function readAoe2CivilizationPickerStateFromSnapshot(processId: number): NativeCivilizationPickerStateResult {
   ensureWindowsBindings();
   const window = findLargestProcessWindow(processId);
   if (!window) return { state: "unknown", detail: "WINDOW_NOT_FOUND" };
@@ -960,7 +977,7 @@ export function readAoe2CivilizationPickerState(processId: number): NativeCivili
   const filteredTilePoint = transformDesignPoint(1259, 515, transform);
   const search = readWindowRgb(window, searchPoint.x, searchPoint.y);
   const filteredTile = readWindowRgb(window, filteredTilePoint.x, filteredTilePoint.y);
-  if (!search || !filteredTile) return { state: "unknown", detail: "PIXEL_READ_FAILED" };
+  if (!search || !filteredTile) return { state: "unknown", detail: `PIXEL_READ_FAILED|${describePixelRead(window)}` };
 
   const searchIsBlack = Math.max(...search) <= 25;
   const tileChroma = Math.max(...filteredTile) - Math.min(...filteredTile);
@@ -989,6 +1006,14 @@ export function readAoe2CivilizationPickerState(processId: number): NativeCivili
 }
 
 export function readAoe2CivilizationTileState(
+  processId: number,
+  tileDesignX: number,
+  tileDesignY: number
+): NativeCivilizationTileStateResult {
+  return withAoe2CaptureSnapshot(() => readAoe2CivilizationTileStateFromSnapshot(processId, tileDesignX, tileDesignY));
+}
+
+function readAoe2CivilizationTileStateFromSnapshot(
   processId: number,
   tileDesignX: number,
   tileDesignY: number
@@ -1026,7 +1051,7 @@ export function readAoe2CivilizationTileState(
     })
     .filter((sample): sample is { x: number; y: number; rgb: [number, number, number] } => Boolean(sample.rgb));
   if (samples.length !== sampleDesignPoints.length) {
-    return { state: "unknown", detail: "State=unknown|Reason=PIXEL_READ_FAILED" };
+    return { state: "unknown", detail: `State=unknown|Reason=PIXEL_READ_FAILED|${describePixelRead(window)}` };
   }
 
   const neutralBrightness = samples.map(({ rgb }) => {
@@ -1048,6 +1073,13 @@ export function readAoe2CivilizationTileState(
 }
 
 export function readAoe2HostSetupState(
+  processId: number,
+  options: { contentPickerExpected?: boolean } = {}
+): NativeHostSetupStateResult {
+  return withAoe2CaptureSnapshot(() => readAoe2HostSetupStateFromSnapshot(processId, options));
+}
+
+function readAoe2HostSetupStateFromSnapshot(
   processId: number,
   options: { contentPickerExpected?: boolean } = {}
 ): NativeHostSetupStateResult {
@@ -1083,7 +1115,7 @@ export function readAoe2HostSetupState(
   const mainMenuButtons = mainMenuButtonPoints.map((point) => readWindowRgb(window, point.x, point.y));
   if (!upperLeft || !upperCenter || !multiplayerPanel || !lowerButton || !guestReadyButton
     || mainMenuButtons.some((sample) => !sample)) {
-    return { state: "unknown", detail: "PIXEL_READ_FAILED" };
+    return { state: "unknown", detail: `PIXEL_READ_FAILED|${describePixelRead(window)}` };
   }
 
   const [leftRed, leftGreen, leftBlue] = upperLeft;

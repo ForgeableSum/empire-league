@@ -123,6 +123,10 @@ Create-lobby, civilization selection, and localization requests reuse the last s
 
 Civilization tile and return-to-lobby verification retry unavailable pixels for up to five seconds, polling every 100 ms while the existing capture worker refreshes. No additional input is sent during this wait. Partial tile-border samples count as unavailable too. Readable states retain the existing selection/fallback rules; persistent missing pixels produce a screen-capture error rather than a civilization-unavailable error. `CIV_CAPTURE` records waiting, recovery, and timeout without refreshing the progress watchdog. Match cancellation interrupts the wait before another read.
 
+All multi-pixel UI state checks pin one capture frame and its freshness time for the duration of the synchronous check, so crossing the one-second freshness boundary between pixels cannot invalidate half a check. Fresh-frame waits respect their caller's deadline even if the native worker stalls. A capture request outstanding for four seconds is retired; a replacement starts only once that worker exits, preventing accumulation of workers stuck in native code. Old-generation and retired-worker replies are ignored.
+
+`CAPTURE_PIPELINE` records reach the downloadable log, at most once per second for normal frame delivery. `QueueMs` measures dispatch to worker entry, `RenderMs` measures PrintWindow/fallback rendering, `CopyMs` measures pixel extraction, `DeliveryMs` measures worker completion to main-thread handling, and `TimerLagMs` exposes delayed main-thread timer callbacks. These diagnostics do not count as automation progress. Worker startup, timeout, retirement, and exit events are logged separately.
+
 ## Replay completion
 
 Every detected replay write prompts an immediate operation-stream inspection.

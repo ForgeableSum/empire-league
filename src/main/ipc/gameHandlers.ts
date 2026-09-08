@@ -12,6 +12,7 @@ import { shouldMonitorReplayMainMenu } from "../../shared/replayLifecycle.js";
 import { isAutomationSensitiveUiPath } from "../../shared/uiModDetection.js";
 import {
   describeAoe2WindowCapture,
+  setAoe2CaptureDiagnosticSink,
   hasFreshAoe2WindowCapture,
   startAoe2WindowCapture,
   stopAoe2WindowCapture,
@@ -2851,6 +2852,13 @@ export function isExternalNavigationLockedForSender(senderId: number): boolean {
 }
 
 export function registerGameHandlers(): void {
+  setAoe2CaptureDiagnosticSink((message) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+        window.webContents.send("game:automation-log", message);
+      }
+    }
+  });
   ipcMain.handle("game:begin-match-audio-suppression", () => {
     beginAoe2MatchAudioSuppression();
   });
